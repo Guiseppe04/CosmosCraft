@@ -832,7 +832,7 @@ function OrderFulfillmentPanel({ order, onUpdateOrder, onManageProject }) {
   )
 }
 
-function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrderStatus, onVerifyPayment, onManageProject, user, initialSection = 'details' }) {
+function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrderStatus, onVerifyPayment, onMarkUnderReview, onMarkProcessing, onManageProject, user, initialSection = 'details' }) {
   const [activeSection, setActiveSection] = useState(initialSection)
   const isCODOrder = isCashOnDeliveryOrder(order)
 
@@ -843,6 +843,25 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
     }
     setActiveSection(initialSection)
   }, [initialSection, isCODOrder, order.order_id])
+
+  // Entering the payment section flags the payment as under review, mirroring the
+  // action button inside the panel.
+  const handleOpenPaymentSection = () => {
+    setActiveSection('payment')
+    if (normalizePaymentStatus(order.payment_status) === 'proof_submitted') {
+      onMarkUnderReview?.(order.order_id)
+    }
+  }
+
+  // Entering the order-status section starts processing. Requires an approved payment,
+  // matching the existing "cannot process without verified payment" rule.
+  const handleOpenOrderSection = () => {
+    setActiveSection('order')
+    const paymentApproved = normalizePaymentStatus(order.payment_status) === 'approved'
+    if ((order.status || 'pending') === 'pending' && paymentApproved) {
+      onMarkProcessing?.(order.order_id)
+    }
+  }
 
   const orderStatusConfig = getOrderStatusConfig(order.status || 'pending')
   const paymentConfig = getPaymentStatusConfig(order.payment_status || 'pending', order)
@@ -903,7 +922,7 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
           </button>
           {!isCODOrder && (
             <button
-              onClick={() => setActiveSection('payment')}
+              onClick={handleOpenPaymentSection}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeSection === 'payment'
                   ? 'bg-[var(--gold-primary)] text-black'
@@ -916,7 +935,7 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
           )}
           {order.order_type !== 'customization' && (
             <button
-              onClick={() => setActiveSection('order')}
+              onClick={handleOpenOrderSection}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeSection === 'order'
                   ? 'bg-[var(--gold-primary)] text-black'
@@ -1106,10 +1125,10 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
 
           {activeSection === 'receipt' && <ReceiptPanel order={order} />}
           {activeSection === 'payment' && !isCODOrder && (
-            <PaymentVerificationPanel order={order} onVerify={onVerifyPayment} user={user} />
+            <PaymentVerificationPanel order={order} onVerify={onVerifyPayment} onMarkUnderReview={onMarkUnderReview} user={user} />
           )}
           {activeSection === 'order' && (
-            <OrderStatusPanel order={order} onUpdate={onUpdateOrderStatus} />
+            <OrderStatusPanel order={order} onUpdate={onUpdateOrderStatus} onMarkProcessing={onMarkProcessing} />
           )}
           {activeSection === 'installment' && (
             <InstallmentTracking orderId={order.order_id} order={order} />
@@ -1129,7 +1148,7 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
   )
 }
 
-function PaymentVerificationPanel({ order, onVerify, user }) {
+function PaymentVerificationPanel({ order, onVerify, onMarkUnderReview, user }) {
   const currentPaymentStatus = normalizePaymentStatus(order.payment_status)
   const availableStatuses = useMemo(
     () => getAllowedPaymentStatuses(currentPaymentStatus),
@@ -1161,6 +1180,14 @@ function PaymentVerificationPanel({ order, onVerify, user }) {
     } finally {
       setIsVerifying(false)
       setShowConfirm(false)
+    }
+  }
+
+  const handleOpenUpdateForm = async () => {
+    setShowConfirm(true)
+    // Flag the payment as under review for the customer while the admin decides.
+    if (currentPaymentStatus === 'proof_submitted') {
+      await onMarkUnderReview?.(order.order_id)
     }
   }
 
@@ -1283,7 +1310,7 @@ function PaymentVerificationPanel({ order, onVerify, user }) {
           </div>
         ) : (
           <button
-            onClick={() => setShowConfirm(true)}
+            onClick={handleOpenUpdateForm}
             disabled={!availableStatuses.some((status) => status.value === selectedStatus)}
             className="w-full px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 rounded-lg text-white font-semibold hover:shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-all flex items-center justify-center gap-2"
           >
@@ -1330,31 +1357,58 @@ function PaymentVerificationPanel({ order, onVerify, user }) {
   )
 }
 
-function OrderStatusPanel({ order, onUpdate }) {
+function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
   const [selectedStatus, setSelectedStatus] = useState(order.status || 'pending')
   const [trackingInfo, setTrackingInfo] = useState('')
+  const [riderName, setRiderName] = useState('')
+  const [riderContact, setRiderContact] = useState('')
   const [trackingError, setTrackingError] = useState('')
   const [isUpdating, setIsUpdating] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const currentStatus = order.status || 'pending'
   const allowedStatuses = ORDER_STATUS_TRANSITIONS[currentStatus] || []
-  const requiresTracking = selectedStatus === 'shipped' || selectedStatus === 'out_for_delivery'
-  const canSubmit = allowedStatuses.includes(selectedStatus) && (!requiresTracking || trackingInfo.trim())
+  const requiresTrackingNumber = selectedStatus === 'shipped'
+  const requiresRiderDetails = selectedStatus === 'out_for_delivery'
+  const canSubmit =
+    allowedStatuses.includes(selectedStatus) &&
+    (!requiresTrackingNumber || Boolean(trackingInfo.trim())) &&
+    (!requiresRiderDetails || Boolean(riderName.trim() && riderContact.trim()))
 
   useEffect(() => {
     setTrackingInfo('')
+    setRiderName('')
+    setRiderContact('')
     setTrackingError('')
   }, [selectedStatus])
 
+  const handleOpenUpdateStatusForm = async () => {
+    setShowConfirm(true)
+    // Mirror the payment side: opening this form starts the order being processed.
+    // Requires an approved payment, matching the existing "cannot process without
+    // verified payment" rule.
+    const paymentApproved = normalizePaymentStatus(order.payment_status) === 'approved'
+    if (currentStatus === 'pending' && paymentApproved) {
+      await onMarkProcessing?.(order.order_id)
+    }
+  }
+
   const handleUpdate = async () => {
-    if (requiresTracking && !trackingInfo.trim()) {
-      setTrackingError(`${selectedStatus === 'shipped' ? 'Tracking number' : 'Rider details'} is required`)
+    if (requiresTrackingNumber && !trackingInfo.trim()) {
+      setTrackingError('Tracking number is required')
+      return
+    }
+    if (requiresRiderDetails && !(riderName.trim() && riderContact.trim())) {
+      setTrackingError('Rider name and contact are required')
       return
     }
     setTrackingError('')
     setIsUpdating(true)
     try {
-      await onUpdate(order.order_id, selectedStatus, trackingInfo)
+      await onUpdate(order.order_id, selectedStatus, {
+        trackingInfo: trackingInfo.trim(),
+        riderName: riderName.trim(),
+        riderContact: riderContact.trim(),
+      })
     } finally {
       setIsUpdating(false)
       setShowConfirm(false)
@@ -1399,19 +1453,53 @@ function OrderStatusPanel({ order, onUpdate }) {
           </div>
         </div>
 
-        {requiresTracking && (
+        {requiresTrackingNumber && (
           <div className="mb-4">
             <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">
-              {selectedStatus === 'shipped' ? 'Tracking Number' : 'Rider Details'}
+              Tracking Number
               <span className="text-red-400 ml-1">*</span>
             </p>
             <input
               type="text"
               value={trackingInfo}
               onChange={(e) => { setTrackingInfo(e.target.value); setTrackingError('') }}
-              placeholder={selectedStatus === 'shipped' ? 'Enter tracking number' : 'Enter rider name & contact'}
+              placeholder="Enter tracking number"
               className={`w-full px-4 py-3 bg-[var(--surface-dark)] border rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] ${trackingError ? 'border-red-500' : 'border-[var(--border)]'}`}
             />
+            {trackingError && (
+              <p className="text-red-400 text-xs mt-1">{trackingError}</p>
+            )}
+          </div>
+        )}
+
+        {requiresRiderDetails && (
+          <div className="mb-4 space-y-3">
+            <div>
+              <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">
+                Rider Name
+                <span className="text-red-400 ml-1">*</span>
+              </p>
+              <input
+                type="text"
+                value={riderName}
+                onChange={(e) => { setRiderName(e.target.value); setTrackingError('') }}
+                placeholder="Enter rider name"
+                className={`w-full px-4 py-3 bg-[var(--surface-dark)] border rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] ${trackingError ? 'border-red-500' : 'border-[var(--border)]'}`}
+              />
+            </div>
+            <div>
+              <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">
+                Rider Contact
+                <span className="text-red-400 ml-1">*</span>
+              </p>
+              <input
+                type="text"
+                value={riderContact}
+                onChange={(e) => { setRiderContact(e.target.value); setTrackingError('') }}
+                placeholder="Enter rider contact number"
+                className={`w-full px-4 py-3 bg-[var(--surface-dark)] border rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] ${trackingError ? 'border-red-500' : 'border-[var(--border)]'}`}
+              />
+            </div>
             {trackingError && (
               <p className="text-red-400 text-xs mt-1">{trackingError}</p>
             )}
@@ -1430,9 +1518,9 @@ function OrderStatusPanel({ order, onUpdate }) {
               </button>
               <button
                 onClick={handleUpdate}
-                disabled={isUpdating || !canSubmit || (requiresTracking && !trackingInfo.trim())}
+                disabled={isUpdating || !canSubmit}
                 className={`flex-1 px-4 py-2 bg-[var(--gold-primary)] rounded-lg text-black text-sm font-medium hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all flex items-center justify-center gap-2 ${
-                  (isUpdating || !canSubmit || (requiresTracking && !trackingInfo.trim())) ? 'opacity-50 cursor-not-allowed' : ''
+                  (isUpdating || !canSubmit) ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >
                 {isUpdating ? (
@@ -1451,7 +1539,7 @@ function OrderStatusPanel({ order, onUpdate }) {
           </div>
         ) : (
           <button
-            onClick={() => setShowConfirm(true)}
+            onClick={handleOpenUpdateStatusForm}
             disabled={!canSubmit}
             className={`w-full px-4 py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
               canSubmit
@@ -1636,7 +1724,37 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
     }
   }
 
-  const handleUpdateOrderStatus = async (orderId, newStatus, trackingInfo) => {
+  // Opening the "Update Payment Status" form marks the payment as under review so the
+  // customer sees an admin has picked it up. Only valid from 'proof_submitted'; never
+  // moves a terminal payment status, and never fails the admin's action.
+  const handleMarkUnderReview = async (orderId) => {
+    try {
+      await adminApi.updatePaymentStatus(orderId, 'under_review', {
+        admin_name: user?.firstName ? `${user.firstName}${user.lastName ? ' ' + user.lastName : ''}` : user?.email,
+        admin_email: user?.email
+      })
+      onRefresh(buildQuery(page))
+      setSelectedOrder(prev => prev ? { ...prev, payment_status: 'under_review' } : null)
+    } catch (error) {
+      console.warn('Could not mark payment as under review:', error)
+    }
+  }
+
+  // Opening the "Update Order Status" form starts the order being processed, mirroring
+  // the payment side. Requires an approved payment (see handleOpenUpdateStatusForm).
+  // Best-effort: never blocks the admin's action.
+  const handleMarkProcessing = async (orderId) => {
+    try {
+      await adminApi.updateOrder(orderId, { status: 'processing' })
+      onRefresh(buildQuery(page))
+      setSelectedOrder(prev => prev ? { ...prev, status: 'processing' } : null)
+    } catch (error) {
+      console.warn('Could not mark order as processing:', error)
+    }
+  }
+
+  const handleUpdateOrderStatus = async (orderId, newStatus, details = {}) => {
+    const { trackingInfo = '', riderName = '', riderContact = '' } = details
     setIsUpdatingOrder(true)
     try {
       const order = orders.find(o => o.order_id === orderId)
@@ -1651,13 +1769,21 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
         updateData.tracking_number = trackingInfo
       }
       if (newStatus === 'out_for_delivery') {
-        if (trackingInfo) {
-          updateData.rider_name = trackingInfo
+        if (riderName) {
+          updateData.rider_name = riderName
+        }
+        if (riderContact) {
+          updateData.rider_contact = riderContact
         }
       }
       await adminApi.updateOrder(orderId, updateData)
       onRefresh(buildQuery(page))
-      setSelectedOrder(prev => prev ? { ...prev, status: newStatus, ...(newStatus === 'shipped' ? { tracking_number: trackingInfo } : {}), ...(newStatus === 'out_for_delivery' ? { rider_name: trackingInfo } : {}) } : null)
+      setSelectedOrder(prev => prev ? {
+        ...prev,
+        status: newStatus,
+        ...(newStatus === 'shipped' ? { tracking_number: trackingInfo } : {}),
+        ...(newStatus === 'out_for_delivery' ? { rider_name: riderName, rider_contact: riderContact } : {}),
+      } : null)
     } catch (error) {
       console.error('Failed to update order status:', error)
     } finally {
@@ -2244,6 +2370,8 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
             onUpdatePaymentStatus={handleUpdatePaymentStatus}
             onUpdateOrderStatus={handleUpdateOrderStatus}
             onVerifyPayment={handleVerifyPayment}
+            onMarkUnderReview={handleMarkUnderReview}
+            onMarkProcessing={handleMarkProcessing}
             onManageProject={onManageProject}
             user={user}
             initialSection={selectedSection}

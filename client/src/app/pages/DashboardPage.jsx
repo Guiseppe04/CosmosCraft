@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
-import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon, Check, RefreshCw, Printer, Info, Camera, Filter, CircleDot, CalendarDays, ArrowDownWideNarrow, ListFilter, DollarSign } from 'lucide-react'
+import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, Bike, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon, Check, RefreshCw, Printer, Info, Camera, Filter, CircleDot, CalendarDays, ArrowDownWideNarrow, ListFilter, DollarSign } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
@@ -108,6 +108,74 @@ const formatStatus = (status) => {
   if (!status) return ''
   return status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
+
+const ORDER_STATUS_BADGE = {
+  pending: { background: 'rgba(234,179,8,0.1)', color: '#facc15', borderColor: 'rgba(234,179,8,0.3)' },
+  processing: { background: 'rgba(59,130,246,0.1)', color: '#60a5fa', borderColor: 'rgba(59,130,246,0.3)' },
+  shipped: { background: 'rgba(14,165,233,0.1)', color: '#38bdf8', borderColor: 'rgba(14,165,233,0.3)' },
+  out_for_delivery: { background: 'rgba(139,92,246,0.1)', color: '#a78bfa', borderColor: 'rgba(139,92,246,0.3)' },
+  delivered: { background: 'rgba(34,197,94,0.1)', color: '#4ade80', borderColor: 'rgba(34,197,94,0.3)' },
+  received: { background: 'rgba(16,185,129,0.1)', color: '#34d399', borderColor: 'rgba(16,185,129,0.3)' },
+  cancelled: { background: 'rgba(239,68,68,0.1)', color: '#f87171', borderColor: 'rgba(239,68,68,0.3)' },
+}
+
+const PAYMENT_STATUS_BADGE = {
+  pending: { background: 'rgba(234,179,8,0.1)', color: '#facc15', borderColor: 'rgba(234,179,8,0.3)' },
+  proof_submitted: { background: 'rgba(59,130,246,0.1)', color: '#60a5fa', borderColor: 'rgba(59,130,246,0.3)' },
+  under_review: { background: 'rgba(139,92,246,0.1)', color: '#a78bfa', borderColor: 'rgba(139,92,246,0.3)' },
+  approved: { background: 'rgba(34,197,94,0.1)', color: '#4ade80', borderColor: 'rgba(34,197,94,0.3)' },
+  paid: { background: 'rgba(34,197,94,0.1)', color: '#4ade80', borderColor: 'rgba(34,197,94,0.3)' },
+  verified: { background: 'rgba(34,197,94,0.1)', color: '#4ade80', borderColor: 'rgba(34,197,94,0.3)' },
+  rejected: { background: 'rgba(239,68,68,0.1)', color: '#f87171', borderColor: 'rgba(239,68,68,0.3)' },
+  failed: { background: 'rgba(239,68,68,0.1)', color: '#f87171', borderColor: 'rgba(239,68,68,0.3)' },
+  refunded: { background: 'rgba(148,163,184,0.1)', color: '#94a3b8', borderColor: 'rgba(148,163,184,0.3)' },
+}
+
+const NEUTRAL_BADGE = { background: 'var(--surface-light)', color: 'var(--text-light)', borderColor: 'var(--border)' }
+
+const orderBadge = (status) => ORDER_STATUS_BADGE[String(status || '').toLowerCase()] || NEUTRAL_BADGE
+const paymentBadge = (status) => PAYMENT_STATUS_BADGE[String(status || '').toLowerCase()] || NEUTRAL_BADGE
+
+// Fulfillment progress. 'received' counts as the final step alongside 'delivered'.
+const FULFILLMENT_STEPS = [
+  { key: 'processing', label: 'Processing' },
+  { key: 'shipped', label: 'Shipped' },
+  { key: 'out_for_delivery', label: 'Out for Delivery' },
+  { key: 'delivered', label: 'Delivered' },
+]
+
+const FULFILLMENT_ALIASES = {
+  processing: 'processing',
+  shipped: 'shipped',
+  out_for_delivery: 'out_for_delivery',
+  delivered: 'delivered',
+  received: 'delivered',
+}
+
+function getFulfillmentProgress(order) {
+  const statusKey = FULFILLMENT_ALIASES[String(order?.status || '').toLowerCase()]
+  if (!statusKey) return null
+  const currentIndex = FULFILLMENT_STEPS.findIndex(step => step.key === statusKey)
+  if (currentIndex === -1) return null
+  return {
+    currentIndex,
+    steps: FULFILLMENT_STEPS.map((step, index) => ({
+      ...step,
+      state: index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'upcoming',
+    })),
+  }
+}
+
+// One source of truth for the purchase tabs so labels and filters cannot drift apart.
+const PURCHASE_TABS = [
+  { key: 'All', label: 'All' },
+  { key: 'Processing', label: 'Processing' },
+  { key: 'Shipped', label: 'Shipped' },
+  { key: 'OutForDelivery', label: 'Out for Delivery' },
+  { key: 'Completed', label: 'Completed' },
+  { key: 'Cancelled', label: 'Cancelled' },
+  { key: 'Refund', label: 'Refund' },
+]
 
 const REFUND_STATUS_CONFIG = {
   pending: {
@@ -1849,11 +1917,11 @@ export function DashboardPage() {
     { id: 'purchases', label: 'My Purchase', icon: Package, group: 'orders' },
   ]
   const renderPurchasesContent = () => {
-    const filteredOrders = myOrders.filter(order => {
+const filteredOrders = myOrders.filter(order => {
       if (activePurchaseTab === 'All') return true;
-      if (activePurchaseTab === 'To Pay' && order.payment_status === 'pending') return true;
-      if (activePurchaseTab === 'To Ship' && order.status === 'processing') return true;
-      if (activePurchaseTab === 'To Receive' && ['shipped', 'out_for_delivery'].includes(order.status)) return true;
+      if (activePurchaseTab === 'Processing' && order.status === 'processing') return true;
+      if (activePurchaseTab === 'Shipped' && order.status === 'shipped') return true;
+      if (activePurchaseTab === 'OutForDelivery' && order.status === 'out_for_delivery') return true;
       if (activePurchaseTab === 'Completed' && ['delivered', 'received', 'completed'].includes(order.status)) return true;
       if (activePurchaseTab === 'Cancelled' && order.status === 'cancelled') return true;
       if (activePurchaseTab === 'Refund') {
@@ -1881,14 +1949,14 @@ export function DashboardPage() {
 
           {/* Order Status Filters */}
           <div className="purch-tabs">
-            {['All', 'To Pay', 'To Ship', 'To Receive', 'Completed', 'Cancelled', 'Refund'].map(label => (
+            {PURCHASE_TABS.map(tab => (
               <button
-                key={label}
-                onClick={() => setActivePurchaseTab(label)}
-                className={`purch-tab ${label === activePurchaseTab ? 'purch-tab--active' : ''}`}
+                key={tab.key}
+                onClick={() => setActivePurchaseTab(tab.key)}
+                className={`purch-tab ${tab.key === activePurchaseTab ? 'purch-tab--active' : ''}`}
                 type="button"
               >
-                {label}
+                {tab.label}
               </button>
             ))}
           </div>
@@ -1959,35 +2027,94 @@ export function DashboardPage() {
                 const orderItems = Array.isArray(order.items) ? order.items : []
                 const orderIsFulfilled = isFulfilled(order.status)
                 const hasCustomItems = orderItems.some(i => i.customization_id)
+                const fulfillment = getFulfillmentProgress(order)
+                const hasTracking = Boolean(order.tracking_number)
+                const hasRider = Boolean(order.rider_name || order.rider_contact)
 
                 return (
                   <div key={order.order_id} className="purch-card">
                     <div className="purch-card-header">
                       <div>
-                        <h3 className="font-bold text-white text-lg">{order.order_number}</h3>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-bold text-white text-lg">{order.order_number}</h3>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border border-[var(--border)] bg-[var(--surface-light)] text-[var(--text-muted)]">
+                            <ShoppingBag className="w-3 h-3" />
+                            {orderItems.length} {orderItems.length === 1 ? 'item' : 'items'}
+                          </span>
+                          {hasCustomItems && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border border-[var(--gold-primary)]/40 bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]">
+                              <Guitar className="w-3 h-3" />
+                              Custom Build
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-[var(--text-muted)] mt-1">{new Date(order.created_at).toLocaleDateString()} {new Date(order.created_at).toLocaleTimeString()}</p>
                       </div>
                       <div className="purch-status-row">
                         <div className="purch-status-group">
                           <span className="purch-status-label">Order Status</span>
-                          <span className="purch-status-badge" style={{ background: 'var(--surface-light)', color: 'var(--text-light)', borderColor: 'var(--border)' }}>
+                          <span className="purch-status-badge" style={orderBadge(order.status)}>
                             {formatStatus(order.status)}
                           </span>
                         </div>
                         <div className="purch-status-group">
                           <span className="purch-status-label">Payment Status</span>
-                          <span
-                            className="purch-status-badge"
-                            style={['approved', 'paid', 'verified'].includes(String(order.payment_status || '').toLowerCase())
-                              ? { background: 'rgba(34,197,94,0.1)', color: '#4ade80', borderColor: 'rgba(34,197,94,0.3)' }
-                              : { background: 'rgba(234,179,8,0.1)', color: '#facc15', borderColor: 'rgba(234,179,8,0.3)' }
-                            }
-                          >
+                          <span className="purch-status-badge" style={paymentBadge(order.payment_status)}>
                             {formatStatus(order.payment_status)}
                           </span>
                         </div>
                       </div>
                     </div>
+
+                    {(fulfillment || hasTracking || hasRider) && (
+                      <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)]/40 p-4 space-y-3">
+                        {fulfillment && (
+                          <ol className="flex items-center gap-1.5 flex-wrap">
+                            {fulfillment.steps.map((step, index) => (
+                              <li key={step.key} className="flex items-center gap-1.5">
+                                <span
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
+                                    step.state === 'done'
+                                      ? 'bg-green-500/10 text-green-400 border-green-500/30'
+                                      : step.state === 'current'
+                                        ? 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)] border-[var(--gold-primary)]/40'
+                                        : 'bg-[var(--surface-light)] text-[var(--text-muted)] border-[var(--border)]'
+                                  }`}
+                                >
+                                  {step.state === 'done' && <CheckCircle className="w-3 h-3" />}
+                                  {step.label}
+                                </span>
+                                {index < fulfillment.steps.length - 1 && (
+                                  <span className="text-[var(--text-muted)] text-xs">→</span>
+                                )}
+                              </li>
+                            ))}
+                          </ol>
+                        )}
+
+                        {hasTracking && (
+                          <div className="flex flex-wrap items-center gap-2 text-sm">
+                            <Truck className="w-4 h-4 text-[var(--gold-primary)] shrink-0" />
+                            <span className="text-[var(--text-muted)]">Tracking Number</span>
+                            <span className="font-mono font-semibold text-white break-all">{order.tracking_number}</span>
+                            {order.courier_name && (
+                              <span className="text-xs text-[var(--text-muted)]">via {order.courier_name}</span>
+                            )}
+                          </div>
+                        )}
+
+                        {hasRider && (
+                          <div className="flex flex-wrap items-center gap-2 text-sm">
+                            <Bike className="w-4 h-4 text-[var(--gold-primary)] shrink-0" />
+                            <span className="text-[var(--text-muted)]">Rider Details</span>
+                            {order.rider_name && <span className="font-semibold text-white">{order.rider_name}</span>}
+                            {order.rider_contact && (
+                              <span className="font-mono text-white break-all">{order.rider_contact}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {orderItems.length > 0 && (
                       <div className="mt-4">
@@ -2118,17 +2245,20 @@ export function DashboardPage() {
                       </div>
                     )}
 
-                    <div className="flex justify-between items-end mt-4">
-                      <div className="text-sm text-[var(--text-muted)] [&>span:last-child]:hidden">
-                        <span className="block">Items: {orderItems.length}</span>
-                        <span className="block">Shipping: ₱{Number(order.shipping_cost || 0).toLocaleString('en-PH')}</span>
-                        <span className="block mt-1">Tax: ₱{Number(order.tax_amount || 0).toLocaleString('en-PH')}</span>
-                      </div>
-                      <div className="text-right items-end flex flex-col [&>span:not(:first-child)]:hidden">
-                        <span className="text-sm text-[var(--text-muted)] mb-1">Total Amount</span>
-                        <div className="text-xl font-bold text-[var(--gold-primary)] block">PHP {displayTotalAmount.toLocaleString('en-PH')}</div>
-                        <span className="text-xl font-bold text-[var(--gold-primary)] block">₱{displayTotalAmount.toLocaleString('en-PH')}</span>
-                        <span className="text-xl font-bold text-[var(--gold-primary)] block">₱{Number(order.total_amount || 0).toLocaleString('en-PH')}</span>
+                    <div className="flex justify-between items-end mt-4 gap-4 flex-wrap">
+                      <dl className="text-sm text-[var(--text-muted)] space-y-1">
+                        <div className="flex gap-2">
+                          <dt>Items</dt>
+                          <dd className="text-white font-medium">{orderItems.length}</dd>
+                        </div>
+                        <div className="flex gap-2">
+                          <dt>Shipping</dt>
+                          <dd className="text-white font-medium">₱{Number(order.shipping_cost || 0).toLocaleString('en-PH')}</dd>
+                        </div>
+                      </dl>
+                      <div className="text-right">
+                        <span className="text-sm text-[var(--text-muted)] mb-1 block">Total Amount</span>
+                        <div className="text-xl font-bold text-[var(--gold-primary)]">₱{displayTotalAmount.toLocaleString('en-PH')}</div>
                       </div>
                     </div>
                     <div className="purch-actions-row">
@@ -2148,7 +2278,7 @@ export function DashboardPage() {
                           Cancel Order
                         </button>
                       )}
-                      {['shipped', 'out_for_delivery', 'delivered'].includes(order.status) && order.status !== 'received' && (
+                      {order.status === 'delivered' && (
                         <button
                           onClick={() => handleMarkAsReceived(order)}
                           disabled={isMarkingReceived}

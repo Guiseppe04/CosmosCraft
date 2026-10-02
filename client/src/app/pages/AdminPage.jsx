@@ -1437,6 +1437,20 @@ export function AdminPage() {
     } catch (e) { showToast(e.message, 'error') }
   }
 
+  // Opening the payment approval form marks the payment as under review so the customer
+  // sees an admin has picked it up. Best-effort: never blocks the admin's action.
+  const markPaymentUnderReview = async (order) => {
+    if (normalizePaymentStatus(order.payment_status) !== 'proof_submitted') return
+    try {
+      await adminApi.updatePaymentStatus(order.order_id, 'under_review', {
+        admin_name: user?.firstName ? `${user.firstName}${user.lastName ? ' ' + user.lastName : ''}` : user?.email,
+        admin_email: user?.email,
+      })
+    } catch (error) {
+      console.warn('Could not mark payment as under review:', error)
+    }
+  }
+
   const approvePayment = async (orderId) => {
     const order = orders.find(o => o.order_id === orderId)
     if (order && isCashOnDeliveryOrder(order)) {
@@ -1444,6 +1458,7 @@ export function AdminPage() {
       return
     }
     if (order?.payment) {
+      await markPaymentUnderReview(order)
       setForm({
         order_id: order.order_id,
         order_number: order.order_number || order.order_id?.slice(0, 8),

@@ -1335,6 +1335,12 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
       updateValues.push(admin_notes)
     }
 
+    // A successful payment advances the order into 'processing'.
+    // 'failed' / 'rejected' must never move the order forward.
+    if (status === 'approved' && orderRes.rows[0].status === 'pending') {
+      updateFields.push(`status = 'processing'`)
+    }
+
     updateValues.push(orderId)
 
     const res = await client.query(
@@ -1435,7 +1441,7 @@ exports.approvePayment = async (orderId, options = {}) => {
 
     // Get current status first
     const currentRes = await client.query(
-      'SELECT payment_status FROM orders WHERE order_id = $1',
+      'SELECT payment_status, status FROM orders WHERE order_id = $1',
       [orderId]
     )
     
@@ -1451,16 +1457,21 @@ exports.approvePayment = async (orderId, options = {}) => {
       await client.query('ROLLBACK')
       throw createValidationError(`Cannot approve payment with current status: ${currentStatus}`)
     }
+
+    // A successful payment advances the order into 'processing'.
+    const nextOrderStatus =
+      currentRes.rows[0].status === 'pending' ? 'processing' : currentRes.rows[0].status
     
     const res = await client.query(
       `UPDATE orders SET 
         payment_status = 'approved', 
+        status = $3,
         reviewed_by = $1, 
         reviewed_at = CURRENT_TIMESTAMP,
         rejection_reason = NULL,
         updated_at = CURRENT_TIMESTAMP 
       WHERE order_id = $2 RETURNING *`,
-      [admin_user_id || null, orderId]
+      [admin_user_id || null, orderId, nextOrderStatus]
     )
     
     const order = res.rows[0]
