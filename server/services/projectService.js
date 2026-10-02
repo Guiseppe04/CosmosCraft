@@ -696,6 +696,7 @@ const buildRequiredPartsPayload = (customization = {}, linkedParts = []) => {
 
     requiredParts.push({
       customization_id: customizationId,
+      part_id: part?.part_id || null,
       name: part?.name || part?.part_name || 'Additional part',
       category: 'additional_parts',
       quantity,
@@ -2179,6 +2180,7 @@ exports.getProjectRequiredParts = async (projectId) => {
             );
             if (match) {
               enrichedPart.name = match.name || enrichedPart.name;
+              enrichedPart.part_id = match.part_id || null;
               const productPrice = productsByNameLookup?.get((match.name || '').toLowerCase());
               const finalPrice = match.price > 0 ? match.price : (productPrice || 0);
               // console.log(`[projectService] MATCHED part "${enrichedPart.name}" (${enrichedPart.part_type}) → builder part "${match.name}" stock=${match.stock} price=${finalPrice}${productPrice ? ' (from products table)' : ''}`);
@@ -2196,6 +2198,7 @@ exports.getProjectRequiredParts = async (projectId) => {
                 const productPrice = productsByNameLookup?.get((fallbackMatch.name || '').toLowerCase());
                 const finalPrice = fallbackMatch.price > 0 ? fallbackMatch.price : (productPrice || 0);
                 // console.log(`[projectService] FALLBACK MATCHED part "${enrichedPart.name}" → "${fallbackMatch.name}" stock=${fallbackMatch.stock} price=${finalPrice}`);
+                enrichedPart.part_id = fallbackMatch.part_id || null;
                 enrichedPart.product_id = enrichedPart.product_id || null;
                 enrichedPart.stock = fallbackMatch.stock ?? null;
                 enrichedPart.price = finalPrice;

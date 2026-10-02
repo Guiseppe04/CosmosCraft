@@ -77,7 +77,7 @@ const formatDisplayDate = (value) => {
   return date.toLocaleDateString();
 };
 
-export default function ProjectTaskTracker({ projectId, projectName, isAdmin = false, parts = [], projectData = null, showTracker = true }) {
+export default function ProjectTaskTracker({ projectId, projectName, isAdmin = false, parts = [], projectData = null, showTracker = true, onRestockPart = null }) {
   const { user } = useAuth();
   const [hierarchy, setHierarchy] = useState(null);
   const [requiredParts, setRequiredParts] = useState([]);
@@ -132,7 +132,8 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
         projectApi.getProjectRequiredParts(projectId),
       ]);
       setHierarchy(hierarchyRes.data);
-      setRequiredParts(Array.isArray(requiredPartsRes.data) ? requiredPartsRes.data : []);
+      const loadedRequiredParts = Array.isArray(requiredPartsRes.data) ? requiredPartsRes.data : [];
+      setRequiredParts(loadedRequiredParts.filter((part) => part.stock_status && part.stock_status !== 'unknown'));
       
       // Auto-expand all milestones on first load only
       if (hierarchyRes.data?.milestones) {
@@ -902,7 +903,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                         {isAdmin && isOutOfStock && !isRestocking && (
                           <button
                             type="button"
-                            onClick={() => setRestockingPartKey(part.part_key)}
+                            onClick={() => onRestockPart ? onRestockPart(part) : setRestockingPartKey(part.part_key)}
                             className="text-[10px] font-semibold rounded-full border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/10 px-2 py-1 text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/20 transition-colors shrink-0"
                           >
                             Restock

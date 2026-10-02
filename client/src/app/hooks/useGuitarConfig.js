@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import axios from 'axios'
 import { API } from '../utils/apiConfig'
+import { useSocketEvent } from '../context/SocketContext'
 import {
   BASE_PRICE,
   BODY_FINISH_OPTIONS,
@@ -216,11 +217,9 @@ export default function useGuitarConfig() {
       const [partsResponse, modelImagesResponse] = await Promise.all([
         axios.get(`${API_URL}/api/builder-parts`, {
           params: { is_active: true, guitar_type: guitarType, pageSize: 500, _t: Date.now() },
-          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'Expires': '0' }
         }),
         axios.get(`${API_URL}/api/builder-parts/model-images`, {
           params: { guitar_type: guitarType, _t: Date.now() },
-          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'Expires': '0' }
         }),
       ])
       if (partsResponse.data?.data) {
@@ -253,6 +252,18 @@ export default function useGuitarConfig() {
     document.addEventListener('visibilitychange', handleVisibility)
     return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [])
+
+  useSocketEvent('builder-part:updated', () => {
+    fetchBuilderParts(config.guitarType || 'electric')
+  })
+
+  useSocketEvent('builder-part:created', () => {
+    fetchBuilderParts(config.guitarType || 'electric')
+  })
+
+  useSocketEvent('builder-part:deleted', () => {
+    fetchBuilderParts(config.guitarType || 'electric')
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -509,7 +520,7 @@ export default function useGuitarConfig() {
       const nextOption = {
         ...(existingOption || {}),
         label: part?.name || existingOption?.label || normalizedOptionKey,
-        note: existingOption?.note || part?.description || '',
+        note: part?.description || existingOption?.note || '',
         price: part?.price !== undefined && part?.price !== null && !Number.isNaN(Number(part.price))
           ? Number(part.price)
           : existingOption?.price || 0,
@@ -1328,59 +1339,74 @@ export default function useGuitarConfig() {
   const summary = useMemo(
     () => ({
       // Old summary (unchanged)
-      body: BODY_OPTIONS[config.body]?.label ?? config.body,
-      bodyWood: BODY_WOOD_OPTIONS[config.bodyWood]?.label ?? config.bodyWood,
-      bodyFinish: BODY_FINISH_OPTIONS[config.bodyFinish]?.label ?? config.bodyFinish,
-      neck: NECK_OPTIONS[config.neck]?.label ?? config.neck,
-      fretboard: FRETBOARD_OPTIONS[config.fretboard]?.label ?? config.fretboard,
-      headstock: HEADSTOCK_OPTIONS[config.headstock]?.label ?? config.headstock,
-      headstockWood: HEADSTOCK_WOOD_OPTIONS[config.headstockWood]?.label ?? config.headstockWood,
-      inlays: INLAY_OPTIONS[config.inlays]?.label ?? config.inlays,
-      inlayShape: INLAY_SHAPE_OPTIONS[config.inlayShape]?.label ?? config.inlayShape,
-      inlayMaterial: INLAY_MATERIAL_OPTIONS[config.inlayMaterial]?.label ?? config.inlayMaterial,
-      bridge: BRIDGE_OPTIONS[config.bridge]?.label ?? config.bridge,
-      pickguard: PICKGUARD_OPTIONS_BY_BODY[config.body]?.[config.pickguard]?.label ?? config.pickguard,
-      knobs: config.body === 'dc' ? (KNOB_STYLE_OPTIONS[config.knobs]?.label ?? config.knobs) : (KNOB_OPTIONS_BY_BODY[config.body]?.[config.knobs]?.label ?? config.knobs),
-      hardware: HARDWARE_OPTIONS[config.hardware]?.label ?? config.hardware,
-      pickups: PICKUP_OPTIONS[config.pickups]?.label ?? config.pickups,
+      body: mergedBodyOptions[config.body]?.label ?? BODY_OPTIONS[config.body]?.label ?? config.body,
+      bodyWood: mergedBodyWoodOptions[config.bodyWood]?.label ?? BODY_WOOD_OPTIONS[config.bodyWood]?.label ?? config.bodyWood,
+      bodyFinish: mergedBodyFinishOptions[config.bodyFinish]?.label ?? BODY_FINISH_OPTIONS[config.bodyFinish]?.label ?? config.bodyFinish,
+      neck: mergedNeckOptions[config.neck]?.label ?? NECK_OPTIONS[config.neck]?.label ?? config.neck,
+      fretboard: mergedFretboardOptions[config.fretboard]?.label ?? FRETBOARD_OPTIONS[config.fretboard]?.label ?? config.fretboard,
+      headstock: mergedHeadstockShapeOptions[config.headstockShape]?.label ?? HEADSTOCK_OPTIONS[config.headstock]?.label ?? config.headstock,
+      headstockWood: mergedHeadstockWoodOptions[config.headstockWood]?.label ?? HEADSTOCK_WOOD_OPTIONS[config.headstockWood]?.label ?? config.headstockWood,
+      inlays: mergedInlayOptions[config.inlays]?.label ?? INLAY_OPTIONS[config.inlays]?.label ?? config.inlays,
+      inlayShape: mergedInlayShapeOptions[config.inlayShape]?.label ?? INLAY_SHAPE_OPTIONS[config.inlayShape]?.label ?? config.inlayShape,
+      inlayMaterial: mergedInlayMaterialOptions[config.inlayMaterial]?.label ?? INLAY_MATERIAL_OPTIONS[config.inlayMaterial]?.label ?? config.inlayMaterial,
+      bridge: mergedBridgeOptions[config.bridge]?.label ?? BRIDGE_OPTIONS[config.bridge]?.label ?? config.bridge,
+      pickguard: pickguardOptions.find(option => option.value === config.pickguard)?.label ?? PICKGUARD_OPTIONS_BY_BODY[config.body]?.[config.pickguard]?.label ?? config.pickguard,
+      knobs: config.body === 'dc' ? (KNOB_STYLE_OPTIONS[config.knobs]?.label ?? config.knobs) : (knobOptions.find(option => option.value === config.knobs)?.label ?? KNOB_OPTIONS_BY_BODY[config.body]?.[config.knobs]?.label ?? config.knobs),
+      hardware: mergedHardwareOptions[config.hardware]?.label ?? HARDWARE_OPTIONS[config.hardware]?.label ?? config.hardware,
+      pickups: mergedPickupOptions[config.pickups]?.label ?? PICKUP_OPTIONS[config.pickups]?.label ?? config.pickups,
       // New summary fields
-      dexterity: DEXTERITY_OPTIONS[config.dexterity]?.label ?? config.dexterity,
-      strings: STRING_COUNT_OPTIONS[config.strings]?.label ?? config.strings,
-      multiscale: MULTISCALE_OPTIONS[config.multiscale]?.label ?? config.multiscale,
-      scaleLength: SCALE_LENGTH_OPTIONS[config.scaleLength]?.label ?? config.scaleLength,
-      caseType: CASE_OPTIONS[config.case]?.label ?? config.case,
+      dexterity: mergedDexterityOptions[config.dexterity]?.label ?? DEXTERITY_OPTIONS[config.dexterity]?.label ?? config.dexterity,
+      strings: mergedStringCountOptions[config.strings]?.label ?? STRING_COUNT_OPTIONS[config.strings]?.label ?? config.strings,
+      multiscale: mergedMultiscaleOptions[config.multiscale]?.label ?? MULTISCALE_OPTIONS[config.multiscale]?.label ?? config.multiscale,
+      scaleLength: mergedScaleLengthOptions[config.scaleLength]?.label ?? SCALE_LENGTH_OPTIONS[config.scaleLength]?.label ?? config.scaleLength,
+      caseType: mergedCaseOptions[config.case]?.label ?? CASE_OPTIONS[config.case]?.label ?? config.case,
       bevel: config.body === 'dc'
         ? (config.bevel === 'on' ? 'Beveled Body Edges' : 'None')
-        : (BEVEL_OPTIONS[config.bevel]?.label ?? config.bevel),
+        : (mergedBevelOptions[config.bevel]?.label ?? BEVEL_OPTIONS[config.bevel]?.label ?? config.bevel),
       topWood: mergedDynamicTopWoodOptions[config.topWood]?.label ?? TOP_WOOD_OPTIONS[config.topWood]?.label ?? config.topWood,
-      finishType: FINISH_TYPE_OPTIONS[config.finishType]?.label ?? config.finishType,
+      finishType: mergedFinishTypeOptions[config.finishType]?.label ?? FINISH_TYPE_OPTIONS[config.finishType]?.label ?? config.finishType,
       topCoat: mergedDynamicTopCoatOptions[config.topCoat]?.label ?? TOP_COAT_OPTIONS[config.topCoat]?.label ?? config.topCoat,
-      burstFinish: BURST_FINISH_OPTIONS[config.burstFinish]?.label ?? config.burstFinish,
-      neckConstruction: NECK_CONSTRUCTION_OPTIONS[config.neckConstruction]?.label ?? config.neckConstruction,
+      burstFinish: mergedBurstFinishOptions[config.burstFinish]?.label ?? BURST_FINISH_OPTIONS[config.burstFinish]?.label ?? config.burstFinish,
+      neckConstruction: mergedNeckConstructionOptions[config.neckConstruction]?.label ?? NECK_CONSTRUCTION_OPTIONS[config.neckConstruction]?.label ?? config.neckConstruction,
       inlay: mergedDynamicInlayOptions[config.inlay]?.label ?? INLAY_OPTIONS[config.inlay]?.label ?? config.inlay,
-      frets: FRET_OPTIONS[config.frets]?.label ?? config.frets,
-      neckRearFinish: NECK_REAR_FINISH_OPTIONS[config.neckRearFinish]?.label ?? config.neckRearFinish,
-      headstockShape: HEADSTOCK_SHAPE_OPTIONS[config.headstockShape]?.label ?? config.headstockShape,
-      trussRodCover: TRUSS_ROD_COVER_OPTIONS[config.trussRodCover]?.label ?? config.trussRodCover,
-      electronicsType: ELECTRONICS_TYPE_OPTIONS[config.electronicsType]?.label ?? config.electronicsType,
-      pickupConfiguration: PICKUP_CONFIGURATION_OPTIONS[config.pickupConfiguration]?.label ?? config.pickupConfiguration,
-      bridgePickupModel: PICKUP_MODEL_BRIDGE_OPTIONS[config.bridgePickupModel]?.label ?? config.bridgePickupModel,
-      middlePickupModel: PICKUP_MODEL_MIDDLE_OPTIONS[config.middlePickupModel]?.label ?? config.middlePickupModel,
-      neckPickupModel: PICKUP_MODEL_NECK_OPTIONS[config.neckPickupModel]?.label ?? config.neckPickupModel,
-      pickupColor: PICKUP_COLOR_OPTIONS[config.pickupColor]?.label ?? config.pickupColor,
-      pickupPoleColor: PICKUP_POLE_COLOR_OPTIONS[config.pickupPoleColor]?.label ?? config.pickupPoleColor,
-      controls: CONTROLS_OPTIONS[config.controls]?.label ?? config.controls,
+      frets: mergedFretOptions[config.frets]?.label ?? FRET_OPTIONS[config.frets]?.label ?? config.frets,
+      neckRearFinish: mergedNeckRearFinishOptions[config.neckRearFinish]?.label ?? NECK_REAR_FINISH_OPTIONS[config.neckRearFinish]?.label ?? config.neckRearFinish,
+      headstockShape: mergedHeadstockShapeOptions[config.headstockShape]?.label ?? HEADSTOCK_SHAPE_OPTIONS[config.headstockShape]?.label ?? config.headstockShape,
+      trussRodCover: mergedTrussRodCoverOptions[config.trussRodCover]?.label ?? TRUSS_ROD_COVER_OPTIONS[config.trussRodCover]?.label ?? config.trussRodCover,
+      electronicsType: mergedElectronicsTypeOptions[config.electronicsType]?.label ?? ELECTRONICS_TYPE_OPTIONS[config.electronicsType]?.label ?? config.electronicsType,
+      pickupConfiguration: mergedPickupConfigurationOptions[config.pickupConfiguration]?.label ?? PICKUP_CONFIGURATION_OPTIONS[config.pickupConfiguration]?.label ?? config.pickupConfiguration,
+      bridgePickupModel: mergedBridgePickupModelOptions[config.bridgePickupModel]?.label ?? PICKUP_MODEL_BRIDGE_OPTIONS[config.bridgePickupModel]?.label ?? config.bridgePickupModel,
+      middlePickupModel: mergedMiddlePickupModelOptions[config.middlePickupModel]?.label ?? PICKUP_MODEL_MIDDLE_OPTIONS[config.middlePickupModel]?.label ?? config.middlePickupModel,
+      neckPickupModel: mergedNeckPickupModelOptions[config.neckPickupModel]?.label ?? PICKUP_MODEL_NECK_OPTIONS[config.neckPickupModel]?.label ?? config.neckPickupModel,
+      pickupColor: mergedPickupColorOptions[config.pickupColor]?.label ?? PICKUP_COLOR_OPTIONS[config.pickupColor]?.label ?? config.pickupColor,
+      pickupPoleColor: mergedPickupPoleColorOptions[config.pickupPoleColor]?.label ?? PICKUP_POLE_COLOR_OPTIONS[config.pickupPoleColor]?.label ?? config.pickupPoleColor,
+      controls: mergedControlsOptions[config.controls]?.label ?? CONTROLS_OPTIONS[config.controls]?.label ?? config.controls,
       saddle: SADDLE_OPTIONS[config.saddle]?.label ?? config.saddle,
-      nut: NUT_OPTIONS[config.nut]?.label ?? config.nut,
-      tuning: TUNING_OPTIONS[config.tuning]?.label ?? config.tuning,
-      stringBrand: STRING_BRAND_OPTIONS[config.stringBrand]?.label ?? config.stringBrand,
-      outputJack: OUTPUT_JACK_OPTIONS[config.outputJack]?.label ?? config.outputJack,
-      strapButtons: STRAP_BUTTON_OPTIONS[config.strapButtons]?.label ?? config.strapButtons,
-      tunerButtons: TUNER_BUTTON_OPTIONS[config.tunerButtons]?.label ?? config.tunerButtons,
-      electronicsCavityCover: ELECTRONICS_CAVITY_COVER_OPTIONS[config.electronicsCavityCover]?.label ?? config.electronicsCavityCover,
-      tremoloCover: TREMOLO_COVER_OPTIONS_BY_BRIDGE[config.bridge]?.[config.tremoloCover]?.label ?? config.tremoloCover,
+      nut: mergedNutOptions[config.nut]?.label ?? NUT_OPTIONS[config.nut]?.label ?? config.nut,
+      tuning: mergedTuningOptions[config.tuning]?.label ?? TUNING_OPTIONS[config.tuning]?.label ?? config.tuning,
+      stringBrand: mergedStringBrandOptions[config.stringBrand]?.label ?? STRING_BRAND_OPTIONS[config.stringBrand]?.label ?? config.stringBrand,
+      outputJack: mergedOutputJackOptions[config.outputJack]?.label ?? OUTPUT_JACK_OPTIONS[config.outputJack]?.label ?? config.outputJack,
+      strapButtons: mergedStrapButtonOptions[config.strapButtons]?.label ?? STRAP_BUTTON_OPTIONS[config.strapButtons]?.label ?? config.strapButtons,
+      tunerButtons: mergedTunerButtonOptions[config.tunerButtons]?.label ?? TUNER_BUTTON_OPTIONS[config.tunerButtons]?.label ?? config.tunerButtons,
+      electronicsCavityCover: mergedElectronicsCavityCoverOptions[config.electronicsCavityCover]?.label ?? ELECTRONICS_CAVITY_COVER_OPTIONS[config.electronicsCavityCover]?.label ?? config.electronicsCavityCover,
+      tremoloCover: tremoloCoverOptions[config.tremoloCover]?.label ?? TREMOLO_COVER_OPTIONS_BY_BRIDGE[config.bridge]?.[config.tremoloCover]?.label ?? config.tremoloCover,
     }),
-    [config],
+    [config, priceOverrides,
+      mergedBodyOptions, mergedBodyWoodOptions, mergedBodyFinishOptions, mergedNeckOptions,
+      mergedFretboardOptions, mergedHeadstockShapeOptions, mergedHeadstockWoodOptions,
+      mergedInlayOptions, mergedInlayShapeOptions, mergedInlayMaterialOptions, mergedBridgeOptions,
+      pickguardOptions, knobOptions, mergedHardwareOptions, mergedPickupOptions,
+      mergedDexterityOptions, mergedStringCountOptions, mergedMultiscaleOptions,
+      mergedScaleLengthOptions, mergedCaseOptions, mergedBevelOptions, mergedFinishTypeOptions,
+      mergedBurstFinishOptions, mergedNeckConstructionOptions, mergedFretOptions,
+      mergedNeckRearFinishOptions, mergedTrussRodCoverOptions, mergedElectronicsTypeOptions,
+      mergedPickupConfigurationOptions, mergedBridgePickupModelOptions, mergedMiddlePickupModelOptions,
+      mergedNeckPickupModelOptions, mergedPickupColorOptions, mergedPickupPoleColorOptions,
+      mergedControlsOptions, mergedNutOptions, mergedTuningOptions, mergedStringBrandOptions,
+      mergedOutputJackOptions, mergedStrapButtonOptions, mergedTunerButtonOptions,
+      mergedElectronicsCavityCoverOptions, tremoloCoverOptions,
+      mergedDynamicTopWoodOptions, mergedDynamicTopCoatOptions, mergedDynamicInlayOptions,
+    ],
   )
 
   const bodyWoodOptions = useMemo(
@@ -1897,8 +1923,8 @@ export default function useGuitarConfig() {
    ])
 
   const refreshPrices = useCallback(() => {
-    fetchBuilderParts()
-  }, [])
+    fetchBuilderParts(config.guitarType || 'electric')
+  }, [config.guitarType, fetchBuilderParts])
 
   return {
     config,

@@ -1032,6 +1032,29 @@ export function AdminPage() {
      setModal({ open: true, type, data })
    }
 
+  const handleProjectPartRestock = (requiredPart) => {
+    const inventoryPart = visibleParts.find(
+      (part) => String(part.part_id) === String(requiredPart.part_id)
+    )
+
+    setActiveTab('inventory')
+    setInventorySubTab('guitar-parts')
+    setInventoryPage(1)
+    setPartsInventoryFilter((prev) => ({ ...prev, search: requiredPart.name || '', page: 1 }))
+
+    if (!inventoryPart) {
+      setModal({ open: false, type: null, data: null })
+      showToast('The linked Guitar Parts inventory record could not be found.', 'error')
+      return
+    }
+
+    openModal('part_inventory', {
+      ...inventoryPart,
+      current_stock: Number(inventoryPart.stock ?? inventoryPart.quantity ?? 0),
+      change_type: 'stock_in',
+    })
+  }
+
   const handleManageCustomizationProject = async (order) => {
     setActiveTab('projects')
     let project = null
@@ -1290,7 +1313,7 @@ export function AdminPage() {
         price: Number(form.price ?? 0) || 0,
         metadata: {
           ...(form.metadata && typeof form.metadata === 'object' ? form.metadata : {}),
-          ...(form.metadata?.option_key?.trim() ? { option_key: form.metadata.option_key.trim() } : {}),
+          ...((form.metadata?.option_key?.trim() || form.option_key?.trim()) ? { option_key: (form.metadata?.option_key?.trim() || form.option_key?.trim()) } : {}),
           inventory_category:
             normalizeInventoryPartCategory(form.inventory_category) ||
             deriveInventoryPartCategory(form),
@@ -2735,7 +2758,12 @@ export function AdminPage() {
             >
 
               {modal.type === 'project_tasks' && modal.data && (
-                <ProjectTasksModal modal={modal} closeModal={closeModal} visibleParts={visibleParts} />
+                <ProjectTasksModal
+                  modal={modal}
+                  closeModal={closeModal}
+                  visibleParts={visibleParts}
+                  onRestockPart={handleProjectPartRestock}
+                />
               )}
 
               {modal.type === 'view_appointment' && modal.data && (

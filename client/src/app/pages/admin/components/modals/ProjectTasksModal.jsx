@@ -31,7 +31,7 @@ const normalizeStickerList = (value) => {
     .filter((sticker) => Boolean(sticker.src))
 }
 
-export function ProjectTasksModal({ modal, closeModal, visibleParts }) {
+export function ProjectTasksModal({ modal, closeModal, visibleParts, onRestockPart }) {
   const [selectedBuildId, setSelectedBuildId] = useState('')
   const [projectDetails, setProjectDetails] = useState(null)
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
@@ -226,6 +226,7 @@ export function ProjectTasksModal({ modal, closeModal, visibleParts }) {
           isAdmin={true}
           parts={visibleParts}
           projectData={projectData}
+          onRestockPart={onRestockPart}
         />
       </div>
     </>

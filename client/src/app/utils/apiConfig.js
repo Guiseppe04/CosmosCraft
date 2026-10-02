@@ -79,8 +79,9 @@ export async function listBuilderAssets({ guitarType, group, subgroup, model } =
   if (group) params.set('group', group)
   if (subgroup) params.set('subgroup', subgroup)
   if (model) params.set('model', model)
+  params.set('_t', Date.now())
   const url = `${API}/api/builder-parts/assets${params.toString() ? `?${params.toString()}` : ''}`
-  const response = await fetch(url, { headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache', Expires: '0' } })
+  const response = await fetch(url)
   if (!response.ok) {
     const text = await response.text().catch(() => '')
     throw new Error(`Asset listing failed: ${response.status} ${text}`)
