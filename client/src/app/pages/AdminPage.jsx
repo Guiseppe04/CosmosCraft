@@ -1034,7 +1034,7 @@ export function AdminPage() {
 
   const handleProjectPartRestock = (requiredPart) => {
     const inventoryPart = visibleParts.find(
-      (part) => String(part.part_id) === String(requiredPart.part_id)
+      (part) => String(part.part_id) === String(requiredPart.builder_part_id || requiredPart.part_id)
     )
 
     setActiveTab('inventory')

@@ -1497,6 +1497,44 @@ exports.updatePart = async (id, { name, description, guitar_type, part_category,
   return updated;
 };
 
+/**
+ * Apply a relative stock change to a builder part (guitar part).
+ * Guitar parts are tracked in guitar_builder_parts.stock — Admin > Inventory > Guitar
+ * Parts — and are not products, so this never touches the products/inventory tables.
+ * Rejects changes that would drive stock below zero.
+ */
+exports.adjustPartStock = async (partId, delta, { client: providedClient = null } = {}) => {
+  const amount = Number(delta);
+  if (!partId || !Number.isFinite(amount) || amount === 0) {
+    throw new AppError('A guitar part and a non-zero stock change are required', 400);
+  }
+
+  const client = providedClient || pool;
+  const res = await client.query(
+    `UPDATE guitar_builder_parts
+     SET stock = stock + $1, updated_at = now()
+     WHERE part_id = $2
+       AND stock + $1 >= 0
+     RETURNING part_id, name, stock`,
+    [amount, partId]
+  );
+
+  if (res.rows.length > 0) return res.rows[0];
+
+  const current = await client.query(
+    'SELECT name, stock FROM guitar_builder_parts WHERE part_id = $1',
+    [partId]
+  );
+  if (current.rows.length === 0) {
+    throw new AppError('Guitar part not found', 404);
+  }
+
+  throw new AppError(
+    `Insufficient stock. Available: ${Number(current.rows[0].stock)}, Requested: ${Math.abs(amount)}`,
+    400
+  );
+};
+
 exports.deletePart = async (id) => {
   // Soft delete
   const res = await pool.query(

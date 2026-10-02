@@ -133,6 +133,8 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
       ]);
       setHierarchy(hierarchyRes.data);
       const loadedRequiredParts = Array.isArray(requiredPartsRes.data) ? requiredPartsRes.data : [];
+      // Specs with no stock record (no guitar part match, no product) are not part of the
+      // checklist, so keep only parts whose stock can actually be tracked.
       setRequiredParts(loadedRequiredParts.filter((part) => part.stock_status && part.stock_status !== 'unknown'));
       
       // Auto-expand all milestones on first load only
@@ -623,15 +625,25 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   };
 
   const handleRestockPart = async (part) => {
-    if (!part.product_id) return;
+    const isBuilderPart = Boolean(part.builder_part_id);
+    if (!isBuilderPart && !part.product_id) return;
     try {
       setRestockSaving(true);
       setRestockFeedback(null);
       setRestockingPartKey(part.part_key);
 
       const quantity = Number(restockQuantity) || 1;
-      const result = await adminApi.addInventoryStock(part.product_id, quantity, restockNotes || `Restocked for project ${projectId}`);
-      const newStock = result.data?.product?.stock;
+      let newStock;
+      if (isBuilderPart) {
+        // Guitar parts are not products: restock them in the Guitar Parts catalog.
+        const result = await adminApi.updateBuilderPart(part.builder_part_id, {
+          stock: (Number(part.stock) || 0) + quantity,
+        });
+        newStock = result.data?.stock;
+      } else {
+        const result = await adminApi.addInventoryStock(part.product_id, quantity, restockNotes || `Restocked for project ${projectId}`);
+        newStock = result.data?.product?.stock;
+      }
       const newStatus = getStockStatus(newStock, part.quantity);
 
       setRequiredParts(prev =>
@@ -874,10 +886,20 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               <div className="divide-y divide-[var(--border)]">
                 {requiredParts.map((part, idx) => {
                   const isReceived = Boolean(part.is_received);
-                  const stockLabel = part.stock_status === 'unknown' || !part.stock_status
-                    ? 'Not Linked'
-                    : formatStatusLabel(part.stock_status);
-                  const isOutOfStock = (part.stock_status === 'out_of_stock' || (Number(part.stock) || 0) === 0) && !isReceived;
+                  // Stock lives in Guitar Parts for builder parts and in Inventory for
+                  // product-backed parts. Specs with neither have no stock to show.
+                  const isStockTracked = Boolean(part.product_id || part.builder_part_id);
+                  const stockLabel = !isStockTracked
+                    ? (isReceived ? 'Received' : 'Not Received')
+                    : part.stock_status === 'unknown' || !part.stock_status
+                      ? 'Not Linked'
+                      : formatStatusLabel(part.stock_status);
+                  const stockDetail = isStockTracked
+                    ? ` • Stock: ${part.stock !== null && part.stock !== undefined ? part.stock : 'Not Linked'}`
+                    : '';
+                  const isOutOfStock = isStockTracked
+                    && (part.stock_status === 'out_of_stock' || (Number(part.stock) || 0) === 0)
+                    && !isReceived;
                   const isRestocking = restockingPartKey === part.part_key;
                   return (
                     <div key={`${part.part_key || `${part.category}-${part.name}-${part.source}-${part.product_id || 'anon'}`}-${idx}`} className={`p-4 transition-colors hover:bg-white/[0.02] ${isReceived ? 'opacity-60' : ''}`}>
@@ -887,17 +909,18 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                             type="checkbox"
                             checked={isReceived}
                             onChange={() => handleToggleReceive(part)}
-                            disabled={togglingSaving && togglingPartKey === part.part_key}
-                            className="w-4 h-4 rounded border-[var(--border)] bg-[var(--surface-dark)] text-[var(--gold-primary)] focus:ring-[var(--gold-primary)] shrink-0"
+                            disabled={(togglingSaving && togglingPartKey === part.part_key) || isOutOfStock}
+                            title={isOutOfStock ? 'Out of stock. Restock this part before marking it received.' : undefined}
+                            className="w-4 h-4 rounded border-[var(--border)] bg-[var(--surface-dark)] text-[var(--gold-primary)] focus:ring-[var(--gold-primary)] shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
                           />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-white truncate">{part.name}</p>
                             <p className="text-xs text-[var(--text-muted)]">
-                              {formatStatusLabel(part.category || 'Other')} • Qty: {part.quantity} • Stock: {part.stock !== null && part.stock !== undefined ? part.stock : 'Not Linked'}
+                              {formatStatusLabel(part.category || 'Other')} • Qty: {part.quantity}{stockDetail}
                             </p>
                           </div>
                         </label>
-                        <span className={`rounded-full px-2 py-1 text-[10px] font-semibold shrink-0 ${getStockBadgeStyle(part.stock_status)}`}>
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-semibold shrink-0 ${getStockBadgeStyle(isStockTracked ? part.stock_status : (isReceived ? 'in_stock' : 'unknown'))}`}>
                           {stockLabel}
                         </span>
                         {isAdmin && isOutOfStock && !isRestocking && (

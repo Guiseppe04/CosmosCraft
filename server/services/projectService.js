@@ -2,6 +2,7 @@ const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const defaultWorkflowService = require('./defaultWorkflowService');
 const inventoryService = require('./inventoryService');
+const builderPartsService = require('./builderPartsService');
 const { generateRefundRequestNumber } = require('../utils/orderNumber');
 const notificationService = require('./notificationService');
 let currentBuildClaimService = null;
@@ -614,6 +615,36 @@ const getPartStockStatus = (stock, quantity = 1) => {
   return 'in_stock';
 };
 
+// Applies a stock change for a required project part to whichever catalog tracks it.
+// Guitar parts are not products: their stock lives in guitar_builder_parts.stock
+// (Admin > Inventory > Guitar Parts), while customer-added parts reference a product and
+// live in inventory.stock (Admin > Inventory > Products). direction is -1 to consume stock
+// when a part is received and +1 to give it back when the part is unchecked.
+const applyRequiredPartStockChange = async ({ client, projectId, part, direction, quantity, userId }) => {
+  if (part.builder_part_id) {
+    const updatedPart = await builderPartsService.adjustPartStock(
+      part.builder_part_id,
+      direction * quantity,
+      { client }
+    );
+    return { updated: true, stock: Number(updatedPart.stock), source: 'builder_part' };
+  }
+
+  if (part.product_id) {
+    const options = {
+      notes: `Project required part ${direction < 0 ? 'received' : 'unchecked'} for ${part.name}`,
+      createdBy: userId,
+      client,
+    };
+    const result = direction < 0
+      ? await inventoryService.deductStock(part.product_id, quantity, 'project_part', projectId, options)
+      : await inventoryService.addStock(part.product_id, quantity, options);
+    return { updated: true, stock: Number(result.product.stock), source: 'product' };
+  }
+
+  return { updated: false, stock: null, source: null };
+};
+
 const buildPartKey = (part = {}) => {
   const base = [
     part?.source || 'unknown',
@@ -658,6 +689,7 @@ const buildRequiredPartsPayload = (customization = {}, linkedParts = []) => {
       needs_purchase: true,
       price: 0,
       part_type: partType,
+      builder_part_id: null,
       part_key: buildPartKey({
         source: 'configuration',
         category,
@@ -706,6 +738,7 @@ const buildRequiredPartsPayload = (customization = {}, linkedParts = []) => {
       needs_purchase: stockStatus !== 'in_stock',
       price: Number(part?.price) || 0,
       product_id: part?.product_id || null,
+      builder_part_id: null,
       is_active: part?.is_active !== false,
       part_key: buildPartKey({
         source: 'additional_parts',
@@ -734,11 +767,17 @@ const getProjectPartReceiptState = (auditRows = []) => {
     const details = typeof row?.details === 'string' ? JSON.parse(row.details) : row?.details;
     if (!details || !details.part_key) return;
 
-    const previous = receiptState.get(details.part_key) || { received_quantity: 0 };
+    const previous = receiptState.get(details.part_key) || { received_quantity: 0, stock_deducted_quantity: 0 };
     const receivedQuantity = Number(previous.received_quantity || 0) + Number(details.received_quantity || 0);
-    
+    // Only entries flagged with stock_updated actually moved inventory stock. Older entries
+    // were logged while the part was not linked to a product, so their stock was never
+    // deducted and must not be handed back when the part is unchecked.
+    const stockDeductedQuantity = Number(previous.stock_deducted_quantity || 0)
+      + (details.stock_updated === true ? Number(details.received_quantity || 0) : 0);
+
     receiptState.set(details.part_key, {
       received_quantity: receivedQuantity,
+      stock_deducted_quantity: stockDeductedQuantity,
       received_at: receivedQuantity > 0 ? (details.received_at || previous.received_at || null) : null,
       received_by: receivedQuantity > 0 ? (details.received_by || previous.received_by || null) : null,
       supplier: receivedQuantity > 0 ? (details.supplier || previous.supplier || null) : null,
@@ -2093,7 +2132,7 @@ exports.getProjectRequiredParts = async (projectId) => {
        FROM audit_logs
        WHERE entity_type = 'project'
          AND entity_id = $1
-         AND action = 'project_part_received'
+         AND action IN ('project_part_received', 'project_part_unreceived')
        ORDER BY created_at ASC`,
       [projectId]
     );
@@ -2103,12 +2142,6 @@ exports.getProjectRequiredParts = async (projectId) => {
     let builderPartsLookup = null;
     let productsByNameLookup = null;
     try {
-      const columnCheck = await client.query(
-        `SELECT column_name FROM information_schema.columns WHERE table_name = 'guitar_builder_parts' AND column_name = 'product_id'`
-      );
-      if (columnCheck.rows.length === 0) {
-        console.warn('[projectService] guitar_builder_parts.product_id column missing. Stock/price lookup will still work but inventory sync requires migration 005.');
-      }
       if (customizationResult.rows.length > 0) {
         const guitarTypes = [...new Set(customizationResult.rows.map(r => r.guitar_type).filter(Boolean))];
         if (guitarTypes.length > 0) {
@@ -2181,10 +2214,10 @@ exports.getProjectRequiredParts = async (projectId) => {
             if (match) {
               enrichedPart.name = match.name || enrichedPart.name;
               enrichedPart.part_id = match.part_id || null;
+              enrichedPart.builder_part_id = match.part_id || null;
               const productPrice = productsByNameLookup?.get((match.name || '').toLowerCase());
               const finalPrice = match.price > 0 ? match.price : (productPrice || 0);
               // console.log(`[projectService] MATCHED part "${enrichedPart.name}" (${enrichedPart.part_type}) → builder part "${match.name}" stock=${match.stock} price=${finalPrice}${productPrice ? ' (from products table)' : ''}`);
-              enrichedPart.product_id = enrichedPart.product_id || null;
               enrichedPart.stock = match.stock ?? null;
               enrichedPart.price = finalPrice;
               enrichedPart.stock_status = getPartStockStatus(match.stock, enrichedPart.quantity);
@@ -2199,7 +2232,7 @@ exports.getProjectRequiredParts = async (projectId) => {
                 const finalPrice = fallbackMatch.price > 0 ? fallbackMatch.price : (productPrice || 0);
                 // console.log(`[projectService] FALLBACK MATCHED part "${enrichedPart.name}" → "${fallbackMatch.name}" stock=${fallbackMatch.stock} price=${finalPrice}`);
                 enrichedPart.part_id = fallbackMatch.part_id || null;
-                enrichedPart.product_id = enrichedPart.product_id || null;
+                enrichedPart.builder_part_id = fallbackMatch.part_id || null;
                 enrichedPart.stock = fallbackMatch.stock ?? null;
                 enrichedPart.price = finalPrice;
                 enrichedPart.stock_status = getPartStockStatus(fallbackMatch.stock, enrichedPart.quantity);
@@ -2224,6 +2257,7 @@ exports.getProjectRequiredParts = async (projectId) => {
         ...enrichedPart,
         is_received: receivedQuantity > 0,
         received_quantity: receivedQuantity,
+        stock_deducted_quantity: Number(receipt?.stock_deducted_quantity || 0),
         pending_quantity: pendingQuantity,
         is_fully_received: isFullyReceived,
         received_at: receipt?.received_at || null,
@@ -2303,16 +2337,20 @@ exports.receiveProjectRequiredPart = async (projectId, partKey, payload = {}, us
 
   const client = await pool.connect();
   let updatedStock = null;
+  let stockUpdated = false;
   try {
     await client.query('BEGIN');
 
-    if (part.product_id) {
-      await inventoryService.deductStock(part.product_id, receivedQuantity, 'project_part', projectId, {
-        notes: `Project required part received for ${part.name}`,
-        createdBy: userId,
-        client,
-      });
-    }
+    const stockChange = await applyRequiredPartStockChange({
+      client,
+      projectId,
+      part,
+      direction: -1,
+      quantity: receivedQuantity,
+      userId,
+    });
+    stockUpdated = stockChange.updated;
+    updatedStock = stockChange.stock;
 
     await client.query(
       `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
@@ -2331,6 +2369,8 @@ exports.receiveProjectRequiredPart = async (projectId, partKey, payload = {}, us
           received_by: userId,
           supplier: null,
           product_id: part.product_id || null,
+          builder_part_id: part.builder_part_id || null,
+          stock_updated: stockUpdated,
         }),
       ]
     );
@@ -2341,11 +2381,6 @@ exports.receiveProjectRequiredPart = async (projectId, partKey, payload = {}, us
     throw error;
   } finally {
     client.release();
-  }
-
-  if (part.product_id) {
-    const stockRow = await pool.query('SELECT stock FROM inventory WHERE product_id = $1', [part.product_id]);
-    updatedStock = stockRow.rows[0] ? Number(stockRow.rows[0].stock) : null;
   }
 
   const refreshedParts = await exports.getProjectRequiredParts(projectId);
@@ -2391,11 +2426,14 @@ exports.receiveProjectRequiredPart = async (projectId, partKey, payload = {}, us
   return {
     part: {
       ...(refreshedPart || part),
-      stock: updatedStock,
-      stock_status: getPartStockStatus(updatedStock, Number(receivedQuantity)),
+      stock: stockUpdated ? updatedStock : (refreshedPart?.stock ?? part.stock ?? null),
+      stock_status: getPartStockStatus(
+        stockUpdated ? updatedStock : (refreshedPart?.stock ?? part.stock ?? null),
+        Number(receivedQuantity)
+      ),
     },
     quantity_received: Number(receivedQuantity),
-    stock_updated: Boolean(part.product_id),
+    stock_updated: stockUpdated,
     all_parts_received: allPartsReceived,
   };
 };
@@ -2413,30 +2451,35 @@ exports.toggleProjectRequiredPart = async (projectId, partKey, received, userId)
 
   const quantity = Number(part.quantity) || 1;
   const currentReceivedQty = Number(part.received_quantity || 0);
+  const isStockTracked = Boolean(part.builder_part_id || part.product_id);
 
   if (received) {
     if (currentReceivedQty >= quantity) {
-      return { part, received: true, stock_updated: Boolean(part.product_id), already_received: true };
+      return { part, received: true, stock_updated: false, already_received: true };
     }
   } else {
     if (currentReceivedQty === 0) {
-      return { part, received: false, stock_updated: Boolean(part.product_id), already_received: false };
+      return { part, received: false, stock_updated: false, already_received: false };
     }
   }
 
   const client = await pool.connect();
   let updatedStock = null;
+  let stockUpdated = false;
   try {
     await client.query('BEGIN');
 
     if (received) {
-      if (part.product_id) {
-        await inventoryService.deductStock(part.product_id, quantity, 'project_part', projectId, {
-          notes: `Project required part received for ${part.name}`,
-          createdBy: userId,
-          client,
-        });
-      }
+      const stockChange = await applyRequiredPartStockChange({
+        client,
+        projectId,
+        part,
+        direction: -1,
+        quantity,
+        userId,
+      });
+      stockUpdated = stockChange.updated;
+      updatedStock = stockChange.stock;
 
       await client.query(
         `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
@@ -2455,6 +2498,8 @@ exports.toggleProjectRequiredPart = async (projectId, partKey, received, userId)
             received_by: userId,
             supplier: null,
             product_id: part.product_id || null,
+            builder_part_id: part.builder_part_id || null,
+            stock_updated: stockUpdated,
           }),
         ]
       );
@@ -2470,12 +2515,25 @@ exports.toggleProjectRequiredPart = async (projectId, partKey, received, userId)
         throw new AppError('Cannot uncheck part: project has already progressed beyond the stage that consumes this part.', 400);
       }
 
-      if (part.product_id) {
-        await inventoryService.addStock(part.product_id, quantity, {
-          notes: `Project required part unchecked for ${part.name}`,
-          createdBy: userId,
+      // Only hand back stock that was actually deducted when the part was received. Parts
+      // received before this flow tracked their stock have nothing to give back.
+      const deductedQuantity = Number(part.stock_deducted_quantity || 0);
+      if (isStockTracked && deductedQuantity >= quantity) {
+        const stockChange = await applyRequiredPartStockChange({
           client,
+          projectId,
+          part,
+          direction: 1,
+          quantity,
+          userId,
         });
+        stockUpdated = stockChange.updated;
+        updatedStock = stockChange.stock;
+      } else if (isStockTracked) {
+        console.warn(
+          `[projectService] Skipped stock return for part "${part.name}" on project ${projectId}: `
+          + `no matching stock deduction was recorded (deducted ${deductedQuantity}, needed ${quantity}).`
+        );
       }
 
       await client.query(
@@ -2495,6 +2553,8 @@ exports.toggleProjectRequiredPart = async (projectId, partKey, received, userId)
             received_by: null,
             supplier: null,
             product_id: part.product_id || null,
+            builder_part_id: part.builder_part_id || null,
+            stock_updated: stockUpdated,
           }),
         ]
       );
@@ -2508,12 +2568,7 @@ exports.toggleProjectRequiredPart = async (projectId, partKey, received, userId)
     client.release();
   }
 
-  if (part.product_id) {
-    const stockRow = await pool.query('SELECT stock FROM inventory WHERE product_id = $1', [part.product_id]);
-    updatedStock = stockRow.rows[0] ? Number(stockRow.rows[0].stock) : null;
-  }
-
-  const stockStatus = getPartStockStatus(updatedStock, quantity);
+  const stockStatus = getPartStockStatus(isStockTracked ? updatedStock : part.stock, quantity);
 
   return {
     part: {
@@ -2521,12 +2576,13 @@ exports.toggleProjectRequiredPart = async (projectId, partKey, received, userId)
       name: part.name,
       is_received: received,
       quantity,
-      stock: updatedStock,
+      stock: isStockTracked ? updatedStock : part.stock ?? null,
       stock_status: stockStatus,
       product_id: part.product_id,
+      builder_part_id: part.builder_part_id,
     },
     received,
-    stock_updated: Boolean(part.product_id),
+    stock_updated: stockUpdated,
   };
 };
 
