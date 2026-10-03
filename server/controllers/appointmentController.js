@@ -85,6 +85,7 @@ exports.createAppointment = async (req, res, next) => {
       location_id: validated.location_id
         || (validated.appointment_type === 'service_home' ? validated.address_id : undefined),
       address_id: validated.address_id || null,
+      contact_number: validated.contact_number || null,
       guitar_details: validated.guitar_details,
       scheduled_at: validated.scheduled_at,
       notes: validated.notes,

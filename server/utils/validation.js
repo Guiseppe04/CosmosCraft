@@ -4,6 +4,12 @@ const Joi = require('joi');
 // REUSABLE FIELD SCHEMAS
 // ============================================================================
 
+// Philippine mobile numbers only: 11 digits starting with 09, or +63 followed
+// by 9 and 9 more digits. Everything else (letters, spaces, dashes, parentheses)
+// is rejected so stored contact numbers stay in one canonical format.
+const PH_MOBILE_REGEX = /^(09\d{9}|\+639\d{9})$/;
+const PH_MOBILE_MESSAGE = 'Phone number must be 11 digits starting with 09 or in +63 format (e.g. +639123456789)';
+
 // Shared regex for PH-style place names (city / state-province). Matches any
 // Unicode letter (\p{L} -- accented Latin like ñ, é, ü, ß all pass), spaces,
 // periods, commas, parentheses, hyphens, and apostrophes, while still blocking
@@ -180,10 +186,10 @@ exports.emailSignupSchema = Joi.object({
       'any.required': 'Email is required',
     }),
   phone: Joi.string()
-    .pattern(/^[\d\s\-\+\(\)]{10,20}$/)
+    .pattern(PH_MOBILE_REGEX)
     .required()
     .messages({
-      'string.pattern.base': 'Phone number must be valid (10-20 digits with optional formatting)',
+      'string.pattern.base': PH_MOBILE_MESSAGE,
       'any.required': 'Phone number is required',
     }),
   password: Joi.string()
@@ -364,9 +370,9 @@ exports.updateProfileSchema = Joi.object({
   phone: Joi.string()
     .optional()
     .allow('')
-    .pattern(/^[\d\s\-\+\(\)]{10,20}$/)
+    .pattern(PH_MOBILE_REGEX)
     .messages({
-      'string.pattern.base': 'Phone number must be valid (10-20 digits with optional formatting)',
+      'string.pattern.base': PH_MOBILE_MESSAGE,
     }),
   avatarUrl: Joi.string()
     .uri()
@@ -380,10 +386,10 @@ exports.updateProfileSchema = Joi.object({
 // Update phone (PH mobile format: 09XXXXXXXXX or +639XXXXXXXXX)
 exports.updatePhoneSchema = Joi.object({
   phone: Joi.string()
-    .pattern(/^(09\d{9}|\+639\d{9})$/)
+    .pattern(PH_MOBILE_REGEX)
     .required()
     .messages({
-      'string.pattern.base': 'Phone number must be 11 digits starting with 09 or in +63 format (e.g. +639123456789)',
+      'string.pattern.base': PH_MOBILE_MESSAGE,
       'any.required': 'Phone number is required',
     }),
 });

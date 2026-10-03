@@ -1056,15 +1056,79 @@ export function AdminPage() {
      setModal({ open: true, type, data })
    }
 
-  const handleProjectPartRestock = (requiredPart) => {
-    const inventoryPart = visibleParts.find(
-      (part) => String(part.part_id) === String(requiredPart.builder_part_id || requiredPart.part_id)
-    )
+  // The in-memory `parts` list is search-scoped and is not loaded on every tab, so a
+  // project's linked part is often missing from it. Always fall back to a direct
+  // by-id fetch so restocking works regardless of the current tab/search state.
+  const resolveBuilderPart = async (partId) => {
+    if (!partId) return null
+    const id = String(partId)
+    const cached = visibleParts.find((part) => String(part.part_id) === id)
+    if (cached) return cached
+
+    try {
+      const response = await adminApi.getBuilderPart(id)
+      const part = response?.data?.part || response?.data || response?.part
+      return part ? normalizeBuilderPart(part) : null
+    } catch (error) {
+      console.error('Failed to load linked builder part:', error)
+      return null
+    }
+  }
+
+  // Same story for product-backed inventory: `visibleInventory` is not loaded on
+  // every tab, so fall back to a direct by-id fetch.
+  const resolveInventoryProduct = async (productId) => {
+    if (!productId) return null
+    const id = String(productId)
+    const cached = visibleInventory.find((item) => String(item.product_id) === id)
+    if (cached) return cached
+
+    try {
+      const response = await adminApi.getInventoryProduct(id)
+      const product = response?.data?.product || response?.data || response?.product
+      return product || null
+    } catch (error) {
+      console.error('Failed to load linked inventory product:', error)
+      return null
+    }
+  }
+
+  const handleProjectPartRestock = async (requiredPart) => {
+    // Customer-added required parts are backed by a product, not a builder part,
+    // so they are restocked from Inventory > Products instead of Guitar Parts.
+    if (!requiredPart?.builder_part_id && !requiredPart?.part_id) {
+      if (requiredPart?.product_id) {
+        const product = await resolveInventoryProduct(requiredPart.product_id)
+        setActiveTab('inventory')
+        setInventorySubTab('products')
+        setInventoryPage(1)
+        setProductsInventoryFilter((prev) => ({ ...prev, search: requiredPart?.name || '', status: 'all', category: '', page: 1 }))
+
+        if (!product) {
+          setModal({ open: false, type: null, data: null })
+          showToast('The linked Products inventory record could not be found.', 'error')
+          return
+        }
+
+        openModal('inventory', {
+          ...product,
+          current_stock: Number(product.stock ?? 0),
+          change_type: 'stock_in',
+        })
+        return
+      }
+
+      setModal({ open: false, type: null, data: null })
+      showToast('This part has no linked inventory record to restock.', 'error')
+      return
+    }
+
+    const inventoryPart = await resolveBuilderPart(requiredPart.builder_part_id || requiredPart.part_id)
 
     setActiveTab('inventory')
     setInventorySubTab('guitar-parts')
     setInventoryPage(1)
-    setPartsInventoryFilter((prev) => ({ ...prev, search: requiredPart.name || '', page: 1 }))
+    setPartsInventoryFilter((prev) => ({ ...prev, search: requiredPart?.name || '', status: 'all', category: 'all', page: 1 }))
 
     if (!inventoryPart) {
       setModal({ open: false, type: null, data: null })
@@ -1866,7 +1930,7 @@ export function AdminPage() {
         showToast('Please fill all required fields', 'error'); return
       }
 
-      const existingPart = visibleParts.find((part) => part.part_id === part_id)
+      const existingPart = await resolveBuilderPart(part_id)
       const currentStock = Number(existingPart?.stock ?? existingPart?.quantity ?? form.current_stock ?? 0) || 0
       const qty = Number(quantity)
 

@@ -9,6 +9,17 @@ const Joi = require('joi');
 const GUITAR_TYPE_VALUES = ['electric', 'bass', 'acoustic', 'ukulele'];
 const APPOINTMENT_STATUS_VALUES = ['pending', 'confirmed', 'in_progress', 'ready_for_pickup', 'completed', 'cancelled', 'no_show'];
 
+// Philippine mobile: 11 digits starting with 09, or +63 followed by 9 and 9 more digits.
+const PH_MOBILE_REGEX = /^(09\d{9}|\+639\d{9})$/;
+const PH_MOBILE_MESSAGE = 'Phone number must be 11 digits starting with 09 or in +63 format (e.g. +639123456789)';
+
+const phMobileSchema = Joi.string()
+  .trim()
+  .pattern(PH_MOBILE_REGEX)
+  .messages({
+    'string.pattern.base': PH_MOBILE_MESSAGE,
+  });
+
 const guitarEntrySchema = Joi.object({
   brand: Joi.string().required(),
   model: Joi.string().required(),
@@ -114,6 +125,15 @@ const appointmentValidation = {
         'string.guid': 'address_id must be a valid UUID',
       }),
 
+    // Contact number entered on the booking form. Falls back to the profile phone
+    // when omitted, so it stays optional.
+    contact_number: phMobileSchema
+      .optional()
+      .allow('')
+      .messages({
+        'string.pattern.base': PH_MOBILE_MESSAGE,
+      }),
+
     // Scheduled date/time - Required for service, optional for pickup
     scheduled_at: Joi.date()
       .iso()
@@ -212,6 +232,13 @@ const appointmentValidation = {
       .optional()
       .messages({
         'string.guid': 'address_id must be a valid UUID',
+      }),
+
+    contact_number: phMobileSchema
+      .optional()
+      .allow('')
+      .messages({
+        'string.pattern.base': PH_MOBILE_MESSAGE,
       }),
 
     notes: Joi.string()

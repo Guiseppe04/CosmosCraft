@@ -639,7 +639,8 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
         const result = await adminApi.updateBuilderPart(part.builder_part_id, {
           stock: (Number(part.stock) || 0) + quantity,
         });
-        newStock = result.data?.stock;
+        // The API nests the updated row under data.part.
+        newStock = result?.data?.part?.stock ?? result?.data?.stock;
       } else {
         const result = await adminApi.addInventoryStock(part.product_id, quantity, restockNotes || `Restocked for project ${projectId}`);
         newStock = result.data?.product?.stock;

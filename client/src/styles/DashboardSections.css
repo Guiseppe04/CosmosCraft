@@ -337,6 +337,46 @@
 }
 
 /* Corrected purchase layout overrides. */
+/* Tabs and the sort control share one row: the tab strip takes the slack and
+   scrolls horizontally when it runs out of room, the sort control stays put. */
+.purch-toolbar {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 1rem !important;
+  width: 100% !important;
+  margin: 0 0 1rem 0 !important;
+}
+
+/* Inside the toolbar the tab strip is a flex child, so drop its standalone
+   block styling (full width, underline, bottom padding) and let it shrink. */
+.purch-toolbar .purch-tabs {
+  flex: 1 1 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-bottom: none !important;
+}
+
+.purch-sort {
+  display: flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  white-space: nowrap !important;
+}
+
+/* Match the tab strip's height so both controls read as one toolbar. */
+.purch-sort .appt-sort-select {
+  width: auto !important;
+  min-height: 36px !important;
+  padding-top: 0.4rem !important;
+  padding-bottom: 0.4rem !important;
+  font-size: 0.75rem !important;
+  cursor: pointer !important;
+}
+
 .purch-tabs {
   display: flex !important;
   flex-direction: row !important;
@@ -540,6 +580,23 @@
 }
 
 @media (max-width: 767px) {
+  /* Too narrow to keep tabs and sort on one line: let the sort control drop
+     below the tab strip instead of squeezing it off screen. */
+  .purch-toolbar {
+    flex-wrap: wrap !important;
+    gap: 0.75rem !important;
+  }
+
+  .purch-toolbar .purch-tabs {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+  }
+
+  .purch-sort {
+    flex: 1 1 100% !important;
+    justify-content: flex-end !important;
+  }
+
   .purch-status-row {
     gap: 0.75rem !important;
   }

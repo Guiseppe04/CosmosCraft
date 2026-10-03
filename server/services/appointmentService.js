@@ -370,7 +370,7 @@ function calculateTotalDuration(serviceRows) {
   return serviceRows.reduce((sum, s) => sum + (Number(s.duration_minutes) || 0), 0);
 }
 
-exports.createAppointment = async ({ appointment_type = 'service_in_shop', services = [], location_id, guitar_details, scheduled_at, notes, user_id, order_id = null, confirmation_notes = null, payment_method = null, payment_proof_url = null, address_id = null }) => {
+exports.createAppointment = async ({ appointment_type = 'service_in_shop', services = [], location_id, guitar_details, scheduled_at, notes, user_id, order_id = null, confirmation_notes = null, payment_method = null, payment_proof_url = null, address_id = null, contact_number = null }) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -387,6 +387,13 @@ exports.createAppointment = async ({ appointment_type = 'service_in_shop', servi
       customerName = `${user.first_name || ''} ${user.last_name || ''}`.trim();
       customerEmail = user.email || '';
       customerPhone = user.phone || '';
+    }
+
+    // The contact number captured on the booking form wins over the profile phone
+    // so the number the customer typed for this appointment is the one on record.
+    const trimmedContactNumber = String(contact_number || '').trim();
+    if (trimmedContactNumber) {
+      customerPhone = trimmedContactNumber;
     }
 
     await assertNoScheduleConflict(client, scheduled_at);
@@ -630,7 +637,7 @@ exports.getUserUpcomingAppointments = async (userId) => {
 exports.getAppointmentsByDateRange = async (startDate, endDate, filters = {}) => this.listAppointments({ ...filters, date_from: startDate, date_to: endDate });
 
 exports.updateAppointment = async (appointmentId, updates) => {
-  const { scheduled_at, status, notes, reason, confirmation_notes, appointment_type, services, location_id, guitar_details, payment_method } = updates;
+  const { scheduled_at, status, notes, reason, confirmation_notes, appointment_type, services, location_id, guitar_details, payment_method, contact_number } = updates;
   const client = await pool.connect();
 
   try {
@@ -692,6 +699,11 @@ exports.updateAppointment = async (appointmentId, updates) => {
     if (payment_method !== undefined) {
       setClauses.push(`payment_method = $${idx++}`);
       params.push(payment_method || null);
+    }
+    if (contact_number !== undefined) {
+      const trimmedContactNumber = String(contact_number || '').trim();
+      setClauses.push(`customer_phone = $${idx++}`);
+      params.push(trimmedContactNumber || null);
     }
 
     if (setClauses.length === 0) {

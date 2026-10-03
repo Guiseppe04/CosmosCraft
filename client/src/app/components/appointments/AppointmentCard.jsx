@@ -102,6 +102,19 @@ export function formatAppointmentServiceType(type) {
 }
 
 /**
+ * "Guitar reference image:" / "Service reference image : " markers the wizard writes
+ * next to the uploaded photo URL. On their own they are not customer notes.
+ */
+const isReferenceImageLabel = (text) =>
+  /^(?:guitar|service)\s+reference\s+image\s*:?\s*$/i.test(String(text || '').trim())
+
+/** Values legacy records use to mean "no notes". */
+const isPlaceholderNote = (text) => {
+  const normalized = String(text || '').trim().toLowerCase()
+  return ['n/a', 'na', 'none', 'nil', 'null', '-', '--', '---', '.', '...'].includes(normalized)
+}
+
+/**
  * Extract guitar label from appointment
  */
 export function getSelectedGuitarLabel(apt) {
@@ -198,18 +211,18 @@ export default function AppointmentCard({
       )
       if (imageMatch) {
         const before = line.replace(imageMatch[0], '').trim()
-        const isImageLabel = /^(?:guitar|service)\s+reference\s+image:?\s*$/i.test(
-          before
-        )
-        if (before && !isImageLabel) textParts.push(before)
+        if (before && !isReferenceImageLabel(before)) textParts.push(before)
         imageParts.push(imageMatch[1])
       } else {
         const trimmed = line.trim()
-        if (trimmed) textParts.push(trimmed)
+        if (trimmed && !isReferenceImageLabel(trimmed) && !isPlaceholderNote(trimmed)) {
+          textParts.push(trimmed)
+        }
       }
     })
   }
 
+  // The section is pointless without customer notes or an actual reference photo.
   const hasNotesOrImages = textParts.length > 0 || imageParts.length > 0
 
   // Payment information
@@ -488,18 +501,18 @@ export default function AppointmentCard({
               </button>
 
               {isNotesOpen && (
-                <div className="mt-2 space-y-2.5 bg-[var(--bg-primary)] p-3 rounded-xl border border-[var(--border)]">
+                <div className="mt-2 space-y-2.5 bg-white p-3 rounded-xl border border-[var(--border)]">
                   {textParts.length > 0 && (
-                    <p className="text-white/80 text-xs leading-relaxed whitespace-pre-line">
+                    <p className="text-black text-xs leading-relaxed whitespace-pre-line">
                       {textParts.join('\n')}
                     </p>
                   )}
                   {imageParts.length > 0 && (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-[var(--border)]">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-black/10">
                       {imageParts.map((url, i) => (
                         <div
                           key={i}
-                          className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-1.5 overflow-hidden"
+                          className="rounded-lg border border-black/10 bg-white p-1.5 overflow-hidden"
                         >
                           <img
                             src={url}

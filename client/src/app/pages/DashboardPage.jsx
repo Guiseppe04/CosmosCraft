@@ -23,6 +23,7 @@ import { ConfirmModal } from '../components/ui/ConfirmModal'
 import { SelectableCartItemRow } from '../components/cart/SelectableCartItemRow.jsx'
 import { DashboardSectionTabs } from '../components/DashboardSectionTabs.jsx'
 import { useSocketEvent } from '../context/SocketContext.jsx'
+import { sanitizePhoneInput, isValidPhoneNumber, PHONE_ERROR_MESSAGE } from '../utils/phone.js'
 import AppointmentCard, { getSelectedGuitarLabel, formatAppointmentServiceType } from '../components/appointments/AppointmentCard.jsx'
 import { printAppointmentReceipt } from '../utils/appointmentReceipt'
 
@@ -624,7 +625,7 @@ export function DashboardPage() {
   const [myAppointments, setMyAppointments] = useState([])
   const [isAppointmentsLoading, setIsAppointmentsLoading] = useState(false)
   const [appointmentSearch, setAppointmentSearch] = useState('')
-  const [appointmentSort, setAppointmentSort] = useState('upcoming')
+  const [appointmentSort, setAppointmentSort] = useState('created_latest')
   const [appointmentStatusFilter, setAppointmentStatusFilter] = useState('all')
   const [appointmentPaymentFilter, setAppointmentPaymentFilter] = useState('all')
   const [appointmentDateFilter, setAppointmentDateFilter] = useState('all')
@@ -1914,7 +1915,8 @@ export function DashboardPage() {
   }
 
   const handleInputChange = (field, value) => {
-    setProfileData(prev => ({ ...prev, [field]: value }))
+    // Phone fields accept digits only (plus a leading "+" for +63 format).
+    setProfileData(prev => ({ ...prev, [field]: field === 'phone' ? sanitizePhoneInput(value) : value }))
   }
 
   const handleConfirmLogout = () => {
@@ -1969,32 +1971,34 @@ const filteredOrders = myOrders.filter(order => {
           </div>
 
           {/* Order Status Filters */}
-          <div className="purch-tabs">
-            {PURCHASE_TABS.map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setActivePurchaseTab(tab.key)}
-                className={`purch-tab ${tab.key === activePurchaseTab ? 'purch-tab--active' : ''}`}
-                type="button"
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          <div className="purch-toolbar">
+            <div className="purch-tabs">
+              {PURCHASE_TABS.map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActivePurchaseTab(tab.key)}
+                  className={`purch-tab ${tab.key === activePurchaseTab ? 'purch-tab--active' : ''}`}
+                  type="button"
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-          <div className="mb-4 flex justify-end">
-            <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-              <span>Sort by:</span>
-              <select
-                value={purchaseSort}
-                onChange={(event) => setPurchaseSort(event.target.value)}
-                className="appt-sort-select"
-                aria-label="Sort purchases"
-              >
-                <option value="created_latest">Recently Purchased</option>
-                <option value="created_earliest">Oldest Created</option>
-              </select>
-            </label>
+            <div className="purch-sort">
+              <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                <span>Sort by:</span>
+                <select
+                  value={purchaseSort}
+                  onChange={(event) => setPurchaseSort(event.target.value)}
+                  className="appt-sort-select"
+                  aria-label="Sort purchases"
+                >
+                  <option value="created_latest">Recently Purchased</option>
+                  <option value="created_earliest">Oldest Created</option>
+                </select>
+              </label>
+            </div>
           </div>
 
           {myOrders.length === 0 ? (
@@ -2405,7 +2409,7 @@ const filteredOrders = myOrders.filter(order => {
     setAppointmentDateFilter('all')
     setAppointmentDateFrom('')
     setAppointmentDateTo('')
-    setAppointmentSort('upcoming')
+    setAppointmentSort('created_latest')
     setAppointmentSearch('')
   }
 
@@ -3534,6 +3538,12 @@ const filteredOrders = myOrders.filter(order => {
 
   const handleSaveProfile = async () => {
     try {
+      const trimmedPhone = String(profileData.phone || '').trim()
+      if (trimmedPhone && !isValidPhoneNumber(trimmedPhone)) {
+        setToastMessage(PHONE_ERROR_MESSAGE)
+        return
+      }
+
       const avatarPayload = profileImage && profileImage.startsWith('data:')
         ? { avatarUrl: profileImage }
         : {}
@@ -3542,7 +3552,7 @@ const filteredOrders = myOrders.filter(order => {
         firstName: profileData.firstName,
         middleName: profileData.middleName,
         lastName: profileData.lastName,
-        phone: profileData.phone,
+        phone: trimmedPhone,
         ...avatarPayload,
       })
 
@@ -3768,7 +3778,10 @@ const filteredOrders = myOrders.filter(order => {
           </div>
           <div>
             <label className="block text-xs font-semibold text-white mb-2">Phone Number</label>
-            <input type="tel" value={profileData.phone} onChange={e => handleInputChange('phone', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" />
+            <input type="tel" inputMode="numeric" autoComplete="tel" maxLength={13} value={profileData.phone} onChange={e => handleInputChange('phone', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" placeholder="09XXXXXXXXX or +639XXXXXXXXX" />
+            {isEditingProfile && String(profileData.phone || '').trim() && !isValidPhoneNumber(profileData.phone) && (
+              <p className="text-[11px] text-red-400 mt-1">{PHONE_ERROR_MESSAGE}</p>
+            )}
           </div>
           <div>
             <label className="block text-xs font-semibold text-white mb-2">Gender</label>

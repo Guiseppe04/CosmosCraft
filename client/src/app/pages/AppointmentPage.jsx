@@ -20,7 +20,17 @@
     X,
     FileText,
     Loader2,
+    Pencil,
+    Plus,
   } from 'lucide-react'
+  import { AddressForm } from '../components/AddressForm.jsx'
+  import { adminApi } from '../utils/adminApi'
+  import {
+    PHONE_ERROR_MESSAGE,
+    isValidPhoneNumber,
+    normalizePhoneForSubmit,
+    sanitizePhoneInput,
+  } from '../utils/phone.js'
 
   const APPOINTMENT_BRANCH_STORAGE_KEY = 'cosmoscraft.appointment.branch'
   const DEFAULT_BRANCH = {
@@ -309,6 +319,9 @@
     // Selections
     const [guitarSelectionMode, setGuitarSelectionMode] = useState(savedBuilds.length > 0 ? 'saved' : 'manual')
     const [selectedSavedBuildId, setSelectedSavedBuildId] = useState('')
+    // Customization ids the customer actually bought (ordered / in a live project).
+    // Saved builds that were never purchased are build-only drafts and must not be selectable.
+    const [purchasedCustomizationIds, setPurchasedCustomizationIds] = useState(null)
     const [homeServiceOption, setHomeServiceOption] = useState('')
     const [homeServiceAddressId, setHomeServiceAddressId] = useState('')
     const [homeServiceContact, setHomeServiceContact] = useState(user?.phone || '')
@@ -317,6 +330,9 @@
     const [phoneError, setPhoneError] = useState('')
     const [phoneSaving, setPhoneSaving] = useState(false)
     const [contactError, setContactError] = useState('')
+    // Address add/edit panel (empty = closed, 'add' = new address, 'edit' = editing the selected one)
+    const [addressPanelMode, setAddressPanelMode] = useState('')
+    const [addressFormSaving, setAddressFormSaving] = useState(false)
     const [availableServices, setAvailableServices] = useState([])
     const [servicesError, setServicesError] = useState('')
     const [servicesLoading, setServicesLoading] = useState(true)
@@ -560,9 +576,66 @@
       && guitarDetails.model.trim()
       && normalizeAppointmentGuitarType(guitarDetails.type)
     )
+
+    // Only guitars the customer actually bought from the system may be picked from
+    // the saved list. A build that was configured but never ordered stays hidden.
+    const purchasableBuilds = useMemo(() => {
+      if (purchasedCustomizationIds === null) return []
+      return savedBuilds.filter((build) => {
+        const customizationId = build.dbCustomizationId || build.customization_id
+        if (!customizationId) return false
+        return purchasedCustomizationIds.has(String(customizationId))
+      })
+    }, [savedBuilds, purchasedCustomizationIds])
+
+    useEffect(() => {
+      if (!isAuthenticated) {
+        setPurchasedCustomizationIds(new Set())
+        return
+      }
+
+      let cancelled = false
+
+      adminApi.getMyCustomizations()
+        .then((response) => {
+          if (cancelled) return
+          const customizations = Array.isArray(response?.data) ? response.data : []
+          const purchased = new Set()
+          for (const customization of customizations) {
+            const isPurchased = Boolean(
+              customization?.is_locked
+              || customization?.active_order_id
+              || customization?.active_project_id
+            )
+            if (isPurchased && customization?.customization_id) {
+              purchased.add(String(customization.customization_id))
+            }
+          }
+          setPurchasedCustomizationIds(purchased)
+        })
+        .catch((error) => {
+          console.error('Failed to load purchased guitars:', error)
+          if (!cancelled) setPurchasedCustomizationIds(new Set())
+        })
+
+      return () => { cancelled = true }
+    }, [isAuthenticated])
+
+    // Saved-build option disappears once we know nothing was bought, so fall back
+    // to manual entry and drop any selection that is no longer offered.
+    useEffect(() => {
+      if (purchasableBuilds.length > 0) return
+      setGuitarSelectionMode((mode) => (mode === 'saved' ? 'manual' : mode))
+      setSelectedSavedBuildId((currentId) => {
+        if (!currentId) return currentId
+        const stillOffered = purchasableBuilds.some((build) => String(build.id) === String(currentId))
+        return stillOffered ? currentId : ''
+      })
+    }, [purchasableBuilds])
+
     const selectedSavedBuilds = useMemo(
-      () => savedBuilds.filter((build) => String(build.id) === String(selectedSavedBuildId)),
-      [selectedSavedBuildId, savedBuilds]
+      () => purchasableBuilds.filter((build) => String(build.id) === String(selectedSavedBuildId)),
+      [selectedSavedBuildId, purchasableBuilds]
     )
     const selectedServices = useMemo(
       () => availableServices.filter((item) => selectedServiceIds.includes(String(item.service_id))),
@@ -856,7 +929,7 @@
       }
       if (currentStep === 4) {
         if (selectedAppointmentType === 'service_home') {
-          return Boolean(homeServiceAddressId && homeServiceContact.trim() && !contactError)
+          return Boolean(homeServiceAddressId && isValidPhoneNumber(homeServiceContact))
         }
         return !!selectedBranchId
       }
@@ -884,7 +957,7 @@
       if (currentStep === 4 && selectedAppointmentType === 'service_home') {
         if (!homeServiceAddressId) return 'Select your home service address.'
         if (!homeServiceContact.trim()) return 'Enter your contact number for home service.'
-        if (contactError) return contactError
+        if (!isValidPhoneNumber(homeServiceContact)) return PHONE_ERROR_MESSAGE
       }
       return ''
     }
@@ -1013,12 +1086,10 @@
       }
     }
 
-    const PHONE_REGEX = /^(09\d{9}|\+639\d{9})$/
-
     const handleSavePhone = async () => {
       const trimmed = newPhone.trim()
-      if (!PHONE_REGEX.test(trimmed)) {
-        setPhoneError('Phone number must be 11 digits starting with 09 or in +63 format (e.g. +639123456789)')
+      if (!isValidPhoneNumber(trimmed)) {
+        setPhoneError(PHONE_ERROR_MESSAGE)
         return
       }
 
@@ -1049,6 +1120,49 @@
         toast.error(error.message || 'Failed to save phone number')
       } finally {
         setPhoneSaving(false)
+      }
+    }
+
+    const closeAddressPanel = () => {
+      setAddressPanelMode('')
+    }
+
+    // Persists a new/edited address from the Step 4 panel, refreshes the cached
+    // profile addresses and keeps it selected so booking can continue immediately.
+    const handleSaveAppointmentAddress = async (payload) => {
+      setAddressFormSaving(true)
+      try {
+        const response = addressPanelMode === 'edit' && homeServiceAddressId
+          ? await adminApi.updateAddress(homeServiceAddressId, payload)
+          : await adminApi.addAddress({ ...payload, isDefault: Boolean(payload?.isDefault) })
+
+        let addresses = response?.data?.user?.addresses
+        if (!Array.isArray(addresses) || addresses.length === 0) {
+          const profile = await adminApi.getProfile()
+          addresses = profile?.data?.user?.addresses
+        }
+        if (Array.isArray(addresses) && addresses.length > 0) {
+          updateUser({ addresses })
+        }
+
+        const savedAddress = Array.isArray(addresses)
+          ? addresses.find((address) => (
+              addressPanelMode === 'edit' && homeServiceAddressId
+                ? String(address.address_id) === String(homeServiceAddressId)
+                : String(address.street_line1 || '') === String(payload.streetLine1 || '')
+            ))
+          : null
+
+        if (savedAddress?.address_id) {
+          setHomeServiceAddressId(String(savedAddress.address_id))
+        }
+
+        closeAddressPanel()
+        toast.success(addressPanelMode === 'edit' ? 'Address updated successfully' : 'Address added successfully')
+      } catch (error) {
+        toast.error(error.message || 'Failed to save address')
+      } finally {
+        setAddressFormSaving(false)
       }
     }
 
@@ -1206,6 +1320,12 @@
           guitarReferenceImageUrl ? `Guitar reference image: ${guitarReferenceImageUrl}` : '',
         ].filter(Boolean).join('\n') || null
 
+        // Only home service collects a contact number on Step 4. Send it only when
+        // it is a valid PH mobile so legacy profile formats never block a booking.
+        const appointmentContactNumber = selectedAppointmentType === 'service_home'
+          ? normalizePhoneForSubmit(homeServiceContact)
+          : undefined
+
         if (isRescheduleMode) {
           // Update existing appointment (reschedule)
           const response = await fetch(`${API}/api/appointments/${rescheduleData.appointment_id}`, {
@@ -1230,6 +1350,7 @@
                   }
                 : undefined,
               payment_method: selectedPaymentMethod,
+              contact_number: appointmentContactNumber,
               notes: finalNotes,
             })
           });
@@ -1259,6 +1380,7 @@
               services: selectedServiceIds,
               location_id: selectedBranchId,
               address_id: selectedAppointmentType === 'service_home' ? homeServiceAddressId : undefined,
+              contact_number: appointmentContactNumber,
               payment_method: selectedPaymentMethod,
               payment_proof_url: paymentProofImageUrl || undefined,
               guitar_details: hasSelectedGuitar
@@ -1338,7 +1460,7 @@
               </div>
               
               <div className="bg-theme-surface-deep border border-[var(--border)] p-6 rounded-2xl space-y-5">
-                {savedBuilds.length > 0 && (
+                {purchasableBuilds.length > 0 && (
                   <div>
                     <label className="block text-sm font-medium text-white mb-1.5">Guitar Source</label>
                     <div className="grid grid-cols-2 gap-2 sm:gap-3">
@@ -1360,7 +1482,7 @@
                   </div>
                 )}
 
-                {guitarSelectionMode === 'saved' && savedBuilds.length > 0 ? (
+                {guitarSelectionMode === 'saved' && purchasableBuilds.length > 0 ? (
                   <div>
                     <label className="block text-sm font-medium text-white mb-1.5">Select Saved Guitar<span className="text-red-500" style={{ color: '#ef4444' }}>*</span></label>
                     <select
@@ -1369,7 +1491,7 @@
                       className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
                     >
                       <option value="">No selected saved guitar</option>
-                      {savedBuilds.map((build) => (
+                      {purchasableBuilds.map((build) => (
                         <option key={String(build.id)} value={String(build.id)}>
                           {build.name || 'Custom Build'} - {build.isBass ? 'Bass Build' : 'Guitar Build'}
                         </option>
@@ -1528,19 +1650,41 @@
                 <>
                   <div>
                     <h2 className="text-2xl font-bold text-white mb-2">Home Service Details</h2>
-                    <p className="text-sm text-[var(--text-muted)]">Select your address and contact number for home service booking.</p>
+                    <p className="text-sm text-[var(--text-muted)]">Select or add the address we should service, plus your contact number.</p>
                   </div>
 
-                  {userAddresses.length === 0 ? (
+                  {!isAuthenticated ? (
                     <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5">
                       <p className="text-sm text-amber-200">
-                        Home service requires a saved address. Please add an address in your Dashboard profile first.
+                        Home service needs a saved address. Please sign in first, then you can add or edit your address here.
                       </p>
                     </div>
                   ) : (
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium text-white mb-1.5">Service Address <span className="text-red-500" style={{ color: '#ef4444' }}>*</span></label>
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                          <label className="block text-sm font-medium text-white">Service Address <span className="text-red-500" style={{ color: '#ef4444' }}>*</span></label>
+                          <div className="flex items-center gap-2">
+                            {homeServiceAddressId && (
+                              <button
+                                type="button"
+                                onClick={() => setAddressPanelMode((mode) => (mode === 'edit' ? '' : 'edit'))}
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--text-muted)] hover:text-[#d4af37] transition-colors"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                                Edit address
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setAddressPanelMode((mode) => (mode === 'add' ? '' : 'add'))}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-[#d4af37] hover:text-[#ffe270] transition-colors"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Add new address
+                            </button>
+                          </div>
+                        </div>
                         <select
                           value={homeServiceAddressId}
                           onChange={(e) => setHomeServiceAddressId(e.target.value)}
@@ -1553,7 +1697,29 @@
                             </option>
                           ))}
                         </select>
+                        {userAddresses.length === 0 && (
+                          <p className="text-xs text-[var(--text-muted)] mt-1.5">
+                            You have no saved address yet. Use "Add new address" to create one.
+                          </p>
+                        )}
                       </div>
+
+                      {addressPanelMode && (
+                        <div className="rounded-2xl border border-[#d4af37]/30 bg-[#d4af37]/5 p-4">
+                          <p className="text-sm font-semibold text-[var(--text-light)] mb-3">
+                            {addressPanelMode === 'edit' ? 'Edit Address' : 'Add New Address'}
+                          </p>
+                          <AddressForm
+                            initialAddress={addressPanelMode === 'edit'
+                              ? (userAddresses.find((address) => String(address.address_id) === String(homeServiceAddressId)) || {})
+                              : { label: 'Home', country: 'PH', isDefault: userAddresses.length === 0 }}
+                            onSubmit={handleSaveAppointmentAddress}
+                            onCancel={closeAddressPanel}
+                            submitLabel={addressPanelMode === 'edit' ? 'Update Address' : 'Save Address'}
+                            isSubmitting={addressFormSaving}
+                          />
+                        </div>
+                      )}
                       <div>
                         <label className="block text-sm font-medium text-white mb-1.5">Contact Number <span className="text-red-500" style={{ color: '#ef4444' }}>*</span></label>
                         {!user?.phone && !showPhoneForm && (
@@ -1574,10 +1740,12 @@
                           <div className="mb-2 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/5 p-4 space-y-3">
                             <p className="text-sm font-semibold text-[var(--text-light)]">Enter Phone Number</p>
                             <input
-                              type="text"
+                              type="tel"
+                              inputMode="numeric"
+                              autoComplete="tel"
                               value={newPhone}
                               onChange={(e) => {
-                                setNewPhone(e.target.value)
+                                setNewPhone(sanitizePhoneInput(e.target.value))
                                 setPhoneError('')
                               }}
                               className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
@@ -1591,7 +1759,7 @@
                               <button
                                 type="button"
                                 onClick={handleSavePhone}
-                                disabled={phoneSaving || !PHONE_REGEX.test(newPhone.trim())}
+                                disabled={phoneSaving || !isValidPhoneNumber(newPhone.trim())}
                                 className="px-4 py-2 rounded-lg text-sm font-semibold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 {phoneSaving ? 'Saving...' : 'Save'}
@@ -1608,19 +1776,22 @@
                         )}
                         {user?.phone || showPhoneForm ? (
                           <input
-                            type="text"
+                            type="tel"
+                            inputMode="numeric"
+                            autoComplete="tel"
                             value={homeServiceContact}
                             onChange={(e) => {
-                              const val = e.target.value
+                              const val = sanitizePhoneInput(e.target.value)
                               setHomeServiceContact(val)
-                              if (val && !PHONE_REGEX.test(val.trim())) {
-                                setContactError('Phone number must be 11 digits starting with 09 or in +63 format (e.g. +639123456789)')
+                              if (val && !isValidPhoneNumber(val)) {
+                                setContactError(PHONE_ERROR_MESSAGE)
                               } else {
                                 setContactError('')
                               }
                             }}
                             className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
-                            placeholder="+639XXXXXXXXX"
+                            placeholder="09XXXXXXXXX or +639XXXXXXXXX"
+                            maxLength={13}
                           />
                         ) : null}
                         {contactError && (
