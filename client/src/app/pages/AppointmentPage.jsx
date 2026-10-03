@@ -1,9 +1,10 @@
-  import { useEffect, useState, useMemo, useRef } from 'react'
+  import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
   import { useNavigate, useLocation } from 'react-router'
   import { motion, AnimatePresence } from 'motion/react'
   import { API, getAuthHeaders } from '../utils/apiConfig'
   import { uploadToCloudinary } from '../utils/cloudinary.js'
   import { useAuth } from '../context/AuthContext.jsx'
+  import { useSocketEvent } from '../context/SocketContext.jsx'
   import { useToast } from '../components/ui/Toast.jsx'
   import {
     Wrench,
@@ -258,6 +259,7 @@
         let isAvailable = false
         let isHolidayDate = false
         let isOpenHoliday = false
+        let isUnavailableDate = false
 
         if (inCurrentMonth) {
           id = formatLocalDateId(date)
@@ -267,8 +269,8 @@
           const isHolidayDay = isHoliday(date)
           isOpenHoliday = isHolidayDay && openOverrideSet.has(id)
           isHolidayDate = isHolidayDay && !isOpenHoliday
-          const isAdminDisabled = disabledDateSet.has(id)
-          isAvailable = !isPast && !isTooSoon && !isSunday && !isHolidayDate && !isAdminDisabled
+          isUnavailableDate = disabledDateSet.has(id)
+          isAvailable = !isPast && !isTooSoon && !isSunday && !isHolidayDate && !isUnavailableDate
         }
 
         week.push({
@@ -278,6 +280,9 @@
           isAvailable,
           isHolidayDate,
           isOpenHoliday,
+          // Blocked by the shop (admin marked the date unavailable), as opposed
+          // to a Sunday/holiday or a past date. The calendar marks these red.
+          isUnavailableDate,
           isPastDate: inCurrentMonth ? date < today : false,
         })
       }
@@ -755,63 +760,91 @@
       return () => { isMounted = false }
     }, [])
 
-    useEffect(() => {
-      let isMounted = true
+    /**
+     * Reads the shop's closed dates and reopened holidays.
+     *
+     * Declared at component level (not inside the mount effect) so the socket
+     * subscription below can re-run it the moment an admin changes the schedule.
+     * The mounted flag lives in a ref because the socket callback outlives any
+     * single effect run and must not set state after unmount.
+     */
+    const isMountedRef = useRef(true)
 
-      const loadUnavailableDates = async () => {
-        try {
-          const [unavailRes, overrideRes] = await Promise.all([
-            fetch(`${API}/api/appointments/unavailable-dates`, {
-              credentials: 'include',
-            }),
-            fetch(`${API}/api/appointments/open-overrides`, {
-              credentials: 'include',
-            }).catch(() => null),
-          ])
+    const loadUnavailableDates = useCallback(async () => {
+      try {
+        const [unavailRes, overrideRes] = await Promise.all([
+          fetch(`${API}/api/appointments/unavailable-dates`, {
+            credentials: 'include',
+          }),
+          fetch(`${API}/api/appointments/open-overrides`, {
+            credentials: 'include',
+          }).catch(() => null),
+        ])
 
-          const payload = await unavailRes.json().catch(() => ({}))
-          const overridePayload = overrideRes && overrideRes.ok ? await overrideRes.json().catch(() => ({})) : null
+        const payload = await unavailRes.json().catch(() => ({}))
+        const overridePayload = overrideRes && overrideRes.ok ? await overrideRes.json().catch(() => ({})) : null
 
-          if (!unavailRes.ok) {
-            if (!isMounted) return
-            setUnavailableDateSet(new Set())
-            setOpenOverrideSet(new Set())
-            return
+        if (!unavailRes.ok) {
+          if (!isMountedRef.current) return
+          setUnavailableDateSet(new Set())
+          setOpenOverrideSet(new Set())
+          return
+        }
+
+        const dates = Array.isArray(payload?.data?.unavailable_dates) ? payload.data.unavailable_dates : []
+        const nextSet = new Set(
+          dates
+            .map((entry) => String(entry?.date || '').slice(0, 10))
+            .filter(Boolean)
+        )
+
+        const overrideDates = Array.isArray(overridePayload?.data?.open_overrides) ? overridePayload.data.open_overrides : []
+        const nextOverrideSet = new Set(
+          overrideDates
+            .map((entry) => String(entry?.date || '').slice(0, 10))
+            .filter(Boolean)
+        )
+
+        if (!isMountedRef.current) return
+
+        setUnavailableDateSet(nextSet)
+        setOpenOverrideSet(nextOverrideSet)
+
+        // The admin may have just closed the day the customer had selected.
+        setSelectedDateId((current) => {
+          if (current && nextSet.has(current)) {
+            setSelectedTime('')
+            return ''
           }
-
-          const dates = Array.isArray(payload?.data?.unavailable_dates) ? payload.data.unavailable_dates : []
-          const nextSet = new Set(
-            dates
-              .map((entry) => String(entry?.date || '').slice(0, 10))
-              .filter(Boolean)
-          )
-
-          const overrideDates = Array.isArray(overridePayload?.data?.open_overrides) ? overridePayload.data.open_overrides : []
-          const nextOverrideSet = new Set(
-            overrideDates
-              .map((entry) => String(entry?.date || '').slice(0, 10))
-              .filter(Boolean)
-          )
-
-          if (isMounted) {
-            setUnavailableDateSet(nextSet)
-            setOpenOverrideSet(nextOverrideSet)
-            if (selectedDateId && nextSet.has(selectedDateId)) {
-              setSelectedDateId('')
-              setSelectedTime('')
-            }
-          }
-        } catch {
-          if (isMounted) {
-            setUnavailableDateSet(new Set())
-            setOpenOverrideSet(new Set())
-          }
+          return current
+        })
+      } catch {
+        if (isMountedRef.current) {
+          setUnavailableDateSet(new Set())
+          setOpenOverrideSet(new Set())
         }
       }
+    }, [])
+
+    useEffect(() => {
+      isMountedRef.current = true
 
       loadUnavailableDates()
-      return () => { isMounted = false }
-    }, [])
+
+      return () => {
+        isMountedRef.current = false
+      }
+    }, [loadUnavailableDates])
+
+    /**
+     * Live schedule updates. `appointment:schedule_updated` is broadcast when an
+     * admin closes a date or reopens a holiday, so a customer already sitting on
+     * step 2 sees the change without reloading. The payload is a hint only; this
+     * re-reads the public endpoints so the server stays the source of truth.
+     */
+    useSocketEvent('appointment:schedule_updated', () => {
+      loadUnavailableDates()
+    })
 
     useEffect(() => {
       let isMounted = true
@@ -1849,7 +1882,7 @@
             <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
               <div>
                 <h2 className="text-2xl font-bold text-white mb-2">Select Date and Time</h2>
-                <p className="text-sm text-[var(--text-muted)]">Select an available date (Mon-Sat) and time. Sundays and official holidays are unavailable.</p>
+                <p className="text-sm text-[var(--text-muted)]">Select an available date (Mon-Sat) and time. Sundays, official holidays, and dates the shop has closed are unavailable.</p>
               </div>
 
               <div className="bg-theme-surface-deep border border-[var(--border)] rounded-2xl p-6 shadow-xl relative">
@@ -1907,18 +1940,29 @@
 
                       const isSelected = selectedDateId === day.id
                       const isUnavailable = !day.isAvailable
-                      const isSunday = day.dayNumber && new Date(day.id).getDay() === 0
+                      // Red is reserved for a date the shop actively closed.
+                      // Sundays, holidays, past dates and dates beyond the
+                      // booking window are simply not bookable, so they stay
+                      // grey — matching the legend under the grid.
+                      const isClosedByShop = !day.isPastDate && day.isUnavailableDate
+                      const blockedLabel = day.isUnavailableDate
+                        ? 'Unavailable — the shop has closed bookings for this date'
+                        : day.isHolidayDate
+                          ? 'Unavailable — holiday'
+                          : day.isPastDate
+                            ? 'Unavailable — date has passed'
+                            : 'Unavailable — not a working day'
 
                       if (isUnavailable) {
-                        const disabledStyle = day.isHolidayDate
+                        const disabledStyle = isClosedByShop
                           ? 'text-[#FF3737]/80 bg-[#FF3737]/10 border border-[#FF3737]/20'
-                          : day.isPastDate
-                            ? 'text-[var(--text-muted)]/70 bg-[var(--surface-elevated)]/80 border border-[var(--border)]'
-                            : 'text-[var(--text-muted)]/60 bg-[var(--surface-elevated)]/80 border border-[var(--border)]'
+                          : 'text-[var(--text-muted)]/70 bg-[var(--surface-elevated)]/80 border border-[var(--border)]'
 
                         return (
-                          <div 
+                          <div
                             key={day.id}
+                            title={blockedLabel}
+                            aria-label={`${day.dayNumber} - ${blockedLabel}`}
                             className={`flex items-center justify-center h-9 sm:h-10 rounded-xl text-xs sm:text-sm font-medium transition-colors ${disabledStyle} cursor-not-allowed`}>
                             {day.dayNumber}
                           </div>
@@ -1943,6 +1987,22 @@
                       )
                     })
                   )}
+                </div>
+
+                {/* Legend: why a date is unavailable */}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-[var(--text-muted)]">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded bg-[#08CB00]" />
+                    Available
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded bg-[#FF3737]/20 border border-[#FF3737]/40" />
+                    Unavailable
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded bg-[var(--surface-elevated)] border border-[var(--border)]" />
+                    Closed / Non-Working Day
+                  </span>
                 </div>
 
                 {/* Time Slots */}

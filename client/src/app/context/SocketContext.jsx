@@ -33,31 +33,16 @@ export function SocketProvider({ children }) {
 
   useEffect(() => {
     /**
-     * Do not create a Socket.IO connection when the
-     * user is not authenticated.
-     */
-    if (!isAuthenticated || !user?.id) {
-      if (socketRef.current) {
-        socketRef.current.disconnect()
-        socketRef.current = null
-      }
-
-      setSocket(null)
-      setIsConnected(false)
-
-      return
-    }
-
-    /**
-     * Socket.IO server URL
+     * The socket also connects for signed-out visitors.
      *
-     * Development:
-     * VITE_SOCKET_URL=http://localhost:5000
+     * The public booking calendar has to react the moment the shop closes a
+     * date, and that page is reachable without a session. The server accepts an
+     * unauthenticated handshake and joins such a socket to no rooms, so a guest
+     * only ever receives public broadcasts — never user, order or admin events.
      *
-     * Production / Coolify:
-     * VITE_SOCKET_URL=https://api.yourdomain.com
-     *
-     * Socket.IO URL must NOT contain /api.
+     * `user?.id` and `isAuthenticated` stay in the dependency list on purpose:
+     * the room set is fixed at connect time, so signing in or out must tear the
+     * socket down and reconnect it rather than reuse the anonymous connection.
      */
     const socketUrl =
       import.meta.env.VITE_SOCKET_URL ||

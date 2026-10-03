@@ -810,6 +810,24 @@ exports.getUnavailableDates = async (req, res, next) => {
   }
 };
 
+// ─── PUBLIC BOOKING SCHEDULE ────────────────────────────────────────────────
+
+/**
+ * The booking calendar is public, so a guest with no session still has to see a
+ * date the moment the shop closes it. Broadcast (not a room emit) because
+ * anonymous sockets join no rooms. Clients re-read the public endpoints rather
+ * than trusting this payload, so the server stays the single source of truth.
+ */
+const SCHEDULE_EVENT = 'appointment:schedule_updated';
+
+const broadcastScheduleChange = (action, date) => {
+  try {
+    socketService.emitBroadcast(SCHEDULE_EVENT, { action, date: date || null });
+  } catch {
+    // A failed notification must never fail the admin's request.
+  }
+};
+
 /**
  * POST /appointments/unavailable-dates
  * Add unavailable date
@@ -828,6 +846,8 @@ exports.addUnavailableDate = async (req, res, next) => {
       reason,
       req.user.user_id
     );
+
+    broadcastScheduleChange('unavailable_date_added', result?.date || date);
 
     res.status(201).json({
       status: 'success',
@@ -851,6 +871,8 @@ exports.removeUnavailableDate = async (req, res, next) => {
     const { id } = req.params;
 
     const result = await appointmentService.removeUnavailableDate(id);
+
+    broadcastScheduleChange('unavailable_date_removed', result?.date);
 
     res.json({
       status: 'success',
@@ -894,6 +916,9 @@ exports.addOpenOverride = async (req, res, next) => {
     if (!date) throw new AppError('date is required', 400);
 
     const result = await appointmentService.addOpenOverride(date, req.user.user_id);
+
+    broadcastScheduleChange('open_override_added', result?.date || date);
+
     res.status(201).json({
       status: 'success',
       data: { open_override: result },
@@ -914,6 +939,9 @@ exports.removeOpenOverride = async (req, res, next) => {
     const { id } = req.params;
     const result = await appointmentService.removeOpenOverride(id);
     if (!result) throw new AppError('Override not found', 404);
+
+    broadcastScheduleChange('open_override_removed', result?.date);
+
     res.json({
       status: 'success',
       data: { removed: result },

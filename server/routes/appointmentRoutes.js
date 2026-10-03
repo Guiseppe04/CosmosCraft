@@ -5,15 +5,74 @@
  */
 
 const express = require('express');
-const { authenticateToken, authorize } = require('../middleware/auth');
+const { authenticateToken, optionalAuthenticateToken, authorize } = require('../middleware/auth');
 const appointmentController = require('../controllers/appointmentController');
 const { validate } = require('../utils/validation');
 const { appointmentValidation } = require('../utils/appointmentValidation');
 
 const router = express.Router();
 
+// ─── PUBLIC SCHEDULE LOOKUP ─────────────────────────────────────────────────
+// A guest who is only browsing the booking page still needs to see which dates
+// are closed, which holidays are open, and which time slots exist. These routes
+// return schedule information only — never customer or appointment data — so
+// they are registered BEFORE the authentication gate. optionalAuthenticateToken
+// still attaches req.user when a token is present, so a signed-in visitor is
+// handled exactly as before.
+
+/**
+ * GET /api/appointments/unavailable-dates
+ * Get all unavailable dates
+ * Access: Public
+ */
+router.get(
+  '/unavailable-dates',
+  optionalAuthenticateToken,
+  appointmentController.getUnavailableDates
+);
+
+/**
+ * GET /api/appointments/open-overrides
+ * List all holiday open overrides
+ * Access: Public (customers can see which holidays are open)
+ */
+router.get(
+  '/open-overrides',
+  optionalAuthenticateToken,
+  appointmentController.getOpenOverrides
+);
+
+/**
+ * GET /api/appointments/services/:serviceId/availability
+ * Check if service is available at specific time
+ * Query params:
+ *   - scheduled_at (required) - ISO date/time string to check
+ * Response: { available: boolean }
+ * Access: Public
+ */
+router.get(
+  '/services/:serviceId/availability',
+  optionalAuthenticateToken,
+  appointmentController.checkAvailability
+);
+
+/**
+ * GET /api/appointments/services/:serviceId/availability/slots
+ * Get available time slots for service on given date
+ * Query params:
+ *   - date (required) - YYYY-MM-DD
+ *   - slot_duration (optional) - Minutes per slot (default: 30)
+ * Response: Array of available slots with start/end times
+ * Access: Public
+ */
+router.get(
+  '/services/:serviceId/availability/slots',
+  optionalAuthenticateToken,
+  appointmentController.getAvailableSlots
+);
+
 // ─── MIDDLEWARE ─────────────────────────────────────────────────────────────
-// All routes require authentication
+// Everything below this line requires authentication.
 router.use(authenticateToken);
 router.get('/capacity', appointmentController.getAppointmentCapacity);
 
@@ -45,13 +104,8 @@ router.post('/', appointmentController.createAppointment);
 router.get('/available-dates', appointmentController.getAvailableDates);
 
 // ─── UNAVAILABLE DATES ───────────────────────────────────────────────────────
-
-/**
- * GET /api/appointments/unavailable-dates
- * Get all unavailable dates
- * Access: Any authenticated user
- */
-router.get('/unavailable-dates', appointmentController.getUnavailableDates);
+// GET /unavailable-dates is public (registered above the auth gate).
+// The write endpoints below stay admin-only.
 
 /**
  * POST /api/appointments/unavailable-dates
@@ -76,16 +130,8 @@ router.delete(
 );
 
 // ─── HOLIDAY OPEN OVERRIDES ──────────────────────────────────────────────────
-
-/**
- * GET /api/appointments/open-overrides
- * List all holiday open overrides
- * Access: Authenticated users (customers can see which holidays are open)
- */
-router.get(
-  '/open-overrides',
-  appointmentController.getOpenOverrides
-);
+// GET /open-overrides is public (registered above the auth gate).
+// The write endpoints below stay admin-only.
 
 /**
  * POST /api/appointments/open-overrides
@@ -153,42 +199,8 @@ router.get(
 );
 
 // ─── AVAILABILITY & SLOTS ──────────────────────────────────────────────────
-
-/**
- * GET /api/services/:serviceId/availability
- * Check if service is available at specific time
- * Query params:
- *   - scheduled_at (required) - ISO date/time string to check
- * Response: { available: boolean }
- * Access: Public (no auth required)
- */
-router.get(
-  '/services/:serviceId/availability',
-  (req, res, next) => {
-    // Make this route public
-    req.user = req.user || { role: 'public' };
-    next();
-  },
-  appointmentController.checkAvailability
-);
-
-/**
- * GET /api/services/:serviceId/availability/slots
- * Get available time slots for service on given date
- * Query params:
- *   - date (required) - YYYY-MM-DD
- *   - slot_duration (optional) - Minutes per slot (default: 30)
- * Response: Array of available slots with start/end times
- * Access: Public
- */
-router.get(
-  '/services/:serviceId/availability/slots',
-  (req, res, next) => {
-    req.user = req.user || { role: 'public' };
-    next();
-  },
-  appointmentController.getAvailableSlots
-);
+// /services/:serviceId/availability and /availability/slots are public
+// (registered above the auth gate).
 
 // ─── USER APPOINTMENTS ────────────────────────────────────────────────────
 

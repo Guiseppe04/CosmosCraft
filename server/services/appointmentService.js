@@ -10,6 +10,8 @@ const { lockAppointmentCapacity } = require('../middleware/appointmentCapacityLo
 
 const NON_BLOCKING_APPOINTMENT_STATUSES = ['cancelled', 'rejected'];
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Statuses that end an appointment's life. A customer can no longer cancel once
 // one of these is reached. Mirrors isTerminalStatus in AppointmentCard.jsx.
 const CUSTOMER_UNCANCELLABLE_STATUSES = [
@@ -502,7 +504,22 @@ exports.autoMarkNoShows = async () => {
   return result.rows || [];
 };
 
+/**
+ * `appointments.appointment_id` is a uuid. A value that is not a uuid can never
+ * match a row, and letting it reach Postgres raises 22P02 ("invalid input syntax
+ * for type uuid"), which surfaces as a 500. Reject it up front so a mistyped or
+ * unmatched path behaves like the lookup it actually is.
+ */
+const assertAppointmentId = (appointmentId) => {
+  const value = String(appointmentId || '').trim();
+  if (!UUID_PATTERN.test(value)) {
+    throw new AppError('Appointment not found', 404);
+  }
+  return value;
+};
+
 exports.getAppointmentById = async (appointmentId) => {
+  assertAppointmentId(appointmentId);
   await this.autoMarkNoShows();
   const result = await pool.query(
     `SELECT 
@@ -690,6 +707,7 @@ const appointmentAuditContext = (appointment) => ({
 exports.getAppointmentsByDateRange = async (startDate, endDate, filters = {}) => this.listAppointments({ ...filters, date_from: startDate, date_to: endDate });
 
 exports.updateAppointment = async (appointmentId, updates, actorId = null) => {
+  assertAppointmentId(appointmentId);
   const { scheduled_at, status, notes, reason, confirmation_notes, appointment_type, services, location_id, guitar_details, payment_method, contact_number } = updates;
   const client = await pool.connect();
 
@@ -855,6 +873,7 @@ exports.rescheduleAppointment = async (appointmentId, newScheduledAt, reason) =>
   });
 
 exports.updateStatus = async (appointmentId, newStatus, reason, actorId = null) => {
+  assertAppointmentId(appointmentId);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1179,6 +1198,7 @@ exports.isDateUnavailable = async (date) => {
 // ─── PAYMENT STATUS ──────────────────────────────────────────────────────────
 
 exports.updatePaymentStatus = async (appointmentId, paymentStatus, paymentMethod = null, paymentProofUrl = null, actorId = null) => {
+  assertAppointmentId(appointmentId);
   const setClauses = ['payment_status = $2'];
   const params = [appointmentId, paymentStatus];
   let idx = 3;
