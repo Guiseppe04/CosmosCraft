@@ -1434,7 +1434,7 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
       updateValues
     )
 
-    const order = res.rows[0]
+    let order = res.rows[0]
 
     // Sync the latest payment record to match the new order payment status
     const paymentStatusMap = {
@@ -1475,6 +1475,16 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
         `UPDATE payments SET ${paymentUpdateFields.join(', ')} WHERE payment_id = $${paymentParamIndex}`,
         paymentUpdateValues
       )
+
+      // Existing databases have a payment trigger that maps for_verification
+      // back to proof_submitted (and cancelled to pending). Preserve the more
+      // specific admin status after that trigger runs, within this transaction.
+      const finalOrderRes = await client.query(
+        `UPDATE orders SET payment_status = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE order_id = $2 RETURNING *`,
+        [status, orderId]
+      )
+      order = finalOrderRes.rows[0]
     }
 
     // Auto-transition any pending_payment_verification refunds for this order

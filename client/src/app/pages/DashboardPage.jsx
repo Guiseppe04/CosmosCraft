@@ -753,8 +753,82 @@ export function DashboardPage() {
     }
   }
 
+  /**
+   * Guards against out-of-order order updates.
+   *
+   * `fetchMyOrders` replaces the whole list, so a response that was already in
+   * flight when a newer change landed would silently overwrite it — the customer
+   * would see a payment status flip forward and then snap back to the older value.
+   * Every fetch takes a ticket, and a realtime patch invalidates every outstanding
+   * ticket, so only the freshest source of truth is ever applied.
+   */
+  const ordersSyncRef = useRef(0)
+
   const fetchMyOrders = () => {
-    adminApi.getMyOrders().then(res => setMyOrders(res.data?.orders || [])).catch(console.error)
+    const requestId = ++ordersSyncRef.current
+
+    adminApi.getMyOrders()
+      .then(res => {
+        // Superseded by a newer fetch, or by a realtime patch that landed while
+        // this request was in flight.
+        if (requestId !== ordersSyncRef.current) return
+        setMyOrders(res.data?.orders || [])
+      })
+      .catch(console.error)
+  }
+
+  /**
+   * Orders carry both `payment_status` (orders table) and a nested `payment.status`
+   * (payments table). Admin payment updates change both, so keep them in sync when
+   * applying a realtime payload.
+   */
+  const ORDER_PAYMENT_TO_PAYMENT_STATUS = {
+    approved: 'verified',
+    rejected: 'rejected',
+    pending: 'pending',
+    proof_submitted: 'for_verification',
+    under_review: 'for_verification',
+    failed: 'cancelled',
+  }
+
+  /**
+   * Applies a single order from a socket payload straight into state.
+   *
+   * The accompanying refetch is still fired as reconciliation, but patching first
+   * means the card reflects an admin change immediately instead of only after the
+   * request round-trip lands.
+   */
+  const applyOrderUpdateFromSocket = (incoming) => {
+    if (!incoming?.order_id) return
+
+    // Realtime data is newer than anything already requested, so drop any
+    // in-flight fetch whose response is now stale.
+    ordersSyncRef.current += 1
+
+    setMyOrders((prev) => {
+      const index = prev.findIndex((order) => order.order_id === incoming.order_id)
+      if (index === -1) return prev
+
+      const next = [...prev]
+      const current = prev[index]
+      const paymentStatus = incoming.payment_status ?? current.payment_status
+
+      next[index] = {
+        ...current,
+        ...incoming,
+        // The payload is a raw orders row, so it lacks the derived fields the
+        // list relies on. Keep the existing ones unless explicitly provided.
+        items: incoming.items ?? current.items,
+        customization_feedback: incoming.customization_feedback ?? current.customization_feedback,
+        project: incoming.project ?? current.project,
+        payment_status: paymentStatus,
+        payment: incoming.payment ?? (current.payment ? {
+          ...current.payment,
+          status: ORDER_PAYMENT_TO_PAYMENT_STATUS[paymentStatus] ?? current.payment.status,
+        } : null),
+      }
+      return next
+    })
   }
 
   const printCustomerInvoice = async (order) => {
@@ -899,6 +973,9 @@ export function DashboardPage() {
   })
 
   useSocketEvent('order:updated', (data) => {
+    // Patch first so the card updates on the same tick the event arrives,
+    // then refetch to reconcile any fields the payload omits.
+    applyOrderUpdateFromSocket(data?.order)
     fetchMyOrders()
     const payStatus = data?.order?.payment_status
     const formattedPayStatus = payStatus === 'proof_submitted'
@@ -924,11 +1001,13 @@ export function DashboardPage() {
     fetchMyOrders()
   })
 
-  useSocketEvent('payment:created', () => {
+  useSocketEvent('payment:created', (data) => {
+    applyOrderUpdateFromSocket(data?.order)
     fetchMyOrders()
   })
 
-  useSocketEvent('payment:updated', () => {
+  useSocketEvent('payment:updated', (data) => {
+    applyOrderUpdateFromSocket(data?.order)
     fetchMyOrders()
   })
 
@@ -951,6 +1030,33 @@ export function DashboardPage() {
     fetchMyProjects()
     setToastMessage('Guitar build project progress updated!')
   })
+
+  /**
+   * Realtime events can be missed while the tab is hidden (backgrounded timers,
+   * suspended sockets, or a reconnect). Re-sync the sections this page owns when
+   * the user comes back so admin-side changes are never silently missed.
+   */
+  useEffect(() => {
+    if (!user?.id) return
+
+    const resync = () => {
+      if (document.visibilityState !== 'visible') return
+      if (activeSection === 'purchases') fetchMyOrders()
+      if (activeSection === 'appointments') fetchMyAppointments()
+      if (activeSection === 'my-guitar') {
+        fetchMyProjects()
+        fetchMyCustomizations()
+      }
+    }
+
+    window.addEventListener('focus', resync)
+    document.addEventListener('visibilitychange', resync)
+
+    return () => {
+      window.removeEventListener('focus', resync)
+      document.removeEventListener('visibilitychange', resync)
+    }
+  }, [user?.id, activeSection])
 
   const customizationLookup = useMemo(
     () => new Map(myCustomizations.map(customization => [customization.customization_id, customization])),

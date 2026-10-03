@@ -350,13 +350,14 @@
 }
 
 /* Inside the toolbar the tab strip is a flex child, so drop its standalone
-   block styling (full width, underline, bottom padding) and let it shrink. */
+   block styling (full width, underline) and let it shrink. The small bottom
+   padding stays so the visible scrollbar is not clipped. */
 .purch-toolbar .purch-tabs {
   flex: 1 1 auto !important;
   width: auto !important;
   min-width: 0 !important;
   margin: 0 !important;
-  padding: 0 !important;
+  padding: 0 0 0.25rem 0 !important;
   border-bottom: none !important;
 }
 
@@ -390,13 +391,34 @@
   overflow-y: hidden !important;
   width: 100% !important;
   max-width: 100% !important;
-  scrollbar-width: none !important;
-  -ms-overflow-style: none !important;
+  /* Keep a visible scrollbar so the overflowed tabs are discoverable. */
+  scrollbar-width: thin !important;
+  -ms-overflow-style: scrollbar !important;
+  scrollbar-color: var(--border) transparent !important;
 }
 
+/* Firefox */
+.purch-tabs {
+  scrollbar-color: var(--border) transparent !important;
+}
+
+/* WebKit / Blink */
 .purch-tabs::-webkit-scrollbar {
-  display: none !important;
-  height: 0 !important;
+  display: block !important;
+  height: 6px !important;
+}
+
+.purch-tabs::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.purch-tabs::-webkit-scrollbar-thumb {
+  background: var(--border) !important;
+  border-radius: 999px !important;
+}
+
+.purch-tabs::-webkit-scrollbar-thumb:hover {
+  background: var(--gold-primary) !important;
 }
 
 .purch-tab {
