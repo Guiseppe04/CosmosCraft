@@ -574,6 +574,7 @@ export default function AppointmentList({
                 <th className="px-4 py-3 text-left font-semibold">Date &amp; Time</th>
                 <th className="px-4 py-3 text-left font-semibold">Created</th>
                 <th className="px-4 py-3 text-left font-semibold">Status</th>
+                <th className="px-4 py-3 text-left font-semibold">Payment</th>
                 <th className="px-4 py-3 text-center font-semibold">Actions</th>
               </tr>
             </thead>
@@ -604,6 +605,9 @@ export default function AppointmentList({
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={apt.status} config={STATUS_CONFIG} />
+                  </td>
+                  <td className="px-4 py-3 text-white capitalize whitespace-nowrap">
+                    {(apt.payment_status || 'pending').replace(/_/g, ' ')}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <button

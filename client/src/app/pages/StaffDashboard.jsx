@@ -1109,12 +1109,13 @@ export function StaffDashboard() {
 
   const updateAppointmentPaymentStatus = useCallback(async (id, paymentStatus) => {
     try {
-      await staffApi.updateAppointmentPaymentStatus(id, paymentStatus)
+      const response = await staffApi.updateAppointmentPaymentStatus(id, paymentStatus)
+      const updated = response.data?.appointment
+      setSelectedAppointment(prev => prev && (prev.appointment_id || prev.id) === id ? { ...prev, ...updated } : prev)
       showToast('Payment status updated')
-      await Promise.all([fetchAppointments(), fetchCalendarAppointments()])
-    } catch (error) {
-      showToast(error.message, 'error')
-    }
+      await Promise.allSettled([fetchAppointments(), fetchCalendarAppointments()])
+      return updated
+    } catch (error) { showToast(error.message, 'error'); throw error }
   }, [fetchAppointments, fetchCalendarAppointments, showToast])
 
   const submitAppointment = useCallback(async (payload) => {

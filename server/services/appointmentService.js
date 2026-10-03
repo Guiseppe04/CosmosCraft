@@ -1297,7 +1297,7 @@ exports.updatePaymentStatus = async (appointmentId, paymentStatus, paymentMethod
     await client.query('BEGIN');
 
     const previousRes = await client.query(
-      `SELECT a.payment_status, a.reference_code, a.appointment_type, a.scheduled_at,
+      `SELECT a.payment_status, a.status, a.approved_payment_amount, a.reference_code, a.appointment_type, a.scheduled_at,
               a.user_id, u.email AS user_email,
               u.first_name || ' ' || u.last_name AS user_name
        FROM appointments a
@@ -1306,9 +1306,16 @@ exports.updatePaymentStatus = async (appointmentId, paymentStatus, paymentMethod
       [appointmentId]
     );
 
+    const lockedAppointment = previousRes.rows[0];
+    if (!lockedAppointment) throw new AppError('Appointment not found', 404);
+    if (lockedAppointment.status === 'rescheduled_by_customer') throw new AppError('Historical appointment payments cannot be changed', 409);
+    if (lockedAppointment.payment_status === 'refunded' || paymentStatus === 'refunded') throw new AppError('Refunded payments must be managed through Refund Management', 409);
+    const refund = await client.query('SELECT 1 FROM appointment_refunds WHERE appointment_id = $1', [appointmentId]);
+    if (refund.rows.length) throw new AppError('Payment is locked because a refund request exists', 409);
+
     if (paymentStatus === 'approved') {
       const amountResult = await client.query(`SELECT SUM(s.price) AS amount FROM appointments a JOIN services s ON s.service_id IN (SELECT el::int FROM jsonb_array_elements_text(a.services) el WHERE el ~ '^[0-9]+$') WHERE a.appointment_id = $1`, [appointmentId]);
-      const approved = { total_amount: amountResult.rows[0]?.amount };
+      const approved = { total_amount: lockedAppointment.approved_payment_amount || amountResult.rows[0]?.amount };
       if (!Number(approved?.total_amount)) throw new AppError('Cannot approve a payment without a valid amount', 400);
       setClauses.push(`approved_payment_amount = $${idx++}`);
       params.push(approved.total_amount);

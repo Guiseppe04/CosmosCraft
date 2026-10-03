@@ -768,11 +768,15 @@ export function AdminPage() {
 
   const handleAppointmentPaymentStatusUpdate = useCallback(async (id, paymentStatus) => {
     try {
-      await adminApi.updateAppointmentPaymentStatus(id, paymentStatus)
+      const response = await adminApi.updateAppointmentPaymentStatus(id, paymentStatus)
+      const updated = response.data?.appointment
+      setSelectedAppointment(prev => prev && (prev.appointment_id || prev.id) === id ? { ...prev, ...updated } : prev)
+      setModal(prev => prev?.type === 'view_appointment' && (prev.data?.appointment_id || prev.data?.id) === id ? { ...prev, data: { ...prev.data, ...updated } } : prev)
       showToast(`Payment status updated to ${paymentStatus}`, 'success')
-      fetchAppointments()
-    } catch (e) { showToast(e.message, 'error') }
-  }, [showToast, fetchAppointments])
+      await Promise.allSettled([fetchAppointments(), fetchCalendarAppointments()])
+      return updated
+    } catch (e) { showToast(e.message, 'error'); throw e }
+  }, [showToast, fetchAppointments, fetchCalendarAppointments])
 
   const handleCreateAppointment = useCallback(async (data) => {
     try {
@@ -2870,7 +2874,7 @@ export function AdminPage() {
               )}
 
               {modal.type === 'view_appointment' && modal.data && (
-                <ViewAppointmentModal modal={modal} closeModal={closeModal} />
+                <ViewAppointmentModal modal={modal} closeModal={closeModal} onPaymentStatusUpdate={handleAppointmentPaymentStatusUpdate} />
               )}
 
               {modal.type === 'appointment' && modal.data && modal.data.hasOwnProperty('appointment_id') && (

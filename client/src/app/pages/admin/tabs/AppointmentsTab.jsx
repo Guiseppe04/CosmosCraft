@@ -118,6 +118,7 @@ export function AppointmentsTab({
           appointments={visibleAppointments}
           loading={appointmentLoading}
           onRefresh={fetchAppointments}
+          onViewDetails={(apt) => { setSelectedAppointment(apt); setAppointmentModalOpen(true) }}
           onEdit={(apt) => {
             setAppointmentFormData(apt)
             setAppointmentFormOpen(true)

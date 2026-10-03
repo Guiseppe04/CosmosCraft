@@ -1,3 +1,4 @@
+import AppointmentPaymentReview from './AppointmentPaymentReview'
 import React, { useState, useEffect, useMemo } from 'react'
 import { format } from 'date-fns'
 import {
@@ -6,7 +7,7 @@ import {
   CreditCard, Package, Receipt, Printer, FileText
 } from 'lucide-react'
 import { formatPaymentMethod } from '../../utils/paymentMethodUtils'
-import { getPaymentStatusConfig, normalizePaymentStatus } from '../../utils/orderPaymentStatus'
+import { getPaymentStatusConfig } from '../../utils/orderPaymentStatus'
 import { printAppointmentReceipt, generatePlainTextReceipt } from '../../utils/appointmentReceipt'
 
 const EMPTY_LABEL = 'N/A'
@@ -272,14 +273,6 @@ export default function AppointmentDetailsModal({
 
   const showCancel = ['pending', 'confirmed', 'in_progress'].includes(derived.status) && Boolean(onCancel || onStatusChange)
 
-  // Payment verification capability
-  const normalizedPaymentStatus = normalizePaymentStatus(derived.rawPaymentStatus)
-  const canVerifyPayment = Boolean(
-    onPaymentStatusUpdate &&
-    derived.paymentProofUrl &&
-    !['approved', 'verified'].includes(normalizedPaymentStatus)
-  )
-
   // Action handlers
   const handleStatusAction = async (nextStatus) => {
     try {
@@ -308,19 +301,6 @@ export default function AppointmentDetailsModal({
       onClose?.()
     } catch (err) {
       console.error('Failed to cancel appointment:', err)
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
-  const handleVerifyPayment = async (newPaymentStatus) => {
-    if (!onPaymentStatusUpdate) return
-    try {
-      setActionLoading(`payment_${newPaymentStatus}`)
-      const id = appointment.appointment_id || appointment.id
-      await onPaymentStatusUpdate(id, newPaymentStatus)
-    } catch (err) {
-      console.error('Failed to update payment status:', err)
     } finally {
       setActionLoading(null)
     }
@@ -533,37 +513,7 @@ export default function AppointmentDetailsModal({
                 </div>
               )}
 
-              {/* Payment Verification Buttons */}
-              {canVerifyPayment && (
-                <div className="pt-3 flex flex-wrap gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => handleVerifyPayment('verified')}
-                    disabled={actionLoading !== null}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 text-xs font-semibold transition-colors disabled:opacity-50"
-                  >
-                    {actionLoading === 'payment_verified' ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <CheckCircle className="w-3.5 h-3.5" />
-                    )}
-                    <span>Verify Payment</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleVerifyPayment('rejected')}
-                    disabled={actionLoading !== null}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 text-xs font-semibold transition-colors disabled:opacity-50"
-                  >
-                    {actionLoading === 'payment_rejected' ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <XCircle className="w-3.5 h-3.5" />
-                    )}
-                    <span>Reject Payment</span>
-                  </button>
-                </div>
-              )}
+              <AppointmentPaymentReview appointment={appointment} onUpdate={onPaymentStatusUpdate} />
             </div>
           </section>
 

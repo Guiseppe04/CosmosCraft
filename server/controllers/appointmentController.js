@@ -1081,6 +1081,11 @@ exports.updatePaymentStatus = async (req, res, next) => {
       req.user?.user_id || null
     );
 
+    socketService.emitToUserAndStaff(updated?.user_id, 'appointment:updated', {
+      appointment: updated,
+      action: 'payment_updated',
+    });
+
     res.json({
       status: 'success',
       data: {

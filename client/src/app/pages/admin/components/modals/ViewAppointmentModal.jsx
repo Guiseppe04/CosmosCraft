@@ -1,8 +1,9 @@
+import AppointmentPaymentReview from '../../../../components/appointments/AppointmentPaymentReview'
 import { ModalHeader } from '../shared/ModalHeader'
 import { CreditCard } from 'lucide-react'
 import { formatPaymentMethod } from '../../../../utils/paymentMethodUtils'
 
-export function ViewAppointmentModal({ modal, closeModal }) {
+export function ViewAppointmentModal({ modal, closeModal, onPaymentStatusUpdate }) {
   if (!modal.data) return null
 
   const apt = modal.data
@@ -143,6 +144,7 @@ export function ViewAppointmentModal({ modal, closeModal }) {
               <p className="text-white font-semibold mt-1">{formatPaymentMethod(apt.payment_method)}</p>
             </div>
           </div>
+          <p className="mt-3 text-white">Payment status: {(apt.payment_status || 'pending').replace(/_/g, ' ')}</p>
           {apt.payment_proof_url && (
             <div className="mt-3">
               <a
@@ -156,6 +158,8 @@ export function ViewAppointmentModal({ modal, closeModal }) {
             </div>
           )}
         </div>
+
+        <AppointmentPaymentReview appointment={apt} onUpdate={onPaymentStatusUpdate} />
 
         <div className="bg-[var(--bg-primary)] p-5 rounded-xl border border-[var(--border)]">
           <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-3">Requested Services</p>
