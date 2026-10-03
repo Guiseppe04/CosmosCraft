@@ -53,6 +53,7 @@ export function ViewAppointmentModal({ modal, closeModal }) {
     ready_for_pickup: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
     completed: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
     cancelled: 'bg-red-500/10 text-red-500 border-red-500/30',
+    rescheduled_by_customer: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
     no_show: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
   }
   const statusCls = statusColors[apt.status] || 'bg-gray-500/10 text-gray-400 border-gray-500/30'

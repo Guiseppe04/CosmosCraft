@@ -2864,6 +2864,8 @@ const filteredOrders = myOrders.filter(order => {
                             notes: targetApt.notes,
                             scheduled_at: targetApt.scheduled_at,
                             status: targetApt.status,
+                            payment_status: targetApt.payment_status,
+                            payment_method: targetApt.payment_method,
                           },
                         },
                       })

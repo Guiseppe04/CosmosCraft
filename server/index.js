@@ -159,6 +159,26 @@ async function startServer() {
   app.set('io', io);
   app.set('socketService', socketService);
 
+  // Keep no-show status current even when no appointment list is being viewed.
+  const appointmentService = require('./services/appointmentService');
+  let noShowSweepRunning = false;
+  const sweepNoShows = async () => {
+    if (noShowSweepRunning) return;
+    noShowSweepRunning = true;
+    try {
+      await appointmentService.autoMarkNoShows();
+    } catch (error) {
+      console.error('Appointment no-show sweep failed:', error.message);
+    } finally {
+      noShowSweepRunning = false;
+    }
+  };
+  const noShowTimer = setInterval(sweepNoShows, 15000);
+  noShowTimer.unref();
+  server.on('close', () => clearInterval(noShowTimer));
+  void sweepNoShows();
+
+
   server.listen(PORT, async () => {
     console.log(`Backend Running`);
     console.log(`Port: ${PORT}`);

@@ -18,6 +18,7 @@ const STATUS_CONFIG = {
   ready_for_pickup: { label: 'Ready for Pickup', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30', icon: CheckCircle },
   completed: { label: 'Completed', color: 'bg-green-500/20 text-green-400 border-green-500/30', icon: CheckCircle },
   cancelled: { label: 'Cancelled', color: 'bg-red-500/20 text-red-400 border-red-500/30', icon: XCircle },
+  rescheduled_by_customer: { label: 'Rescheduled by Customer', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30', icon: XCircle },
   no_show: { label: 'No Show', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30', icon: XCircle },
 }
 
@@ -36,6 +37,7 @@ const STATUS_FILTERS = [
   { value: 'ready_for_pickup', label: 'Ready for Pickup' },
   { value: 'completed', label: 'Completed' },
   { value: 'cancelled', label: 'Cancelled' },
+  { value: 'rescheduled_by_customer', label: 'Rescheduled by Customer' },
   { value: 'no_show', label: 'No Show' },
 ]
 

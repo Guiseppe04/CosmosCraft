@@ -3,67 +3,14 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateToken, authorize } = require('../middleware/auth');
 
-// Ensure the payment_settings table exists with a default row
-let paymentSettingsTableReady = false;
-
-const ensurePaymentSettingsTable = async () => {
-  if (paymentSettingsTableReady) return;
-  try {
-    const checkRes = await pool.query(
-      `SELECT column_name
-       FROM information_schema.columns
-       WHERE table_name = 'payment_settings'
-         AND table_schema = current_schema()`
-    );
-    if (checkRes.rows.length === 0) {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS payment_settings (
-          id INTEGER PRIMARY KEY DEFAULT 1,
-          bank_name VARCHAR(255) NOT NULL DEFAULT '',
-          account_name VARCHAR(255) NOT NULL DEFAULT '',
-          account_number VARCHAR(255) NOT NULL DEFAULT '',
-          gcash_number VARCHAR(255) NOT NULL DEFAULT '',
-          maya_number VARCHAR(255) NOT NULL DEFAULT '',
-          qr_image_url TEXT NOT NULL DEFAULT '',
-          bank_transfer_qr_image_url TEXT NOT NULL DEFAULT '',
-          bank_transfer_display_mode VARCHAR(20) NOT NULL DEFAULT 'details',
-          notes TEXT NOT NULL DEFAULT '',
-          pickup_storage_fee NUMERIC(12, 2) NOT NULL DEFAULT 0,
-          created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )
-      `);
-      await pool.query(
-        `INSERT INTO payment_settings (id, bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, notes)
-         VALUES (1, '', '', '', '', '', '', '')
-         ON CONFLICT (id) DO NOTHING`
-      );
-    }
-    await pool.query(
-      'ALTER TABLE payment_settings ADD COLUMN IF NOT EXISTS pickup_storage_fee NUMERIC(12, 2) NOT NULL DEFAULT 0'
-    );
-    await pool.query(
-      "ALTER TABLE payment_settings ADD COLUMN IF NOT EXISTS bank_transfer_qr_image_url TEXT NOT NULL DEFAULT ''"
-    );
-    await pool.query(
-      "ALTER TABLE payment_settings ADD COLUMN IF NOT EXISTS bank_transfer_display_mode VARCHAR(20) NOT NULL DEFAULT 'details'"
-    );
-    await pool.query(
-      `INSERT INTO payment_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING`
-    );
-    paymentSettingsTableReady = true;
-  } catch (err) {
-    console.warn('Could not create payment_settings table (may already exist):', err.message);
-    paymentSettingsTableReady = true;
-  }
-};
+const { ensurePaymentSettingsTable } = require('../services/paymentSettingsService');
 
 // GET /api/payment-settings - Public route to fetch payment settings for checkout
 router.get('/', async (req, res) => {
   try {
     await ensurePaymentSettingsTable();
     const result = await pool.query(
-      'SELECT id, bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, bank_transfer_qr_image_url, bank_transfer_display_mode, notes, pickup_storage_fee, updated_at FROM payment_settings WHERE id = 1'
+      'SELECT id, bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, bank_transfer_qr_image_url, bank_transfer_display_mode, notes, pickup_storage_fee, no_show_grace_minutes, updated_at FROM payment_settings WHERE id = 1'
     );
     if (result.rows.length === 0) {
       return res.json({
@@ -79,6 +26,7 @@ router.get('/', async (req, res) => {
           bank_transfer_display_mode: 'details',
           notes: '',
           pickup_storage_fee: 0,
+          no_show_grace_minutes: 30,
         }
       });
     }
@@ -104,6 +52,13 @@ router.put('/', authenticateToken, authorize('admin', 'super_admin'), async (req
       }
     }
     
+    let graceMinutes = null;
+    if (req.body.no_show_grace_minutes !== undefined) {
+      graceMinutes = Number(req.body.no_show_grace_minutes);
+      if (req.body.no_show_grace_minutes === '' || !Number.isInteger(graceMinutes) || graceMinutes < 0 || graceMinutes > 1440) {
+        return res.status(400).json({ success: false, message: 'No-show grace period must be a whole number from 0 to 1440 minutes.' });
+      }
+    }
     // Ensure table and default row exist
     await ensurePaymentSettingsTable();
 
@@ -119,10 +74,11 @@ router.put('/', authenticateToken, authorize('admin', 'super_admin'), async (req
         pickup_storage_fee = COALESCE($8, pickup_storage_fee),
         bank_transfer_qr_image_url = COALESCE($9, bank_transfer_qr_image_url),
         bank_transfer_display_mode = COALESCE($10, bank_transfer_display_mode),
+        no_show_grace_minutes = COALESCE($11, no_show_grace_minutes),
         updated_at = NOW()
        WHERE id = 1
        RETURNING *`,
-      [bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, notes, pickupStorageFee, bank_transfer_qr_image_url, bank_transfer_display_mode]
+      [bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, notes, pickupStorageFee, bank_transfer_qr_image_url, bank_transfer_display_mode, graceMinutes]
     );
 
     res.json({ success: true, data: result.rows[0] });

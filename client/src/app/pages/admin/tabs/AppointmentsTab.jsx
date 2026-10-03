@@ -1,6 +1,7 @@
+import { GracePeriodModal } from '../components/modals/GracePeriodModal'
 import { useState, useMemo } from 'react'
 import { motion } from 'motion/react'
-import { CalendarX, List } from 'lucide-react'
+import { CalendarX, Clock, List } from 'lucide-react'
 import AppointmentCalendar from '../../../components/appointments/AppointmentCalendar'
 import AppointmentList from '../../../components/appointments/AppointmentList'
 
@@ -13,6 +14,7 @@ const STATUS_OPTIONS = [
   { value: 'completed', label: 'Completed' },
   { value: 'cancelled', label: 'Cancelled' },
   { value: 'no_show', label: 'No Show' },
+  { value: 'rescheduled_by_customer', label: 'Rescheduled by Customer' },
 ]
 
 export function AppointmentsTab({
@@ -35,6 +37,7 @@ export function AppointmentsTab({
   onSearchChange,
 }) {
   const [showAppointmentsTable, setShowAppointmentsTable] = useState(false)
+  const [gracePeriodOpen, setGracePeriodOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState('all')
 
   // Calendar uses the full unpaginated/paginated list filtered by status if selected
@@ -75,6 +78,12 @@ export function AppointmentsTab({
               <span>Mark Unavailable</span>
             </button>
           )}
+          {isSuperAdmin && !showAppointmentsTable && (
+            <button type="button" onClick={() => setGracePeriodOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[var(--gold-primary)] text-[var(--gold-primary)] bg-[var(--surface-dark)] font-semibold text-sm hover:bg-[var(--gold-primary)]/10 transition-colors shrink-0">
+              <Clock className="w-4 h-4" /><span>Grace Period</span>
+            </button>
+          )}
         </div>
 
         {!showAppointmentsTable && (
@@ -90,6 +99,8 @@ export function AppointmentsTab({
 
       </div>
       )}
+
+      {gracePeriodOpen && <GracePeriodModal onClose={() => setGracePeriodOpen(false)} />}
 
       {!showAppointmentsTable ? (
         <AppointmentCalendar

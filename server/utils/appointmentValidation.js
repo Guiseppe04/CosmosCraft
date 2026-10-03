@@ -599,6 +599,9 @@ const appointmentValidation = {
   // ─── REFUND REQUEST ────────────────────────────────────────────────────────
 
   createRefundRequestSchema: Joi.object({
+    refund_method: Joi.string().trim().max(100).required(),
+    account_holder: Joi.string().trim().max(200).required(),
+    account_number: Joi.string().trim().max(100).required(),
     appointment_id: Joi.string()
       .uuid()
       .required()

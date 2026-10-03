@@ -681,27 +681,29 @@ export function ShopPage() {
                         setSelectedProduct(product)
                         setProductModalTab('details')
                       }}
-                      className={`product-card group bg-[var(--surface-dark)] border border-white/5 rounded-[20px] rounded-br-[20px] overflow-hidden hover:border-white/20 transition-all duration-300 flex flex-col hover:shadow-2xl hover:-translate-y-1 cursor-pointer ${outOfStock ? 'opacity-60' : ''}`}
+                      className="product-card group cursor-pointer"
                     >
-                      <div className="product-card-image-wrapper aspect-[4/3] bg-[var(--surface-elevated)] overflow-hidden relative flex flex-col justify-center items-center border border-white/5 rounded-[16px] m-2">
+                      <div className="product-card-image-wrapper">
                         <img
                           src={product.image}
                           alt={product.name}
                           onError={handleProductImageError}
-                          className="product-card-image w-full h-full object-cover filter brightness-90 group-hover:scale-105 group-hover:brightness-100 transition-all duration-700 ease-out"
+                          className="product-card-image"
+                          loading="lazy"
                         />
 
                         {outOfStock && (
-                          <div className="absolute top-3 left-3">
-                            <span className="px-3 py-1 bg-red-500 text-white text-[10px] uppercase tracking-widest font-black rounded-full shadow-md">
+                          <div className="product-card-badge">
+                            <span className="product-card-status">
                               Out of Stock
                             </span>
                           </div>
                         )}
                       </div>
 
-                      <div className="px-4 pb-4 pt-2 flex flex-col flex-1 relative bg-transparent">
+                      <div className="product-card-info">
                         {product.brand && <p className="product-card-brand text-[12px] font-semibold mb-1 tracking-wide uppercase">{product.brand}</p>}
+                        <p className="product-card-price">₱{product.price.toLocaleString('en-PH')}</p>
                         <h3 className="product-card-name font-bold text-white text-[15px] leading-snug mb-2 group-hover:text-[var(--gold-primary)] transition-colors line-clamp-1">{product.name}</h3>
 
                         <div className="product-card-reviews flex items-center gap-2 mb-2">
@@ -726,15 +728,8 @@ export function ShopPage() {
                           )}
                         </div>
 
-                        <p className="text-[12px] text-[var(--text-muted)] font-medium mb-4">
-                          Stock: <span className="text-white">{product.stock || 0} pieces</span>
-                        </p>
-
-                        <div className="mt-auto flex flex-col gap-4 pt-3 border-t border-white/10">
+                        <div className="product-card-controls">
                           <div className="flex items-center justify-between">
-                            <p className="product-card-price text-lg font-bold text-white tracking-tight">
-                              ₱{product.price.toLocaleString('en-PH')}
-                            </p>
                             {!outOfStock && (
                               <div
                                 onClick={(e) => e.stopPropagation()}
@@ -759,9 +754,10 @@ export function ShopPage() {
                                 </button>
                               </div>
                             )}
+                          <p className="product-card-stock">Quantity: <span>{product.stock || 0} pieces</span></p>
                           </div>
 
-                          <div className="flex flex-col sm:flex-row items-stretch gap-3">
+                          <div className="product-card-actions flex items-stretch gap-3">
                             {!outOfStock && isAuthenticated && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleBuyNow(product); }}
@@ -864,27 +860,29 @@ export function ShopPage() {
             setSelectedProduct(product)
             setProductModalTab('details')
           }}
-          className={`product-card group bg-[var(--surface-dark)] border border-white/5 rounded-[20px] rounded-br-[20px] overflow-hidden hover:border-white/20 transition-all duration-300 flex flex-col hover:shadow-2xl hover:-translate-y-1 cursor-pointer ${outOfStock ? 'opacity-60' : ''}`}
+          className="product-card group cursor-pointer"
         >
-          <div className="product-card-image-wrapper aspect-[4/3] bg-[var(--surface-elevated)] overflow-hidden relative flex flex-col justify-center items-center border border-white/5 rounded-[16px] m-2">
+          <div className="product-card-image-wrapper">
             <img
               src={product.image}
               alt={product.name}
               onError={handleProductImageError}
-              className="product-card-image w-full h-full object-cover filter brightness-90 group-hover:scale-105 group-hover:brightness-100 transition-all duration-700 ease-out"
+              className="product-card-image"
+                          loading="lazy"
             />
 
-            {outOfStock && (
-              <div className="absolute top-3 left-3">
-                <span className="px-3 py-1 bg-red-500 text-white text-[10px] uppercase tracking-widest font-black rounded-full shadow-md">
+                        {outOfStock && (
+              <div className="product-card-badge">
+                <span className="product-card-status">
                   Out of Stock
                 </span>
               </div>
             )}
           </div>
 
-          <div className="px-4 pb-4 pt-2 flex flex-col flex-1 relative bg-transparent">
+          <div className="product-card-info">
             {product.brand && <p className="product-card-brand text-[12px] font-semibold mb-1 tracking-wide uppercase">{product.brand}</p>}
+                        <p className="product-card-price">₱{product.price.toLocaleString('en-PH')}</p>
             <h3 className="product-card-name font-bold text-white text-[15px] leading-snug mb-2 group-hover:text-[var(--gold-primary)] transition-colors line-clamp-1">{product.name}</h3>
 
             <div className="product-card-reviews flex items-center gap-2 mb-2">
@@ -909,15 +907,8 @@ export function ShopPage() {
               )}
             </div>
 
-            <p className="text-[12px] text-[var(--text-muted)] font-medium mb-4">
-              Stock: <span className="text-white">{product.stock || 0} pieces</span>
-            </p>
-
-            <div className="mt-auto flex flex-col gap-4 pt-3 border-t border-white/10">
+            <div className="product-card-controls">
               <div className="flex items-center justify-between">
-                <p className="product-card-price text-lg font-bold text-white tracking-tight">
-                  ₱{product.price.toLocaleString('en-PH')}
-                </p>
                 {!outOfStock && (
                   <div
                     onClick={(e) => e.stopPropagation()}
@@ -942,9 +933,10 @@ export function ShopPage() {
                     </button>
                   </div>
                 )}
-              </div>
+              <p className="product-card-stock">Quantity: <span>{product.stock || 0} pieces</span></p>
+                          </div>
 
-              <div className="flex flex-col sm:flex-row items-stretch gap-3">
+              <div className="product-card-actions flex items-stretch gap-3">
                 {!outOfStock && isAuthenticated && (
                   <button
                     onClick={(e) => { e.stopPropagation(); handleBuyNow(product); }}

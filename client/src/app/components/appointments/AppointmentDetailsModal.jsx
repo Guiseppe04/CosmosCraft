@@ -19,6 +19,7 @@ const STATUS_CONFIG = {
   ready_for_pickup: { label: 'Ready for Pickup', color: 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30' },
   completed: { label: 'Completed', color: 'bg-green-500/10 text-green-400 border border-green-500/30' },
   cancelled: { label: 'Cancelled', color: 'bg-red-500/10 text-red-400 border border-red-500/30' },
+  rescheduled_by_customer: { label: 'Rescheduled by Customer', color: 'bg-orange-500/10 text-orange-400 border border-orange-500/30' },
   no_show: { label: 'No Show', color: 'bg-orange-500/10 text-orange-400 border border-orange-500/30' },
 }
 

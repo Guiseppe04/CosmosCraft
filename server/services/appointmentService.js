@@ -8,7 +8,7 @@ const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const { lockAppointmentCapacity } = require('../middleware/appointmentCapacityLock');
 
-const NON_BLOCKING_APPOINTMENT_STATUSES = ['cancelled', 'rejected'];
+const NON_BLOCKING_APPOINTMENT_STATUSES = ['cancelled', 'rejected', 'rescheduled_by_customer'];
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -19,6 +19,7 @@ const CUSTOMER_UNCANCELLABLE_STATUSES = [
   'cancelled',
   'rejected',
   'no_show',
+  'rescheduled_by_customer',
 ];
 
 // ─── STATUS TRANSITION RULES ─────────────────────────────────────────────────
@@ -50,6 +51,7 @@ const STATUS_TRANSITIONS = {
   completed: [],
   cancelled: [],
   no_show: [],
+  rescheduled_by_customer: [],
 };
 
 /**
@@ -298,6 +300,8 @@ function formatAppointmentResponse(appointment) {
   return {
     appointment_id: appointment.appointment_id,
     reference_code: appointment.reference_code || null,
+    rescheduled_from: appointment.rescheduled_from || null,
+    approved_payment_amount: appointment.approved_payment_amount || null,
     user_id: appointment.user_id,
     user_email: appointment.user_email,
     user_name: appointment.user_name,
@@ -466,15 +470,23 @@ exports.createAppointment = async ({ appointment_type = 'service_in_shop', servi
 };
 
 exports.autoMarkNoShows = async () => {
-  // Lazy sweep: transition confirmed appointments past 1 hour after scheduled_at to no_show.
-  // Admins can still manually override back to another status afterward.
+  await require('./paymentSettingsService').ensurePaymentSettingsTable();
+  const settings = await pool.query('SELECT no_show_grace_minutes FROM payment_settings WHERE id = 1');
+  const graceMinutes = settings.rows[0]?.no_show_grace_minutes ?? 30;
   const result = await pool.query(
     `UPDATE appointments
      SET status = 'no_show', updated_at = now()
      WHERE status = 'confirmed'
-       AND scheduled_at < now() - interval '1 hour'
-     RETURNING appointment_id, reference_code`
+       AND scheduled_at <= now() - ($1 * interval '1 minute')
+     RETURNING *`,
+    [graceMinutes]
   );
+  for (const row of result.rows || []) {
+    require('./socketService').emitToUserAndStaff(row.user_id, 'appointment:updated', {
+      appointment: formatAppointmentResponse(row),
+      action: 'no_show',
+    });
+  }
 
   // The sweep runs without an actor, so these rows are recorded as automatic
   // transitions rather than disappearing from the audit trail entirely.
@@ -490,7 +502,8 @@ exports.autoMarkNoShows = async () => {
         from: 'confirmed',
         to: 'no_show',
         automatic: true,
-        note: 'Marked automatically one hour after the scheduled time',
+        note: `Marked automatically ${graceMinutes} minutes after the scheduled time`,
+        grace_minutes: graceMinutes,
       },
       context: {
         appointmentId: row.appointment_id,
@@ -730,6 +743,37 @@ exports.updateAppointment = async (appointmentId, updates, actorId = null) => {
     }
 
     const currentAppt = formatAppointmentResponse(currentRes.rows[0]);
+    if (currentAppt.status === 'rescheduled_by_customer') throw new AppError('Historical appointments cannot be changed', 409);
+    let targetId = appointmentId;
+    if (scheduled_at && actorId === currentAppt.user_id) {
+      if (!['pending', 'confirmed', 'no_show'].includes(currentAppt.status)) throw new AppError('This appointment cannot be rescheduled', 409);
+      if (new Date(scheduled_at).getTime() === new Date(currentAppt.scheduled_at).getTime()) throw new AppError('Choose a different schedule', 400);
+      const refund = await client.query('SELECT 1 FROM appointment_refunds WHERE appointment_id = $1', [appointmentId]);
+      if (refund.rows.length) throw new AppError('An appointment with a refund request cannot be rescheduled', 409);
+      await assertNoScheduleConflict(client, scheduled_at, appointmentId);
+      if (currentAppt.payment_status === 'approved' && services !== undefined) {
+        const originalServices = [...(currentAppt.services || [])].map(String).sort();
+        const requestedServices = [...services].map(String).sort();
+        if (JSON.stringify(originalServices) !== JSON.stringify(requestedServices)) throw new AppError('Services cannot change when rescheduling an approved payment', 409);
+      }
+      const reference = await generateReferenceCode(client, scheduled_at);
+      const successor = await client.query(`INSERT INTO appointments
+        (user_id, appointment_type, order_id, services, location_id, guitar_details, scheduled_at, estimated_end_at,
+         status, payment_method, payment_status, payment_proof_url, notes, customer_name, customer_email, customer_phone,
+         reference_code, rescheduled_from, approved_payment_amount)
+        SELECT user_id, appointment_type, order_id, services, location_id, guitar_details, $2,
+          CASE WHEN estimated_end_at IS NULL THEN NULL ELSE $2::timestamptz + (estimated_end_at - scheduled_at) END,
+          CASE WHEN payment_status::text = 'approved' THEN 'confirmed'::appointment_status_enum ELSE 'pending'::appointment_status_enum END,
+          payment_method, payment_status, payment_proof_url, notes, customer_name, customer_email, customer_phone,
+          $3, appointment_id, approved_payment_amount FROM appointments WHERE appointment_id = $1 RETURNING appointment_id`,
+        [appointmentId, scheduled_at, reference]);
+      targetId = successor.rows[0].appointment_id;
+      await client.query("UPDATE appointments SET status = 'rescheduled_by_customer', updated_at = now() WHERE appointment_id = $1", [appointmentId]);
+      await require('./appointmentRefundService').recordEvent(client, currentAppt, actorId, 'rescheduled_by_customer', currentAppt.status,
+        { old_schedule: currentAppt.scheduled_at, new_schedule: scheduled_at, new_appointment_id: targetId });
+      await require('./appointmentRefundService').notify(client, currentAppt.user_id, 'Appointment rescheduled',
+        `Previous schedule: ${currentAppt.scheduled_at}. New schedule: ${scheduled_at}.`, targetId, true);
+    }
     const setClauses = [];
     const params = [];
     let idx = 1;
@@ -772,7 +816,12 @@ exports.updateAppointment = async (appointmentId, updates, actorId = null) => {
       setClauses.push(`guitar_details = $${idx++}`);
       params.push(JSON.stringify(normalizedGuitarDetails));
     }
-    if (payment_method !== undefined) {
+    const paymentApproved = ['approved', 'paid', 'verified', 'confirmed'].includes(String(currentAppt.payment_status || '').toLowerCase());
+    if (scheduled_at && currentAppt.status === 'no_show' && status === undefined && targetId === appointmentId) {
+      setClauses.push(`status = $${idx++}`);
+      params.push(paymentApproved ? 'confirmed' : 'pending');
+    }
+    if (payment_method !== undefined && !(scheduled_at && paymentApproved)) {
       setClauses.push(`payment_method = $${idx++}`);
       params.push(payment_method || null);
     }
@@ -788,7 +837,7 @@ exports.updateAppointment = async (appointmentId, updates, actorId = null) => {
     }
 
     setClauses.push(`updated_at = now()`);
-    params.push(appointmentId);
+    params.push(targetId);
 
     const updateRes = await client.query(
       `UPDATE appointments SET ${setClauses.join(', ')} WHERE appointment_id = $${idx} RETURNING *`,
@@ -799,10 +848,10 @@ exports.updateAppointment = async (appointmentId, updates, actorId = null) => {
 
     await require('./auditService').logAppointmentEvent({
       userId: actorId,
-      action: status !== undefined && status !== currentAppt.status ? `APPOINTMENT_${status}` : 'UPDATE',
+      action: updatedAppt.status !== currentAppt.status ? `APPOINTMENT_${updatedAppt.status}` : 'UPDATE',
       entityId: appointmentId,
       entityType: 'appointment',
-      status: status !== undefined ? status : currentAppt.status,
+      status: updatedAppt.status,
       previousStatus: currentAppt.status,
       details: {
         updated_fields: Object.keys(updates),
@@ -857,7 +906,7 @@ exports.updateAppointment = async (appointmentId, updates, actorId = null) => {
     });
 
     await client.query('COMMIT');
-    return this.getAppointmentById(appointmentId);
+    return this.getAppointmentById(targetId);
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -866,11 +915,11 @@ exports.updateAppointment = async (appointmentId, updates, actorId = null) => {
   }
 };
 
-exports.rescheduleAppointment = async (appointmentId, newScheduledAt, reason) =>
+exports.rescheduleAppointment = async (appointmentId, newScheduledAt, reason, actorId = null) =>
   this.updateAppointment(appointmentId, {
     scheduled_at: newScheduledAt,
     ...(reason !== undefined && reason !== null ? { reason } : {}),
-  });
+  }, actorId);
 
 exports.updateStatus = async (appointmentId, newStatus, reason, actorId = null) => {
   assertAppointmentId(appointmentId);
@@ -933,6 +982,7 @@ exports.updateStatus = async (appointmentId, newStatus, reason, actorId = null) 
       executor: client,
     });
 
+    await require('./appointmentRefundService').notify(client, currentRow.user_id, 'Appointment status updated', `Your appointment is now ${newStatus.replace(/_/g, ' ')}.`, appointmentId);
     await client.query('COMMIT');
 
     // 6. Return the formatted appointment response
@@ -1016,6 +1066,7 @@ exports.getAppointmentStats = async (filters = {}) => {
        SUM(CASE WHEN status::text = 'ready_for_pickup' THEN 1 ELSE 0 END) as ready_for_pickup_count,
        SUM(CASE WHEN status::text = 'completed' THEN 1 ELSE 0 END) as completed_count,
        SUM(CASE WHEN status::text = 'cancelled' THEN 1 ELSE 0 END) as cancelled_count,
+       SUM(CASE WHEN status::text = 'rescheduled_by_customer' THEN 1 ELSE 0 END) as rescheduled_count,
        SUM(CASE WHEN status::text = 'no_show' THEN 1 ELSE 0 END) as no_show_count
      FROM appointments ${whereClause}`, params
   );
@@ -1090,7 +1141,7 @@ exports.getAvailableDates = async (dateFrom, dateTo) => {
          FROM appointments
          WHERE scheduled_at >= d::date
            AND scheduled_at < d::date + interval '1 day'
-           AND lower(status::text) NOT IN ('cancelled', 'rejected')
+           AND lower(status::text) NOT IN ('cancelled', 'rejected', 'rescheduled_by_customer')
        ) < $3
      ORDER BY d::date ASC`,
     [dateFrom, dateTo, capacity]
@@ -1255,6 +1306,13 @@ exports.updatePaymentStatus = async (appointmentId, paymentStatus, paymentMethod
       [appointmentId]
     );
 
+    if (paymentStatus === 'approved') {
+      const amountResult = await client.query(`SELECT SUM(s.price) AS amount FROM appointments a JOIN services s ON s.service_id IN (SELECT el::int FROM jsonb_array_elements_text(a.services) el WHERE el ~ '^[0-9]+$') WHERE a.appointment_id = $1`, [appointmentId]);
+      const approved = { total_amount: amountResult.rows[0]?.amount };
+      if (!Number(approved?.total_amount)) throw new AppError('Cannot approve a payment without a valid amount', 400);
+      setClauses.push(`approved_payment_amount = $${idx++}`);
+      params.push(approved.total_amount);
+    }
     const updateRes = await client.query(
       `UPDATE appointments SET ${setClauses.join(', ')} WHERE appointment_id = $1 RETURNING *`,
       params
@@ -1264,6 +1322,7 @@ exports.updatePaymentStatus = async (appointmentId, paymentStatus, paymentMethod
     const updated = updateRes.rows[0];
 
     if (previous) {
+      await require('./appointmentRefundService').notify(client, previous.user_id, 'Appointment payment reviewed', `Your appointment payment is ${paymentStatus}.`, appointmentId);
       await require('./auditService').logAppointmentEvent({
         userId: actorId,
         action: 'PAYMENT',
@@ -1320,7 +1379,7 @@ exports.getAvailableSlots = async (serviceId, date, slotDuration = 30) => {
 
   const appointmentsResult = await pool.query(
     `SELECT scheduled_at, estimated_end_at FROM appointments 
-     WHERE scheduled_at >= $1 AND scheduled_at <= $2 AND lower(status::text) NOT IN ('cancelled', 'rejected')`,
+     WHERE scheduled_at >= $1 AND scheduled_at <= $2 AND lower(status::text) NOT IN ('cancelled', 'rejected', 'rescheduled_by_customer')`,
     [startOfDay, endOfDay]
   );
 
@@ -1385,7 +1444,7 @@ exports.checkAvailability = async (serviceId, scheduledAt, durationMinutes) => {
 
   const appointmentsResult = await pool.query(
     `SELECT scheduled_at, estimated_end_at FROM appointments 
-     WHERE scheduled_at >= $1 AND scheduled_at <= $2 AND lower(status::text) NOT IN ('cancelled', 'rejected')`,
+     WHERE scheduled_at >= $1 AND scheduled_at <= $2 AND lower(status::text) NOT IN ('cancelled', 'rejected', 'rescheduled_by_customer')`,
     [startOfDay, endOfDay]
   );
 
@@ -1428,89 +1487,8 @@ exports.getDailyAppointmentLoad = async (date, excludeAppointmentId = null) => {
 
 // ─── REFUND REQUESTS ──────────────────────────────────────────────────────────
 
-exports.createRefundRequest = async ({ appointment_id, user_id, payment_method, payment_reference, amount, reason }) => {
-  // The deployed refund_requests table stores refunds by order_id (no appointment_id column).
-  // Appointments link to orders via appointments.order_id, so resolve the order first.
-  const appointmentRes = await pool.query(
-    `SELECT order_id FROM appointments WHERE appointment_id = $1`,
-    [appointment_id]
-  );
-  if (appointmentRes.rows.length === 0) {
-    throw new AppError('Appointment not found', 404);
-  }
-
-  // Store the amount in amount_requested (the only amount column on the deployed table).
-  // payment_method / payment_reference are not persisted as columns on refund_requests,
-  // but are captured as notes for record-keeping.
-  const notes = [
-    payment_method ? `Payment Method: ${payment_method}` : null,
-    payment_reference ? `Payment Reference: ${payment_reference}` : null,
-    reason ? `Reason: ${reason}` : null,
-  ].filter(Boolean).join('\n');
-
-  const result = await pool.query(
-    `INSERT INTO refund_requests (
-      order_id, user_id, reason, customer_notes, amount_requested
-    ) VALUES (
-      $1, $2, $3, $4, $5
-    ) RETURNING *`,
-    [appointmentRes.rows[0].order_id, user_id, reason || 'Refund request', notes || null, amount || null]
-  );
-  return result.rows[0];
-};
-
-exports.getRefundRequestsByAppointment = async (appointmentId) => {
-  const result = await pool.query(
-    `SELECT r.*, u.first_name, u.last_name, u.email
-     FROM refund_requests r
-     JOIN users u ON r.user_id = u.user_id
-     JOIN appointments a ON a.order_id = r.order_id
-     WHERE a.appointment_id = $1
-     ORDER BY r.created_at DESC`,
-    [appointmentId]
-  );
-  return result.rows;
-};
-
-exports.getRefundRequestById = async (refundId) => {
-  const result = await pool.query('SELECT * FROM refund_requests WHERE refund_request_id = $1', [refundId]);
-  return result.rows[0] || null;
-};
-
-exports.getAllRefundRequests = async ({ status, user_id, sort_by = 'created_at', sort_order = 'desc', limit = 50, offset = 0 } = {}) => {
-  const params = [];
-  let idx = 1;
-  let whereClause = '';
-
-  if (status) {
-    whereClause = `WHERE status = $${idx++}`;
-    params.push(status);
-  }
-
-  if (user_id) {
-    whereClause += (whereClause ? ' AND ' : 'WHERE ') + `user_id = $${idx++}`;
-    params.push(user_id);
-  }
-
-  const countResult = await pool.query(
-    `SELECT COUNT(*) as total FROM refund_requests ${whereClause}`,
-    params.slice(0, idx - 1)
-  );
-
-  const result = await pool.query(
-    `SELECT r.*, u.first_name, u.last_name, u.email
-     FROM refund_requests r
-     JOIN users u ON r.user_id = u.user_id
-     ${whereClause}
-     ORDER BY ${sort_by === 'created_at' ? 'r.created_at' : sort_by} ${sort_order === 'desc' ? 'DESC' : 'ASC'}
-     LIMIT $${idx} OFFSET $${idx + 1}`,
-    [...params.slice(0, idx - 1), limit, offset]
-  );
-
-  return {
-    refund_requests: result.rows,
-    total: parseInt(countResult.rows[0].total),
-    limit,
-    offset,
-  };
-};
+const appointmentRefundService = require('./appointmentRefundService');
+exports.createRefundRequest = appointmentRefundService.create;
+exports.getRefundRequestsByAppointment = appointmentRefundService.forAppointment;
+exports.getRefundRequestById = appointmentRefundService.get;
+exports.getAllRefundRequests = appointmentRefundService.list;

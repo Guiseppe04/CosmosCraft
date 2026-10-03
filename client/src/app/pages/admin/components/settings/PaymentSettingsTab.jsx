@@ -56,7 +56,7 @@ export function PaymentSettingsTab({ showToast }) {
         bank_transfer_qr_image_url = await uploadToCloudinary(bankTransferQrFile)
       }
       await adminApi.updatePaymentSettings({
-        ...settings,
+        ...Object.fromEntries(Object.entries(settings).filter(([key]) => key !== 'no_show_grace_minutes')),
         qr_image_url,
         bank_transfer_qr_image_url,
       })

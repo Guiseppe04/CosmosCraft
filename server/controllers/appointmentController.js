@@ -271,7 +271,8 @@ exports.rescheduleAppointment = async (req, res, next) => {
      const updated = await appointmentService.rescheduleAppointment(
        id,
        validated.new_scheduled_at,
-       validated.reason
+       validated.reason,
+       req.user.user_id
      );
 
     socketService.emitToUserAndStaff(updated?.user_id, 'appointment:updated', {
@@ -1113,6 +1114,9 @@ exports.createRefundRequest = async (req, res, next) => {
     const refundRequest = await appointmentService.createRefundRequest({
       appointment_id,
       user_id: req.user.user_id,
+      refund_method: validated.refund_method,
+      account_holder: validated.account_holder,
+      account_number: validated.account_number,
       payment_method: appointment.payment_method,
       payment_reference,
       amount,

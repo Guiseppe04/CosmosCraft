@@ -1,3 +1,4 @@
+import { AppointmentRefundAdmin } from '../../../components/appointments/AppointmentRefund'
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
@@ -438,6 +439,7 @@ export function RefundRequestsTab({ showToast, user }) {
 
   return (
     <motion.div key="refund-requests" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+      <AppointmentRefundAdmin />
       <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
         <div className="flex flex-col gap-4 mb-6 sm:flex-row sm:items-start sm:justify-between">
           <div>

@@ -317,6 +317,23 @@
     // Reschedule mode - check if we're editing an existing appointment
     const rescheduleData = location.state?.rescheduleAppointment || null
     const isRescheduleMode = Boolean(rescheduleData)
+    const [reschedulePaymentStatus, setReschedulePaymentStatus] = useState(rescheduleData?.payment_status || '')
+    const hasApprovedReschedulePayment = isRescheduleMode && ['approved', 'paid', 'verified', 'confirmed'].includes(String(reschedulePaymentStatus).toLowerCase())
+
+    useEffect(() => {
+      if (!rescheduleData?.appointment_id) return
+      let cancelled = false
+      fetch(`${API}/api/appointments/${rescheduleData.appointment_id}`, {
+        headers: getAuthHeaders(), credentials: 'include',
+      }).then(async response => {
+        if (!response.ok) throw new Error('Unable to check appointment payment')
+        const payload = await response.json()
+        if (!cancelled) setReschedulePaymentStatus(payload.data?.appointment?.payment_status || '')
+      }).catch(error => {
+        if (!cancelled) console.error(error)
+      })
+      return () => { cancelled = true }
+    }, [rescheduleData?.appointment_id])
 
     // State
     const [currentStep, setCurrentStep] = useState(1)
@@ -967,6 +984,7 @@
         return !!selectedBranchId
       }
       if (currentStep === 5) {
+        if (hasApprovedReschedulePayment) return true
         if (!selectedPaymentMethod) return false
         if (selectedPaymentMethod === 'e_wallet' || selectedPaymentMethod === 'e_bank') {
           return Boolean(paymentProofFile && paymentProofPreviewUrl)
@@ -1382,7 +1400,7 @@
                     guitars: guitarsPayload,
                   }
                 : undefined,
-              payment_method: selectedPaymentMethod,
+              payment_method: hasApprovedReschedulePayment ? undefined : selectedPaymentMethod,
               contact_number: appointmentContactNumber,
               notes: finalNotes,
             })
@@ -2205,6 +2223,11 @@
                   </div>
                 )}
 
+                {hasApprovedReschedulePayment ? (
+                  <div className="border-t border-[var(--border)] pt-4">
+                    <p className="text-sm text-[var(--text-light)]">Your payment is already approved. Rescheduling keeps your existing payment; no new payment is required.</p>
+                  </div>
+                ) : (
                 <div className="border-t border-[var(--border)] pt-4">
                   <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Payment Method <span className="text-red-500" style={{ color: '#ef4444' }}>*</span></p>
                   <div className="overflow-x-auto pb-1">
@@ -2324,6 +2347,7 @@
                     <p className="mt-3 text-sm font-medium text-red-400">{paymentValidationError}</p>
                   )}
                 </div>
+                )}
               </div>
 
             </motion.div>

@@ -58,6 +58,7 @@ const STATUS_COLORS = {
   ready_for_pickup: { bg: 'bg-cyan-500/20', text: 'text-cyan-400', border: 'border-cyan-500/30', label: 'Ready for Pickup' },
   completed: { bg: 'bg-green-500/20', text: 'text-green-400', border: 'border-green-500/30', label: 'Completed' },
   cancelled: { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/30', label: 'Cancelled' },
+  rescheduled_by_customer: { bg: 'bg-orange-500/20', text: 'text-orange-400', border: 'border-orange-500/30', label: 'Rescheduled by Customer' },
   no_show: { bg: 'bg-orange-500/20', text: 'text-orange-400', border: 'border-orange-500/30', label: 'No Show' },
   approved: { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/30', label: 'Approved' },
 }
@@ -199,6 +200,7 @@ const WEEK_STATUS_STYLES = {
   ready_for_pickup: 'border-cyan-400/60 bg-cyan-500/20 text-cyan-100',
   completed: 'border-emerald-400/60 bg-emerald-500/20 text-emerald-100',
   cancelled: 'border-rose-400/60 bg-rose-500/20 text-rose-100',
+  rescheduled_by_customer: 'border-orange-400/60 bg-orange-500/20 text-orange-100',
   no_show: 'border-orange-400/60 bg-orange-500/20 text-orange-100',
 }
 
@@ -570,7 +572,7 @@ const getDateStatus = (dateKey) => {
               </div>
               <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
                 <span className="px-3 py-1 rounded-full bg-green-500/20 text-green-400">
-                  {selectedAppointments.filter(a => a.status !== 'cancelled').length} booked
+                  {selectedAppointments.filter(a => !['cancelled', 'rejected', 'rescheduled_by_customer'].includes(a.status)).length} booked
                 </span>
                 <span className="px-3 py-1 rounded-full bg-[var(--surface-dark)] text-[var(--text-muted)]">
                   {TIME_SLOT_CONFIG.endHour - TIME_SLOT_CONFIG.startHour} hours available

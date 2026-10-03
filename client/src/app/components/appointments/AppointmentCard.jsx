@@ -1,3 +1,4 @@
+import AppointmentRefund from './AppointmentRefund'
 import React, { useState } from 'react'
 import {
   Calendar,
@@ -171,7 +172,7 @@ export default function AppointmentCard({
 
   const apptDate = apt.scheduled_at || apt.date
   const isPast = apptDate && new Date(apptDate) < new Date()
-  const isTerminalStatus = ['completed', 'cancelled', 'rejected', 'no_show'].includes(
+  const isTerminalStatus = ['completed', 'cancelled', 'rejected', 'no_show', 'rescheduled_by_customer'].includes(
     String(apt.status || '').toLowerCase()
   )
   const needsReschedule = isPast && !isTerminalStatus
@@ -545,6 +546,8 @@ export default function AppointmentCard({
             </div>
           )}
 
+          {apt.status === 'rescheduled_by_customer' && <p className="mt-3 text-amber-300">Rescheduled by Customer ? historical schedule</p>}
+          {apt.status === 'no_show' && <AppointmentRefund apt={apt} />}
           {/* Past-Due Reschedule Notice */}
           {needsReschedule && (
             <div className="mt-3 flex items-center justify-between bg-orange-500/10 p-3.5 rounded-xl border border-orange-500/20 gap-3">
