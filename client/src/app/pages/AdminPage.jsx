@@ -266,6 +266,10 @@ export function AdminPage() {
   const [orderPage, setOrderPage] = useState(1)
   const ORDERS_PAGE_SIZE = 10
 
+  // Dashboard deep-link filters – set by Dashboard before tab navigation, consumed on mount, reset to 'all' after
+  const [dashboardOrderPaymentFilter, setDashboardOrderPaymentFilter] = useState('all')
+  const [dashboardOrderStatusFilter, setDashboardOrderStatusFilter] = useState('all')
+  const [dashboardAppointmentStatusFilter, setDashboardAppointmentStatusFilter] = useState('all')
   // Projects tab state
   const [projectStatusFilter, setProjectStatusFilter] = useState('all')
   const [projectAssignedFilter, setProjectAssignedFilter] = useState('all')
@@ -2600,10 +2604,16 @@ export function AdminPage() {
               visibleAppointments={visibleAppointments}
               inventoryHealthData={inventoryHealthData}
               enhancedOrderStats={enhancedOrderStats}
-              handleRefresh={handleRefresh}
               isLoading={isLoading}
               setActiveTab={setActiveTab}
-              lastRefreshed={lastRefreshed}
+              // Dashboard filter-aware navigation setters
+              setDashboardOrderPaymentFilter={setDashboardOrderPaymentFilter}
+              setDashboardOrderStatusFilter={setDashboardOrderStatusFilter}
+              setProjectStatusFilter={setProjectStatusFilter}
+              setProductsInventoryFilter={setProductsInventoryFilter}
+              setPartsInventoryFilter={setPartsInventoryFilter}
+              setInventorySubTab={setInventorySubTab}
+              setDashboardAppointmentStatusFilter={setDashboardAppointmentStatusFilter}
             />
           )}
 
@@ -2778,6 +2788,8 @@ export function AdminPage() {
               onManageProject={handleManageCustomizationProject}
               onGoToProjects={() => handleManageCustomizationProject()}
               ordersLoading={ordersLoading}
+              initialPaymentStatusFilter={dashboardOrderPaymentFilter}
+              initialStatusFilter={dashboardOrderStatusFilter}
             />
           )}
 
@@ -2802,6 +2814,7 @@ export function AdminPage() {
                isSuperAdmin={isSuperAdmin}
                searchQuery={appointmentSearch}
                onSearchChange={setAppointmentSearch}
+               initialStatusFilter={dashboardAppointmentStatusFilter}
              />
           )}
 
