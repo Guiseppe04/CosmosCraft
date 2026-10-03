@@ -834,6 +834,8 @@ function OrderFulfillmentPanel({ order, onUpdateOrder, onManageProject }) {
 
 function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrderStatus, onVerifyPayment, onMarkUnderReview, onMarkProcessing, onManageProject, user, initialSection = 'details' }) {
   const [activeSection, setActiveSection] = useState(initialSection)
+  const [isStartingReview, setIsStartingReview] = useState(false)
+  const [reviewError, setReviewError] = useState('')
   const isCODOrder = isCashOnDeliveryOrder(order)
 
   useEffect(() => {
@@ -846,10 +848,19 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
 
   // Entering the payment section flags the payment as under review, mirroring the
   // action button inside the panel.
-  const handleOpenPaymentSection = () => {
-    setActiveSection('payment')
-    if (normalizePaymentStatus(order.payment_status) === 'proof_submitted') {
-      onMarkUnderReview?.(order.order_id)
+  const handleOpenPaymentSection = async () => {
+    if (isStartingReview) return
+    setReviewError('')
+    setIsStartingReview(true)
+    try {
+      if (normalizePaymentStatus(order.payment_status) === 'proof_submitted') {
+        await onMarkUnderReview(order.order_id)
+      }
+      setActiveSection('payment')
+    } catch (error) {
+      setReviewError(error.message || 'Unable to mark payment as under review. Please try again.')
+    } finally {
+      setIsStartingReview(false)
     }
   }
 
@@ -923,14 +934,15 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
           {!isCODOrder && (
             <button
               onClick={handleOpenPaymentSection}
+              disabled={isStartingReview}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeSection === 'payment'
                   ? 'bg-[var(--gold-primary)] text-black'
                   : 'text-[var(--text-muted)] hover:text-white'
               }`}
             >
-              <CreditCard className="w-4 h-4 inline mr-2" />
-              Update Payment Status
+              {isStartingReview ? <Loader2 className="w-4 h-4 inline mr-2 animate-spin" /> : <CreditCard className="w-4 h-4 inline mr-2" />}
+              {isStartingReview ? 'Starting Review...' : 'Update Payment Status'}
             </button>
           )}
           {order.order_type !== 'customization' && (
@@ -985,6 +997,7 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
         </div>
 
         <div className="flex-1 overflow-y-auto">
+          {reviewError && <p role="alert" className="text-sm text-red-400 mb-4">{reviewError}</p>}
           {activeSection === 'details' && (
             <div className="space-y-4">
               <div className="bg-[var(--bg-primary)]/50 rounded-xl p-4">
@@ -1724,19 +1737,16 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
     }
   }
 
-  // Opening the "Update Payment Status" form marks the payment as under review so the
-  // customer sees an admin has picked it up. Only valid from 'proof_submitted'; never
-  // moves a terminal payment status, and never fails the admin's action.
+  // Save the review status before opening the payment tab so both the admin
+  // form and the customer see the persisted status.
   const handleMarkUnderReview = async (orderId) => {
     try {
-      await adminApi.updatePaymentStatus(orderId, 'under_review', {
-        admin_name: user?.firstName ? `${user.firstName}${user.lastName ? ' ' + user.lastName : ''}` : user?.email,
-        admin_email: user?.email
-      })
+      const response = await adminApi.updatePaymentStatus(orderId, 'under_review')
+      setSelectedOrder(prev => prev?.order_id === orderId ? { ...prev, ...response.data, payment_status: response.data?.payment_status || 'under_review' } : prev)
       onRefresh(buildQuery(page))
-      setSelectedOrder(prev => prev ? { ...prev, payment_status: 'under_review' } : null)
     } catch (error) {
       console.warn('Could not mark payment as under review:', error)
+      throw error
     }
   }
 

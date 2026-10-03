@@ -861,3 +861,20 @@
     padding: 0 !important;
   }
 }
+
+/* Price fields follow the active theme in desktop and mobile filters. */
+.shop-price-input {
+  color: var(--text-light);
+  -webkit-text-fill-color: var(--text-light);
+  caret-color: var(--text-light);
+}
+
+.shop-price-input::placeholder {
+  color: var(--text-muted);
+  -webkit-text-fill-color: var(--text-muted);
+}
+
+/* Keep the brand accent above the global light-mode paragraph color. */
+.shop-page .product-card .product-card-brand {
+  color: var(--gold-primary) !important;
+}

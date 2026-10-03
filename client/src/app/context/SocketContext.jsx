@@ -33,22 +33,6 @@ export function SocketProvider({ children }) {
 
   useEffect(() => {
     /**
-     * Do not create a Socket.IO connection when the
-     * user is not authenticated.
-     */
-    if (!isAuthenticated || !user?.id) {
-      if (socketRef.current) {
-        socketRef.current.disconnect()
-        socketRef.current = null
-      }
-
-      setSocket(null)
-      setIsConnected(false)
-
-      return
-    }
-
-    /**
      * Socket.IO server URL
      *
      * Development:
@@ -74,7 +58,7 @@ export function SocketProvider({ children }) {
     /**
      * Get the current authentication token.
      */
-    const token = getAuthToken()
+    const token = isAuthenticated ? getAuthToken() : null
 
     /**
      * Create Socket.IO connection.
@@ -219,7 +203,7 @@ export function SocketProvider({ children }) {
      * Cleanup.
      *
      * This runs when:
-     * - user logs out
+     * - user logs out (reconnect as a guest)
      * - user changes
      * - authentication state changes
      * - SocketProvider unmounts

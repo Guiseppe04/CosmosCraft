@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { Filter, Search, ShoppingCart, Zap, Star, Folder, Tag, X, SlidersHorizontal, Package, Wrench } from 'lucide-react'
 import { useCart } from '../context/CartContext.jsx'
@@ -37,13 +37,15 @@ function CategoryFilterItem({ category, selectedCategory, onSelect }) {
   const isSelected = selectedCategory === category.name
 
   return (
-    <div
-      className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-all font-semibold text-white ${isSelected ? 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' : 'hover:bg-white/5'}`}
+    <button
+      type="button"
+      aria-pressed={isSelected}
+      className={`w-full text-left flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-all font-semibold text-white ${isSelected ? 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' : 'hover:bg-white/5'}`}
       onClick={() => onSelect(category.name)}
     >
       <Folder className={`w-4 h-4 ${isSelected ? 'text-[var(--gold-primary)]' : 'text-[var(--gold-primary)]/70'}`} />
       <span className="truncate text-[13px]">{category.name}</span>
-    </div>
+    </button>
   )
 }
 
@@ -80,14 +82,16 @@ function FilterSidebar({
         <div>
           <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Category</h4>
           <div className="space-y-0.5">
-            <div
-              className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-all font-semibold text-white ${selectedCategory === 'all' ? 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' : 'hover:bg-white/5'
+            <button
+              type="button"
+              aria-pressed={selectedCategory === 'all'}
+              className={`w-full text-left flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-all font-semibold text-white ${selectedCategory === 'all' ? 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' : 'hover:bg-white/5'
                 }`}
               onClick={() => onCategoryChange('all')}
             >
               <Tag className="w-4 h-4" />
               <span className="text-[13px]">All Products</span>
-            </div>
+            </button>
             {categories.map((category) => (
               <CategoryFilterItem
                 key={category.category_id}
@@ -133,20 +137,27 @@ function FilterSidebar({
           <div className="flex items-center gap-2">
             <input
               type="number"
+              min="0"
+              aria-label="Minimum price in pesos"
               placeholder="Min"
               value={priceRange[0] || ''}
-              onChange={(e) => onPriceRangeChange([Number(e.target.value) || 0, priceRange[1]])}
-              className="w-full px-3 py-2 bg-[var(--surface-elevated)] border border-white/10 rounded-lg text-sm text-white placeholder-white/30 focus:outline-none focus:border-[var(--gold-primary)]/50"
+              onChange={(e) => onPriceRangeChange([Math.max(0, Number(e.target.value) || 0), priceRange[1]])}
+              className="shop-price-input w-full px-3 py-2 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:border-[var(--gold-primary)]/50"
             />
             <span className="text-white/40">—</span>
             <input
               type="number"
+              min="0"
+              aria-label="Maximum price in pesos"
               placeholder="Max"
               value={priceRange[1] || ''}
-              onChange={(e) => onPriceRangeChange([priceRange[0], Number(e.target.value) || 0])}
-              className="w-full px-3 py-2 bg-[var(--surface-elevated)] border border-white/10 rounded-lg text-sm text-white placeholder-white/30 focus:outline-none focus:border-[var(--gold-primary)]/50"
+              onChange={(e) => onPriceRangeChange([priceRange[0], Math.max(0, Number(e.target.value) || 0)])}
+              className="shop-price-input w-full px-3 py-2 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:border-[var(--gold-primary)]/50"
             />
           </div>
+          {priceRange[1] > 0 && priceRange[0] > priceRange[1] && (
+            <p role="alert" className="text-xs text-red-400 mt-2">Maximum price must be at least the minimum price.</p>
+          )}
         </div>
 
         <div className="border-t border-white/10 pt-4">
@@ -217,9 +228,14 @@ function ActiveFiltersBar({
   onPriceRangeClear,
   inStockOnly,
   onInStockClear,
-  brandLabels
+  brandLabels,
+  searchQuery,
+  onSearchClear
 }) {
   const filters = []
+  if (searchQuery.trim()) {
+    filters.push({ type: 'search', label: `Search: ${searchQuery.trim()}`, onClear: onSearchClear })
+  }
 
   if (selectedCategory !== 'all') {
     filters.push({ type: 'category', label: selectedCategory, onClear: onCategoryClear })
@@ -257,6 +273,7 @@ function ActiveFiltersBar({
           {filter.label}
           <button
             onClick={filter.onClear}
+            aria-label={`Remove ${filter.label} filter`}
             className="p-0.5 hover:bg-[var(--gold-primary)]/20 rounded-full transition-colors"
           >
             <X className="w-3 h-3" />
@@ -269,6 +286,7 @@ function ActiveFiltersBar({
           selectedBrands.forEach(b => onBrandClear(b))
           onPriceRangeClear()
           onInStockClear()
+          onSearchClear()
         }}
         className="text-xs text-white/50 hover:text-white underline ml-2"
       >
@@ -284,6 +302,7 @@ export function ShopPage() {
   const [priceRange, setPriceRange] = useState([0, 0])
   const [inStockOnly, setInStockOnly] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [sortBy, setSortBy] = useState('featured')
   const [notification, setNotification] = useState(null)
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [categories, setCategories] = useState([])
@@ -296,9 +315,13 @@ export function ShopPage() {
   const { isAuthenticated, openLogin } = useAuth()
 
   const [products, setProducts] = useState([])
-  const [brands, setBrands] = useState([])
+  const brands = useMemo(() => [...new Set(products.map(p => String(p.brand || '').trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b))
+    .map(brand => ({ value: brand, label: brand })), [products])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
+  const [catalogRevision, setCatalogRevision] = useState(0)
+  const catalogRequestRef = useRef(0)
 
   const brandLabels = useMemo(() => {
     const labels = {}
@@ -313,88 +336,31 @@ export function ShopPage() {
   const isItemJustAdded = (productId) => getItemAddedState(productId)
 
   // ── Real-Time Socket Updates for Shop Catalog ──────────────────────────
-  useSocketEvent('stock:updated', (data) => {
-    const targetId = String(data?.productId || data?.product_id || data?.product?.product_id || '')
-    if (!targetId) return
-    const rawStock = data?.stock ?? data?.product?.stock
-    const newStock = Number(rawStock)
-    if (!Number.isFinite(newStock)) return
+  const refreshCatalog = () => {
+    // Invalidate an in-flight snapshot as soon as a newer change arrives.
+    catalogRequestRef.current += 1
+    setCatalogRevision(revision => revision + 1)
+  }
 
-    setProducts((prev) =>
-      prev.map((item) => {
-        const itemId = String(item.id || item.product_id || '')
-        if (itemId === targetId) {
-          return { ...item, stock: newStock }
-        }
-        return item
-      })
-    )
-  })
-
-  useSocketEvent('product:updated', (data) => {
-    const targetId = String(data?.productId || data?.product_id || data?.product?.product_id || '')
-    if (!targetId) return
-
-    setProducts((prev) =>
-      prev.map((item) => {
-        const itemId = String(item.id || item.product_id || '')
-        if (itemId === targetId) {
-          const rawPrice = data.price !== undefined ? data.price : data?.product?.price
-          const nextPrice = rawPrice !== undefined ? Number(rawPrice) : item.price
-          const nextName = data?.name || data?.product?.name || item.name
-          const nextImage = data?.primary_image || data?.image_url || data?.product?.primary_image || data?.product?.image || item.image
-          const rawStock = data?.stock !== undefined ? data.stock : data?.product?.stock
-          const nextStock = rawStock !== undefined ? Number(rawStock) : item.stock
-          const isActive = data?.is_active !== undefined ? data.is_active : data?.product?.is_active
-
-          return {
-            ...item,
-            price: Number.isFinite(nextPrice) ? nextPrice : item.price,
-            name: nextName,
-            image: nextImage,
-            stock: Number.isFinite(nextStock) ? nextStock : item.stock,
-            is_active: isActive !== undefined ? isActive : item.is_active,
-          }
-        }
-        return item
-      }).filter((p) => p.is_active !== false)
-    )
-  })
-
-  useSocketEvent('product:created', (data) => {
-    const p = data?.product
-    if (!p || p.is_active === false) return
-    const newProduct = {
-      id: p.product_id || p.id,
-      name: p.name,
-      price: Number(p.price) || 0,
-      image: p.primary_image || p.image || DEFAULT_PRODUCT_IMAGE,
-      category: p.category_name || p.category || 'Uncategorized',
-      brand: p.brand,
-      description: p.description,
-      stock: Number(p.stock) || 0,
-      average_rating: Number(p.average_rating) || 0,
-      review_count: Number(p.review_count) || 0,
-      is_active: p.is_active,
-    }
-
-    setProducts((prev) => {
-      const exists = prev.some((item) => String(item.id || item.product_id) === String(newProduct.id))
-      if (exists) return prev
-      return [newProduct, ...prev]
-    })
-  })
-
-  useSocketEvent('product:deleted', (data) => {
-    const targetId = String(data?.productId || data?.product_id || data?.product?.product_id || '')
-    if (!targetId) return
-    setProducts((prev) => prev.filter((item) => String(item.id || item.product_id) !== targetId))
-  })
+  useSocketEvent('stock:updated', refreshCatalog)
+  useSocketEvent('product:updated', refreshCatalog)
+  useSocketEvent('product:created', refreshCatalog)
+  useSocketEvent('product:deleted', refreshCatalog)
+  useSocketEvent('connect', refreshCatalog)
 
   useEffect(() => {
+    setSelectedProduct(current => current
+      ? products.find(product => String(product.id) === String(current.id)) || null
+      : null)
+  }, [products])
+
+  useEffect(() => {
+    const requestId = ++catalogRequestRef.current
+    let cancelled = false
+    const isCurrent = () => !cancelled && requestId === catalogRequestRef.current
     const fetchData = async () => {
       try {
-        setLoading(true)
+        if (catalogRevision === 0) setLoading(true)
         setLoadError('')
         const fetchAllActiveProducts = async () => {
           const byId = new Map()
@@ -441,41 +407,61 @@ export function ShopPage() {
 
         const fetchedCategories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes.data || [])
 
+        if (!isCurrent()) return
         setProducts(fetchedProducts)
 
         setCategories(fetchedCategories)
 
-        const uniqueBrands = [...new Set(fetchedProducts.map(p => p.brand).filter(Boolean))]
-        setBrands(uniqueBrands.map(b => ({
-          value: b,
-          label: b
-        })))
 
       } catch (err) {
+        if (!isCurrent()) return
         console.error("Failed to fetch shop data", err)
         setLoadError(err?.message || 'Failed to load products. Please refresh and try again.')
       } finally {
-        setLoading(false)
+        if (isCurrent()) setLoading(false)
       }
     }
     fetchData()
-  }, [])
+    return () => { cancelled = true }
+  }, [catalogRevision])
 
-  const filteredProducts = products.filter(product => {
-    const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory
+  const filteredProducts = useMemo(() => {
+    const searchTerms = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    const result = products.filter(product => {
+      const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory
 
-    const matchesBrand = selectedBrands.length === 0 || selectedBrands.includes(product.brand)
+      const matchesBrand = selectedBrands.length === 0 || selectedBrands.includes(String(product.brand || '').trim())
 
-    const matchesPrice = (!priceRange[0] || product.price >= priceRange[0]) &&
-      (!priceRange[1] || product.price <= priceRange[1])
+      const matchesPrice = (!priceRange[0] || product.price >= priceRange[0]) &&
+        (!priceRange[1] || product.price <= priceRange[1])
 
-    const matchesStock = !inStockOnly || product.stock > 0
+      const matchesStock = !inStockOnly || product.stock > 0
 
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (product.description || '').toLowerCase().includes(searchQuery.toLowerCase())
+      const searchableText = [product.name, product.description, product.brand, product.category].filter(Boolean).join(' ').toLowerCase()
+      const matchesSearch = searchTerms.every(term => searchableText.includes(term))
 
-    return matchesCategory && matchesBrand && matchesPrice && matchesStock && matchesSearch
-  })
+      return matchesCategory && matchesBrand && matchesPrice && matchesStock && matchesSearch
+    })
+    if (sortBy === 'price_asc') result.sort((a, b) => a.price - b.price)
+    if (sortBy === 'price_desc') result.sort((a, b) => b.price - a.price)
+    if (sortBy === 'name') result.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+    if (sortBy === 'rating') result.sort((a, b) => b.average_rating - a.average_rating || b.review_count - a.review_count)
+    return result
+  }, [products, selectedCategory, selectedBrands, priceRange, inStockOnly, searchQuery, sortBy])
+
+  const sortControl = (
+    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+      Sort by
+      <select aria-label="Sort products" value={sortBy} onChange={event => setSortBy(event.target.value)}
+        className="px-3 py-2 rounded-lg bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)]">
+        <option value="featured">Featured</option>
+        <option value="price_asc">Price: Low to High</option>
+        <option value="price_desc">Price: High to Low</option>
+        <option value="name">Name: A to Z</option>
+        <option value="rating">Top Rated</option>
+      </select>
+    </label>
+  )
 
   const handleCategoryChange = (category) => {
     setSelectedCategory(category)
@@ -489,7 +475,7 @@ export function ShopPage() {
     )
   }
 
-  const hasActiveFilters = selectedCategory !== 'all' || selectedBrands.length > 0 || priceRange[0] > 0 || priceRange[1] > 0 || inStockOnly
+  const hasActiveFilters = selectedCategory !== 'all' || selectedBrands.length > 0 || priceRange[0] > 0 || priceRange[1] > 0 || inStockOnly || Boolean(searchQuery.trim())
 
   const getQuantity = (productId) => quantities[productId] ?? 1
 
@@ -651,7 +637,7 @@ export function ShopPage() {
                   />
                 </div>
               </div>
-              <span className="shop-count text-sm text-[var(--text-muted)]">{filteredProducts.length} products</span>
+              {sortControl}
               </div>
             </div>
 
@@ -671,6 +657,8 @@ export function ShopPage() {
               inStockOnly={inStockOnly}
               onInStockClear={() => setInStockOnly(false)}
               brandLabels={brandLabels}
+              searchQuery={searchQuery}
+              onSearchClear={() => setSearchQuery('')}
             />
 
             <div className="shop-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '1.25rem' }}>
@@ -713,12 +701,7 @@ export function ShopPage() {
                       </div>
 
                       <div className="px-4 pb-4 pt-2 flex flex-col flex-1 relative bg-transparent">
-                        <p className="text-[12px] text-[var(--text-muted)] font-medium mb-1 tracking-wide">{product.category}</p>
-                        {product.brand && (
-                          <p className="text-[11px] text-[var(--gold-primary)] font-semibold mb-1.5 tracking-wide uppercase">
-                            {product.brand}
-                          </p>
-                        )}
+                        {product.brand && <p className="product-card-brand text-[12px] font-semibold mb-1 tracking-wide uppercase">{product.brand}</p>}
                         <h3 className="product-card-name font-bold text-white text-[15px] leading-snug mb-2 group-hover:text-[var(--gold-primary)] transition-colors line-clamp-1">{product.name}</h3>
 
                         <div className="product-card-reviews flex items-center gap-2 mb-2">
@@ -739,9 +722,7 @@ export function ShopPage() {
                               </span>
                             </button>
                           ) : (
-                            <span className="text-[11px] text-[var(--text-muted)] italic font-light">
-                              No reviews yet
-                            </span>
+                            <StarRating rating={0} size="w-3.5 h-3.5" />
                           )}
                         </div>
 
@@ -841,7 +822,7 @@ export function ShopPage() {
             </div>
           </div>
 
-          <span className="shop-count text-sm text-[var(--text-muted)] mb-4 block">{filteredProducts.length} products</span>
+          <div className="flex justify-end mb-4">{sortControl}</div>
 
           {loadError && (
             <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
@@ -859,6 +840,8 @@ export function ShopPage() {
             inStockOnly={inStockOnly}
             onInStockClear={() => setInStockOnly(false)}
             brandLabels={brandLabels}
+            searchQuery={searchQuery}
+            onSearchClear={() => setSearchQuery('')}
           />
 
           <div className="shop-grid shop-mobile-grid">
@@ -901,12 +884,7 @@ export function ShopPage() {
           </div>
 
           <div className="px-4 pb-4 pt-2 flex flex-col flex-1 relative bg-transparent">
-            <p className="text-[12px] text-[var(--text-muted)] font-medium mb-1 tracking-wide">{product.category}</p>
-            {product.brand && (
-              <p className="text-[11px] text-[var(--gold-primary)] font-semibold mb-1.5 tracking-wide uppercase">
-                {product.brand}
-              </p>
-            )}
+            {product.brand && <p className="product-card-brand text-[12px] font-semibold mb-1 tracking-wide uppercase">{product.brand}</p>}
             <h3 className="product-card-name font-bold text-white text-[15px] leading-snug mb-2 group-hover:text-[var(--gold-primary)] transition-colors line-clamp-1">{product.name}</h3>
 
             <div className="product-card-reviews flex items-center gap-2 mb-2">
@@ -927,9 +905,7 @@ export function ShopPage() {
                   </span>
                 </button>
               ) : (
-                <span className="text-[11px] text-[var(--text-muted)] italic font-light">
-                  No reviews yet
-                </span>
+                <StarRating rating={0} size="w-3.5 h-3.5" />
               )}
             </div>
 
