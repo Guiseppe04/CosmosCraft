@@ -18,6 +18,17 @@ export function SocketProvider({ children }) {
 
   const socketRef = useRef(null)
 
+  /**
+   * The socket instance is held in state as well as in a ref.
+   *
+   * Publishing `socketRef.current` straight into the context value cannot work on
+   * its own: assigning a ref does not re-render, so consumers would keep seeing
+   * the value from the previous render (null) unless some unrelated state change
+   * happened to fire at the right moment. Holding it in state guarantees the
+   * context updates exactly when the socket is created or torn down.
+   */
+  const [socket, setSocket] = useState(null)
+
   const [isConnected, setIsConnected] = useState(false)
 
   useEffect(() => {
@@ -31,6 +42,7 @@ export function SocketProvider({ children }) {
         socketRef.current = null
       }
 
+      setSocket(null)
       setIsConnected(false)
 
       return
@@ -120,6 +132,7 @@ export function SocketProvider({ children }) {
     })
 
     socketRef.current = socketInstance
+    setSocket(socketInstance)
 
     /**
      * Successfully connected.
@@ -238,6 +251,7 @@ export function SocketProvider({ children }) {
         socketRef.current = null
       }
 
+      setSocket(null)
       setIsConnected(false)
     }
   }, [user?.id, isAuthenticated])
@@ -245,7 +259,7 @@ export function SocketProvider({ children }) {
   return (
     <SocketContext.Provider
       value={{
-        socket: socketRef.current,
+        socket,
         isConnected,
       }}
     >
