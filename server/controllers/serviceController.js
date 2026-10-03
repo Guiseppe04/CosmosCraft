@@ -252,6 +252,10 @@ exports.updateAppointment = async (req, res, next) => {
 /**
  * POST /api/appointments/:id/cancel
  * Cancel appointment
+ *
+ * Mirrors the rule enforced on the primary /api/appointments cancel routes:
+ * a settled appointment, or one whose scheduled time has already passed, can
+ * only be rescheduled by the customer. Staff/Admin are exempt.
  */
 exports.cancelAppointment = async (req, res, next) => {
   try {
@@ -260,12 +264,20 @@ exports.cancelAppointment = async (req, res, next) => {
       throw new AppError('Appointment not found', 404);
     }
 
+    const isCustomer = req.user.role === 'customer';
+
     // Check authorization
-    if (
-      req.user.role === 'customer'
-      && appointment.user_id !== req.user.id
-    ) {
+    if (isCustomer && appointment.user_id !== req.user.id) {
       throw new AppError('Unauthorized', 403);
+    }
+
+    // Past-due is checked before status so the customer gets the actionable
+    // "reschedule instead" guidance rather than a generic status error.
+    if (isCustomer) {
+      const scheduledAt = appointment.scheduled_at ? new Date(appointment.scheduled_at) : null;
+      if (scheduledAt && !Number.isNaN(scheduledAt.getTime()) && scheduledAt.getTime() < Date.now()) {
+        throw new AppError('This appointment is past due and can no longer be cancelled. Please reschedule it instead.', 400);
+      }
     }
 
     // Cannot cancel completed or already cancelled appointments
