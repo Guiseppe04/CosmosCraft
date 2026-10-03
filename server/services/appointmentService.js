@@ -10,6 +10,15 @@ const { lockAppointmentCapacity } = require('../middleware/appointmentCapacityLo
 
 const NON_BLOCKING_APPOINTMENT_STATUSES = ['cancelled', 'rejected'];
 
+// Statuses that end an appointment's life. A customer can no longer cancel once
+// one of these is reached. Mirrors isTerminalStatus in AppointmentCard.jsx.
+const CUSTOMER_UNCANCELLABLE_STATUSES = [
+  'completed',
+  'cancelled',
+  'rejected',
+  'no_show',
+];
+
 // ─── STATUS TRANSITION RULES ─────────────────────────────────────────────────
 
 /**
@@ -784,9 +793,30 @@ exports.updateStatus = async (appointmentId, newStatus, reason) => {
   }
 };
 
-exports.cancelAppointment = async (appointmentId, reason) => {
+exports.cancelAppointment = async (appointmentId, reason, { forCustomer = false } = {}) => {
   const appointment = await this.getAppointmentById(appointmentId);
   if (!appointment) throw new AppError('Appointment not found', 404);
+
+  // Customers are held to a stricter rule than staff/admin, who still need to be
+  // able to cancel or reconcile appointments that already elapsed.
+  //   - an elapsed appointment can only be rescheduled, never cancelled
+  //   - a settled appointment can no longer be cancelled by its owner
+  // Staff/admin (forCustomer = false) bypass both checks.
+  if (forCustomer) {
+    // Checked before status because getAppointmentById() auto-flags elapsed
+    // 'confirmed' appointments to 'no_show', and the reschedule guidance is the
+    // more actionable message for the customer.
+    const scheduledAt = appointment.scheduled_at ? new Date(appointment.scheduled_at) : null;
+    if (scheduledAt && !Number.isNaN(scheduledAt.getTime()) && scheduledAt.getTime() < Date.now()) {
+      throw new AppError('This appointment is past due and can no longer be cancelled. Please reschedule it instead.', 400);
+    }
+
+    const status = String(appointment.status || '').toLowerCase();
+    if (CUSTOMER_UNCANCELLABLE_STATUSES.includes(status)) {
+      throw new AppError(`Cannot cancel a ${status.replace(/_/g, ' ')} appointment`, 400);
+    }
+  }
+
   const cancelReason = reason || `Cancelled on ${new Date().toISOString()}`;
   await pool.query(
     `UPDATE appointments SET status = 'cancelled', reason = $1, updated_at = now() WHERE appointment_id = $2`,

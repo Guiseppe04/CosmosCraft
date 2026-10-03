@@ -338,7 +338,12 @@ exports.updateStatus = async (req, res, next) => {
 
 /**
  * DELETE /appointments/:id
- * Cancel appointment
+ * POST  /appointments/:id/cancel
+ * Cancel appointment.
+ *
+ * Staff/Admin may cancel any appointment, including ones that already elapsed.
+ * Customers are restricted: a settled appointment, or one whose scheduled time
+ * has passed, can only be rescheduled — never cancelled.
  */
 exports.cancelAppointment = async (req, res, next) => {
   try {
@@ -353,8 +358,12 @@ exports.cancelAppointment = async (req, res, next) => {
       appointmentValidation.cancelSchema
     );
 
+    const isPrivileged = ['admin', 'super_admin', 'staff'].includes(req.user.role);
+
     // Perform cancellation
-    const cancelled = await appointmentService.cancelAppointment(id, validated.reason);
+    const cancelled = await appointmentService.cancelAppointment(id, validated.reason, {
+      forCustomer: !isPrivileged,
+    });
 
     socketService.emitToUserAndStaff(cancelled?.user_id, 'appointment:updated', {
       appointment: cancelled,

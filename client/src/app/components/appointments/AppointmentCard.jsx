@@ -333,32 +333,34 @@ export default function AppointmentCard({
       ) : (
         <>
           {/* Appointment Information Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm mt-4">
-            <div className="bg-white/[0.02] p-3 rounded-xl border border-white/[0.04]">
+          <div className="mt-4 pt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
+            <div>
               <span className="block text-xs text-[var(--text-muted)] mb-1 flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-[var(--gold-primary)]" />
-                Date & Time
+                Date &amp; Time
               </span>
               <span className="text-white font-medium text-xs sm:text-sm">
-                {apptDate
-                  ? new Date(apptDate).toLocaleDateString('en-US', {
-                      month: 'short',
+                {apptDate ? (
+                  <>
+                    {new Date(apptDate).toLocaleDateString('en-US', {
+                      month: 'numeric',
                       day: 'numeric',
                       year: 'numeric',
-                    })
-                  : '—'}
-                {' • '}
-                {apt.time ||
-                  (apptDate
-                    ? new Date(apptDate).toLocaleTimeString([], {
+                    })}
+                    {' at '}
+                    {apt.time ||
+                      new Date(apptDate).toLocaleTimeString([], {
                         hour: '2-digit',
                         minute: '2-digit',
-                      })
-                    : '—')}
+                      })}
+                  </>
+                ) : (
+                  '—'
+                )}
               </span>
             </div>
 
-            <div className="bg-white/[0.02] p-3 rounded-xl border border-white/[0.04]">
+            <div>
               <span className="block text-xs text-[var(--text-muted)] mb-1 flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-[var(--gold-primary)]" />
                 Branch / Location
@@ -371,7 +373,7 @@ export default function AppointmentCard({
               </span>
             </div>
 
-            <div className="bg-white/[0.02] p-3 rounded-xl border border-white/[0.04]">
+            <div>
               <span className="block text-xs text-[var(--text-muted)] mb-1 flex items-center gap-1.5">
                 <Wrench className="w-3.5 h-3.5 text-[var(--gold-primary)]" />
                 Service Type
@@ -381,7 +383,7 @@ export default function AppointmentCard({
               </span>
             </div>
 
-            <div className="bg-white/[0.02] p-3 rounded-xl border border-white/[0.04]">
+            <div>
               <span className="block text-xs text-[var(--text-muted)] mb-1 flex items-center gap-1.5">
                 <Guitar className="w-3.5 h-3.5 text-[var(--gold-primary)]" />
                 Selected Guitar
@@ -568,30 +570,33 @@ export default function AppointmentCard({
           )}
 
           {/* Contextual Actions Bar */}
-          <div className="flex flex-wrap items-center justify-end gap-2.5 mt-4 pt-3.5 border-t border-[var(--border)]">
-            {isPaymentConfirmedStatus && (
-              <button
-                type="button"
-                onClick={() => onPrintReceipt(apt)}
-                className="px-3.5 py-2 rounded-xl border border-[var(--border)] bg-white/5 text-white font-semibold hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-all text-xs inline-flex items-center justify-center gap-2"
-                title="Print official appointment receipt"
-              >
-                <Printer className="w-3.5 h-3.5 text-[var(--gold-primary)]" />
-                <span>Print Receipt</span>
-              </button>
-            )}
+          {(isPaymentConfirmedStatus || (!isTerminalStatus && !needsReschedule)) && (
+            <div className="flex flex-wrap items-center justify-end gap-2.5 mt-4 pt-3.5 border-t border-[var(--border)]">
+              {isPaymentConfirmedStatus && (
+                <button
+                  type="button"
+                  onClick={() => onPrintReceipt(apt)}
+                  className="px-3.5 py-2 rounded-xl border border-[var(--border)] bg-white/5 text-white font-semibold hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-all text-xs inline-flex items-center justify-center gap-2"
+                  title="Print official appointment receipt"
+                >
+                  <Printer className="w-3.5 h-3.5 text-[var(--gold-primary)]" />
+                  <span>Print Receipt</span>
+                </button>
+              )}
 
-            {!isTerminalStatus && (
-              <button
-                type="button"
-                onClick={() => onCancel(apt)}
-                className="px-3.5 py-2 rounded-xl border border-red-500/30 text-red-400 bg-red-500/5 hover:bg-red-500/15 transition-colors text-xs font-semibold inline-flex items-center justify-center gap-1.5"
-              >
-                <XCircle className="w-3.5 h-3.5" />
-                <span>Cancel Appointment</span>
-              </button>
-            )}
-          </div>
+              {/* A past-due appointment can only be rescheduled, never cancelled. */}
+              {!isTerminalStatus && !needsReschedule && (
+                <button
+                  type="button"
+                  onClick={() => onCancel(apt)}
+                  className="px-3.5 py-2 rounded-xl border border-red-500/30 text-red-400 bg-red-500/5 hover:bg-red-500/15 transition-colors text-xs font-semibold inline-flex items-center justify-center gap-1.5"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  <span>Cancel Appointment</span>
+                </button>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>
