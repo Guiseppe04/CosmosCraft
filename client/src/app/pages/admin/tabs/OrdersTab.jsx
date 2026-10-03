@@ -7,7 +7,7 @@ import ReviewModerationTab from './ReviewModerationTab'
 import { adminApi } from '../../../utils/adminApi'
 import { useSocketEvent } from '../../../context/SocketContext'
 
-export function OrdersTab({ orders, fetchOrders, user, pagination, showToast, onManageProject, ordersLoading = false }) {
+export function OrdersTab({ orders, fetchOrders, user, pagination, showToast, onManageProject, ordersLoading = false, initialPaymentStatusFilter = 'all', initialStatusFilter = 'all' }) {
   const [view, setView] = useState('orders')
   const [newRefundCount, setNewRefundCount] = useState(0)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -161,6 +161,8 @@ export function OrdersTab({ orders, fetchOrders, user, pagination, showToast, on
               pagination={pagination}
               onManageProject={onManageProject}
               loading={ordersLoading}
+              initialPaymentStatusFilter={initialPaymentStatusFilter}
+              initialStatusFilter={initialStatusFilter}
             />
           </motion.div>
         )}

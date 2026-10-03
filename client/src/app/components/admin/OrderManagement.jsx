@@ -1575,12 +1575,12 @@ function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
 }
 
 
-export function OrderManagement({ orders, onRefresh, user, pagination, onManageProject, loading = false }) {
+export function OrderManagement({ orders, onRefresh, user, pagination, onManageProject, loading = false, initialPaymentStatusFilter = 'all', initialStatusFilter = 'all' }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
   const [orderTypeFilter, setOrderTypeFilter] = useState('all')
-  const [paymentStatusFilter, setPaymentStatusFilter] = useState('all')
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState(initialPaymentStatusFilter)
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')

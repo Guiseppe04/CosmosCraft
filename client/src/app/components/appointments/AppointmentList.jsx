@@ -163,11 +163,12 @@ export default function AppointmentList({
   onSearchChange: externalOnSearchChange,
   onStatusChange,
   onPaymentStatusUpdate,
+  initialStatusFilter = 'all',
 }) {
   const [internalSearchQuery, setInternalSearchQuery] = useState('')
   const searchQuery = externalSearchQuery !== undefined ? externalSearchQuery : internalSearchQuery
   const [dateFilter, setDateFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
   const [viewMode, setViewMode] = useState('list') // 'list' or 'grid'
   const [showFilters, setShowFilters] = useState(false)
   const [selectedAppointment, setSelectedAppointment] = useState(null)

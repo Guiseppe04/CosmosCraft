@@ -35,8 +35,11 @@ export function AppointmentsTab({
   isSuperAdmin,
   searchQuery,
   onSearchChange,
+  // Dashboard deep-link: when set, auto-switch to list view with this filter pre-applied
+  initialStatusFilter = 'all',
 }) {
-  const [showAppointmentsTable, setShowAppointmentsTable] = useState(false)
+  // Auto-show list view when navigated from dashboard with a specific filter
+  const [showAppointmentsTable, setShowAppointmentsTable] = useState(initialStatusFilter !== 'all')
   const [gracePeriodOpen, setGracePeriodOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState('all')
 
@@ -130,6 +133,7 @@ export function AppointmentsTab({
           selectedDate={selectedCalendarDate}
           searchQuery={searchQuery}
           onSearchChange={onSearchChange}
+          initialStatusFilter={initialStatusFilter}
         />
       )}
     </motion.div>
