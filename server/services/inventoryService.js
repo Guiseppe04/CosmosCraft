@@ -1,5 +1,154 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+const auditService = require('./auditService');
+
+/**
+ * Human-readable labels for the raw stock movement types stored in
+ * inventory_logs, so the audit trail says "Stock Restored" rather than
+ * "stock_in".
+ */
+const MOVEMENT_LABELS = {
+  stock_in: 'Stock Added',
+  stock_out: 'Stock Deducted',
+  adjustment: 'Manual Stock Adjustment',
+  restock: 'Stock Added',
+  restocked: 'Stock Restored',
+  returned: 'Stock Restored',
+  reserved: 'Stock Reserved',
+  released: 'Stock Released',
+  return_restock: 'Return Restock',
+  refund_restock: 'Refund Restock',
+  cancellation_restock: 'Cancellation Restock',
+  pos_deduction: 'POS Deduction',
+  order_deduction: 'Online Order Deduction',
+  project_deduction: 'Project Part Deduction',
+  builder_part_deduction: 'Builder Part Deduction',
+};
+
+/** Where the movement came from, e.g. an order, a POS sale or a manual edit. */
+const SOURCE_LABELS = {
+  pos_sale: 'POS Sale',
+  order: 'Online Order',
+  return: 'Customer Return',
+  refund: 'Refund',
+  cancellation: 'Order Cancellation',
+  project: 'Custom Guitar Build',
+  appointment: 'Appointment',
+  manual_stocking: 'Manual Stock-in',
+  manual_adjustment: 'Manual Adjustment',
+  supplier: 'Supplier',
+};
+
+/** Reference types that represent stock coming back rather than going out. */
+const RESTOCK_REFERENCE_TYPES = new Set(['return', 'refund', 'cancellation', 'return_restock']);
+
+/** Reference types whose movement is a custom guitar build part. */
+const PROJECT_REFERENCE_TYPES = new Set(['project', 'project_part', 'custom_build']);
+
+/**
+ * Maps a reference type to the movement wording used in the audit trail, so a
+ * deduction caused by a POS sale reads "POS Deduction", one caused by a custom
+ * build reads "Project Part Deduction" and a restock caused by a return reads
+ * "Return Restock".
+ */
+const movementForReference = (referenceType) => {
+  if (RESTOCK_REFERENCE_TYPES.has(referenceType)) {
+    return referenceType === 'return' ? 'restocked' : `${referenceType}_restock`;
+  }
+  if (referenceType === 'pos_sale') return 'pos_deduction';
+  if (referenceType === 'order') return 'order_deduction';
+  if (PROJECT_REFERENCE_TYPES.has(referenceType)) return 'project_deduction';
+  if (referenceType === 'manual') return 'adjustment';
+  return 'stock_out';
+};
+
+/**
+ * Resolves the business identifier behind a stock movement so the audit entry
+ * can name the order it belongs to. Returns an empty object for reference types
+ * that have no order (e.g. a supplier restock).
+ */
+const readReferenceOrder = async (query, referenceType, referenceId) => {
+  if (!referenceId) return {};
+  const ordersOnly = ['order', 'pos_sale', 'return', 'refund', 'cancellation'];
+
+  try {
+    if (PROJECT_REFERENCE_TYPES.has(referenceType)) {
+      const { rows } = await query.query(
+        `SELECT p.project_id, p.custom_build_id, p.title, p.order_number
+         FROM projects p WHERE p.project_id = $1`,
+        [referenceId]
+      );
+      const row = rows[0] || {};
+      return {
+        project_id: row.project_id,
+        project_number: row.custom_build_id,
+        project_title: row.title,
+        order_number: row.order_number,
+      };
+    }
+
+    if (!ordersOnly.includes(referenceType)) return {};
+
+    const { rows } = await query.query(
+      `SELECT order_id, order_number FROM orders WHERE order_id = $1`,
+      [referenceId]
+    );
+    const row = rows[0] || {};
+    return { order_number: row.order_number };
+  } catch (err) {
+    // A missing reference must never block the stock movement itself.
+    console.warn('Could not resolve stock reference:', err.message);
+    return {};
+  }
+};
+
+/**
+ * Reads the product name/SKU that the audit entry needs. Kept as a single
+ * lightweight query so every stock movement still costs only one extra read.
+ */
+const readProductLabel = async (query, productId) => {
+  const { rows } = await query.query(
+    `SELECT p.name, p.sku FROM products p WHERE p.product_id = $1`,
+    [productId]
+  );
+  return rows[0] || {};
+};
+
+/**
+ * Records a stock movement in the audit trail.
+ *
+ * Inventory previously wrote only to inventory_logs, so every deduction and
+ * restock was invisible in the admin audit view. This captures the product, its
+ * SKU, previous/new quantity, the delta, the movement type and the source.
+ */
+const logStockEvent = async ({
+  query,
+  userId,
+  productId,
+  previousQuantity,
+  newQuantity,
+  delta,
+  changeType,
+  source,
+  reason,
+  context = {},
+}) => {
+  const product = await readProductLabel(query, productId);
+
+  await auditService.logStockMovement({
+    userId,
+    entityId: productId,
+    entityType: auditService.MODULES.INVENTORY,
+    previousQuantity,
+    newQuantity,
+    delta,
+    movement: MOVEMENT_LABELS[changeType] || MOVEMENT_LABELS.adjustment,
+    source: SOURCE_LABELS[source] || source || 'Manual Adjustment',
+    reason,
+    context: { productName: product.name, sku: product.sku, ...context },
+    executor: query,
+  });
+};
 
 const syncStockToBuilderParts = async (productId, delta, client = null) => {
   if (!productId || delta === 0) return;
@@ -127,6 +276,19 @@ exports.addStock = async (productId, quantity, { notes = null, createdBy = null,
       [productId, 'stock_in', quantity, 'manual_stocking', notes, createdBy]
     );
 
+    // Audit: record the movement before committing so the trail matches stock
+    await logStockEvent({
+      query: client,
+      userId: createdBy,
+      productId,
+      previousQuantity: Number(inventoryRes.rows[0]?.stock ?? 0),
+      newQuantity: Number(updateRes.rows[0].stock),
+      delta: quantity,
+      changeType: 'stock_in',
+      source: 'manual_stocking',
+      reason: notes,
+    });
+
     if (ownClient) await client.query('COMMIT');
 
     await syncStockToBuilderParts(productId, quantity, client);
@@ -202,6 +364,27 @@ exports.deductStock = async (
        RETURNING *`,
       [productId, 'stock_out', -quantity, referenceType, referenceId, notes, createdBy]
     );
+
+    // Audit: a deduction must always say what it was deducted for
+    const referenceOrder = await readReferenceOrder(query, referenceType, referenceId);
+    await logStockEvent({
+      query: client,
+      userId: createdBy,
+      productId,
+      previousQuantity: currentStock,
+      newQuantity: Number(updateRes.rows[0].stock),
+      delta: -quantity,
+      changeType: movementForReference(referenceType),
+      source: referenceType,
+      reason: notes,
+      context: {
+        orderNumber: referenceOrder.order_number,
+        sourceId: referenceId,
+        projectId: referenceOrder.project_id,
+        projectNumber: referenceOrder.project_number,
+        projectTitle: referenceOrder.project_title,
+      },
+    });
 
     // Check for low stock alert
     const newStock = updateRes.rows[0].stock;
@@ -305,6 +488,18 @@ exports.adjustStock = async (productId, quantity, { notes = null, createdBy = nu
        RETURNING *`,
       [productId, 'adjustment', quantity, 'manual_adjustment', notes, createdBy]
     );
+
+    await logStockEvent({
+      query: client,
+      userId: createdBy,
+      productId,
+      previousQuantity: currentStock,
+      newQuantity: Number(updateRes.rows[0].stock),
+      delta: quantity,
+      changeType: 'adjustment',
+      source: 'manual_adjustment',
+      reason: notes,
+    });
 
     if (ownClient) await client.query('COMMIT');
 

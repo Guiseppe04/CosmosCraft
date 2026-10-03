@@ -73,13 +73,22 @@ exports.createProduct = async (req, res, next) => {
       product.primary_image = data.image_url;
     }
 
-    await auditService.logCreate(
-      req.user?.user_id || null,
-      auditService.MODULES.PRODUCTS,
-      product.product_id,
-      product,
-      req.ip
-    );
+    await auditService.logProductEvent({
+      userId: req.user?.user_id || null,
+      action: 'INSERT',
+      entityId: product.product_id,
+      status: product.is_active ? 'active' : null,
+      details: product,
+      context: {
+        productId: product.product_id,
+        name: product.name,
+        sku: product.sku,
+        price: product.price,
+        stock: product.stock,
+        category: product.category_name || product.category_id,
+      },
+      ipAddress: req.ip,
+    });
 
     socketService.emitBroadcast('product:created', {
       productId: product.product_id,
@@ -113,14 +122,22 @@ exports.updateProduct = async (req, res, next) => {
       product.primary_image = existing.primary_image;
     }
 
-    await auditService.logUpdate(
-      req.user?.user_id || null,
-      auditService.MODULES.PRODUCTS,
-      product.product_id,
-      existing,
-      product,
-      req.ip
-    );
+    await auditService.logProductEvent({
+      userId: req.user?.user_id || null,
+      action: 'UPDATE',
+      entityId: product.product_id,
+      details: { old: existing, new: product },
+      context: {
+        productId: product.product_id,
+        name: product.name,
+        sku: product.sku,
+        price: product.price,
+        stock: product.stock,
+        category: product.category_name || product.category_id,
+      },
+      changes: auditService.auditContext.buildChanges(existing, product),
+      ipAddress: req.ip,
+    });
 
     socketService.emitBroadcast('product:updated', {
       productId: product.product_id,
@@ -146,13 +163,20 @@ exports.deleteProduct = async (req, res, next) => {
     const product = await productService.deleteProduct(req.params.id);
     if (!product) throw new AppError('Product not found', 404);
 
-    await auditService.logDelete(
-      req.user?.user_id || null,
-      auditService.MODULES.PRODUCTS,
-      product.product_id,
-      existing,
-      req.ip
-    );
+    await auditService.logProductEvent({
+      userId: req.user?.user_id || null,
+      action: 'DELETE',
+      entityId: product.product_id,
+      details: existing,
+      context: {
+        productId: product.product_id,
+        name: existing.name,
+        sku: existing.sku,
+        price: existing.price,
+        stock: existing.stock,
+      },
+      ipAddress: req.ip,
+    });
 
     socketService.emitBroadcast('product:deleted', {
       productId: req.params.id,

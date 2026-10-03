@@ -187,15 +187,95 @@ async function getAllActivePaymentConfigs() {
   return result.rows;
 }
 
+/**
+ * Reads a payment together with everything the audit trail needs to explain it:
+ * the order it belongs to, the custom-build project for that order and the
+ * customer. Every payment event already has to load the payment row, so this
+ * keeps the trail complete without an extra round trip per event.
+ */
 async function getPaymentById(paymentId) {
   const result = await pool.query(
-    `SELECT p.*, o.order_number, o.total_amount as order_total
+    `SELECT p.*,
+            o.order_number,
+            o.order_type,
+            o.status AS order_status,
+            o.total_amount AS order_total,
+            o.payment_status AS order_payment_status,
+            TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) AS customer_name,
+            u.email AS customer_email,
+            pr.project_id,
+            pr.custom_build_id,
+            pr.title AS project_title,
+            pr.status::text AS project_status,
+            pr.progress AS project_progress
      FROM payments p
      JOIN orders o ON p.order_id = o.order_id
+     LEFT JOIN users u ON COALESCE(p.user_id, o.user_id) = u.user_id
+     LEFT JOIN projects pr ON pr.order_id = o.order_id AND pr.deleted_at IS NULL
      WHERE p.payment_id = $1`,
     [paymentId]
   );
   return result.rows[0];
+}
+
+/**
+ * Records a payment event in the audit trail.
+ *
+ * A payment without its order, amount and customer is the single most common
+ * source of confusion in the audit screen, so the context is captured here at
+ * event time instead of being looked up later.
+ */
+async function logPaymentAuditEvent({
+  client,
+  actorId,
+  action,
+  payment,
+  status,
+  previousStatus,
+  reason,
+  notes,
+  extraContext = {},
+}) {
+  const auditService = require('./auditService');
+
+  await auditService.logPaymentEvent({
+    userId: actorId || null,
+    action,
+    entityId: payment.payment_id || payment.order_id,
+    status,
+    previousStatus,
+    details: {
+      amount: payment.amount,
+      currency: payment.currency,
+      method: payment.method,
+      reference_number: payment.reference_number,
+      reason: reason || null,
+      notes: notes || null,
+      proof_provided: Boolean(payment.proof_url),
+    },
+    context: {
+      paymentId: payment.payment_id,
+      amount: payment.amount,
+      currency: payment.currency,
+      method: payment.method,
+      referenceNumber: payment.reference_number,
+      rejectionReason: reason || null,
+      paymentStatus: status,
+      proofProvided: Boolean(payment.proof_url),
+      orderId: payment.order_id,
+      orderNumber: payment.order_number,
+      orderType: payment.order_type,
+      orderStatus: payment.order_status,
+      totalAmount: payment.order_total,
+      customerName: payment.customer_name,
+      customerEmail: payment.customer_email,
+      projectId: payment.project_id,
+      projectNumber: payment.custom_build_id,
+      projectTitle: payment.project_title,
+      ...extraContext,
+    },
+    executor: client || null,
+  });
 }
 
 async function getPaymentByOrderId(orderId) {
@@ -288,6 +368,25 @@ async function createPayment({ order_id, user_id, method, amount, currency = 'PH
 
     await ensureProjectForCustomBuildOrder(client, order_id);
 
+    const created = result.rows[0];
+
+    await logPaymentAuditEvent({
+      client,
+      actorId: user_id,
+      action: 'PAYMENT_RECORDED',
+      payment: {
+        ...created,
+        order_number: order.rows[0].order_number,
+        order_type: order.rows[0].order_type,
+        order_status: order.rows[0].status,
+        order_total: order.rows[0].total_amount,
+        project_id: null,
+        custom_build_id: null,
+      },
+      status: created.status,
+      previousStatus: null,
+    });
+
     await client.query('COMMIT');
     return result.rows[0];
   } catch (err) {
@@ -340,6 +439,16 @@ async function uploadProofOfPayment(paymentId, { reference_number, proof_url }) 
       `UPDATE payments SET ${updateFields.join(', ')} WHERE payment_id = $${paramIndex} RETURNING *`,
       updateValues
     );
+
+    await logPaymentAuditEvent({
+      client,
+      actorId: payment.user_id,
+      action: 'PAYMENT_PROOF_SUBMITTED',
+      payment: { ...result.rows[0], ...payment },
+      status: result.rows[0].status,
+      previousStatus: payment.status,
+      extraContext: { proofProvided: Boolean(result.rows[0].proof_url) },
+    });
 
     await client.query('COMMIT');
     return result.rows[0];
@@ -403,6 +512,16 @@ async function verifyPayment(paymentId, verifiedByUserId, notes) {
     await ensureProjectForCustomBuildOrder(client, payment.order_id);
 
     await projectRefundService.transitionRefundStatusesForPayment(client, payment.order_id, 'verified');
+
+    await logPaymentAuditEvent({
+      client,
+      actorId: verifiedByUserId,
+      action: 'PAYMENT_VERIFIED',
+      payment: { ...result.rows[0], ...payment },
+      status: result.rows[0].status,
+      previousStatus: payment.status,
+      notes,
+    });
 
     await client.query('COMMIT');
 
@@ -489,6 +608,17 @@ async function rejectPayment(paymentId, rejectedByUserId, reason, notes) {
 
     await projectRefundService.transitionRefundStatusesForPayment(client, payment.order_id, 'rejected');
 
+    await logPaymentAuditEvent({
+      client,
+      actorId: rejectedByUserId,
+      action: 'PAYMENT_REJECTED',
+      payment: { ...result.rows[0], ...payment },
+      status: result.rows[0].status,
+      previousStatus: payment.status,
+      reason,
+      notes,
+    });
+
     await client.query('COMMIT');
 
     if (rejectedInstallment) {
@@ -542,6 +672,14 @@ async function cancelPayment(paymentId, cancelledByUserId) {
       paymentId
     ]
   );
+
+  await logPaymentAuditEvent({
+    actorId: cancelledByUserId,
+    action: 'PAYMENT_CANCELLED',
+    payment: { ...result.rows[0], ...payment },
+    status: result.rows[0].status,
+    previousStatus: payment.status,
+  });
 
   return result.rows[0];
 }
@@ -745,6 +883,16 @@ async function refundPayment(paymentId, refundedByUserId, reason) {
       `UPDATE orders SET payment_status = $1, updated_at = $2 WHERE order_id = $3`,
       [ORDER_PAYMENT_STATUS.PENDING, new Date(), payment.order_id]
     );
+
+    await logPaymentAuditEvent({
+      client,
+      actorId: refundedByUserId,
+      action: 'PAYMENT_REFUNDED',
+      payment: { ...result.rows[0], ...payment },
+      status: result.rows[0].status,
+      previousStatus: payment.status,
+      reason,
+    });
 
     await client.query('COMMIT');
     return result.rows[0];

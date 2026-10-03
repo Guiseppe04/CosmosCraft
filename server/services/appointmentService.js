@@ -464,6 +464,32 @@ exports.autoMarkNoShows = async () => {
        AND scheduled_at < now() - interval '1 hour'
      RETURNING appointment_id, reference_code`
   );
+
+  // The sweep runs without an actor, so these rows are recorded as automatic
+  // transitions rather than disappearing from the audit trail entirely.
+  for (const row of result.rows || []) {
+    await require('./auditService').logAppointmentEvent({
+      userId: null,
+      action: 'APPOINTMENT_NO_SHOW',
+      entityId: row.appointment_id,
+      entityType: 'appointment',
+      status: 'no_show',
+      previousStatus: 'confirmed',
+      details: {
+        from: 'confirmed',
+        to: 'no_show',
+        automatic: true,
+        note: 'Marked automatically one hour after the scheduled time',
+      },
+      context: {
+        appointmentId: row.appointment_id,
+        referenceCode: row.reference_code,
+        previousStatus: 'confirmed',
+        automatic: true,
+      },
+    });
+  }
+
   return result.rows || [];
 };
 
@@ -634,9 +660,27 @@ exports.getUserUpcomingAppointments = async (userId) => {
   return result.rows.map(row => formatAppointmentResponse(row));
 };
 
+/**
+ * Builds the audit context for an appointment event.
+ *
+ * Appointments are reachable by their reference code in support conversations
+ * but their id is an opaque UUID, so the code, the customer and the booking
+ * time travel with the audit row.
+ */
+const appointmentAuditContext = (appointment) => ({
+  appointmentId: appointment.appointment_id,
+  referenceCode: appointment.reference_code,
+  appointmentType: appointment.appointment_type,
+  scheduledAt: appointment.scheduled_at,
+  customerName: appointment.user_name,
+  customerEmail: appointment.user_email,
+  contactNumber: appointment.customer_phone,
+  status: appointment.status,
+});
+
 exports.getAppointmentsByDateRange = async (startDate, endDate, filters = {}) => this.listAppointments({ ...filters, date_from: startDate, date_to: endDate });
 
-exports.updateAppointment = async (appointmentId, updates) => {
+exports.updateAppointment = async (appointmentId, updates, actorId = null) => {
   const { scheduled_at, status, notes, reason, confirmation_notes, appointment_type, services, location_id, guitar_details, payment_method, contact_number } = updates;
   const client = await pool.connect();
 
@@ -645,7 +689,12 @@ exports.updateAppointment = async (appointmentId, updates) => {
     await lockAppointmentCapacity(client);
 
     const currentRes = await client.query(
-      'SELECT * FROM appointments WHERE appointment_id = $1 FOR UPDATE',
+      `SELECT a.*,
+              u.email AS user_email,
+              u.first_name || ' ' || u.last_name AS user_name
+       FROM appointments a
+       LEFT JOIN users u ON u.user_id = a.user_id
+       WHERE a.appointment_id = $1 FOR UPDATE OF a`,
       [appointmentId]
     );
 
@@ -714,10 +763,71 @@ exports.updateAppointment = async (appointmentId, updates) => {
     setClauses.push(`updated_at = now()`);
     params.push(appointmentId);
 
-    await client.query(
+    const updateRes = await client.query(
       `UPDATE appointments SET ${setClauses.join(', ')} WHERE appointment_id = $${idx} RETURNING *`,
       params
     );
+
+    const updatedAppt = formatAppointmentResponse(updateRes.rows[0]);
+
+    await require('./auditService').logAppointmentEvent({
+      userId: actorId,
+      action: status !== undefined && status !== currentAppt.status ? `APPOINTMENT_${status}` : 'UPDATE',
+      entityId: appointmentId,
+      entityType: 'appointment',
+      status: status !== undefined ? status : currentAppt.status,
+      previousStatus: currentAppt.status,
+      details: {
+        updated_fields: Object.keys(updates),
+        previous: {
+          scheduled_at: currentAppt.scheduled_at,
+          status: currentAppt.status,
+          appointment_type: currentAppt.appointment_type,
+          notes: currentAppt.notes,
+          reason: currentAppt.reason,
+          confirmation_notes: currentAppt.confirmation_notes,
+          payment_method: currentAppt.payment_method,
+          customer_phone: currentAppt.customer_phone,
+        },
+        updated: {
+          scheduled_at: updatedAppt.scheduled_at,
+          status: updatedAppt.status,
+          appointment_type: updatedAppt.appointment_type,
+          notes: updatedAppt.notes,
+          reason: updatedAppt.reason,
+          confirmation_notes: updatedAppt.confirmation_notes,
+          payment_method: updatedAppt.payment_method,
+          customer_phone: updatedAppt.customer_phone,
+        },
+      },
+      context: {
+        ...appointmentAuditContext(updatedAppt),
+        previousStatus: currentAppt.status,
+      },
+      changes: require('./auditContext').buildChanges(
+        {
+          scheduled_at: currentAppt.scheduled_at,
+          status: currentAppt.status,
+          appointment_type: currentAppt.appointment_type,
+          notes: currentAppt.notes,
+          reason: currentAppt.reason,
+          confirmation_notes: currentAppt.confirmation_notes,
+          payment_method: currentAppt.payment_method,
+          customer_phone: currentAppt.customer_phone,
+        },
+        {
+          scheduled_at: updatedAppt.scheduled_at,
+          status: updatedAppt.status,
+          appointment_type: updatedAppt.appointment_type,
+          notes: updatedAppt.notes,
+          reason: updatedAppt.reason,
+          confirmation_notes: updatedAppt.confirmation_notes,
+          payment_method: updatedAppt.payment_method,
+          customer_phone: updatedAppt.customer_phone,
+        }
+      ),
+      executor: client,
+    });
 
     await client.query('COMMIT');
     return this.getAppointmentById(appointmentId);
@@ -735,14 +845,20 @@ exports.rescheduleAppointment = async (appointmentId, newScheduledAt, reason) =>
     ...(reason !== undefined && reason !== null ? { reason } : {}),
   });
 
-exports.updateStatus = async (appointmentId, newStatus, reason) => {
+exports.updateStatus = async (appointmentId, newStatus, reason, actorId = null) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     // 1. Retrieve the current appointment (with row-lock to prevent races)
     const currentRes = await client.query(
-      'SELECT appointment_id, status, appointment_type FROM appointments WHERE appointment_id = $1 FOR UPDATE',
+      `SELECT a.appointment_id, a.status, a.appointment_type, a.reference_code,
+              a.scheduled_at, a.user_id,
+              u.email AS user_email,
+              u.first_name || ' ' || u.last_name AS user_name
+       FROM appointments a
+       LEFT JOIN users u ON u.user_id = a.user_id
+       WHERE a.appointment_id = $1 FOR UPDATE OF a`,
       [appointmentId]
     );
 
@@ -752,6 +868,7 @@ exports.updateStatus = async (appointmentId, newStatus, reason) => {
     }
 
     const { status: currentStatus, appointment_type: appointmentType } = currentRes.rows[0];
+    const currentRow = currentRes.rows[0];
 
     // 3. Validate the requested transition (throws 409 on invalid)
     assertValidAppointmentStatusTransition(currentStatus, newStatus, appointmentType);
@@ -772,6 +889,22 @@ exports.updateStatus = async (appointmentId, newStatus, reason) => {
     sql += ` WHERE appointment_id = $2`;
     await client.query(sql, params);
 
+    await require('./auditService').logAppointmentEvent({
+      userId: actorId,
+      action: `APPOINTMENT_${newStatus}`,
+      entityId: appointmentId,
+      entityType: 'appointment',
+      status: newStatus,
+      previousStatus: currentStatus,
+      details: { from: currentStatus, to: newStatus, reason },
+      context: {
+        ...appointmentAuditContext({ ...currentRow, status: newStatus }),
+        previousStatus: currentStatus,
+        reason,
+      },
+      executor: client,
+    });
+
     await client.query('COMMIT');
 
     // 6. Return the formatted appointment response
@@ -784,14 +917,41 @@ exports.updateStatus = async (appointmentId, newStatus, reason) => {
   }
 };
 
-exports.cancelAppointment = async (appointmentId, reason) => {
+exports.cancelAppointment = async (appointmentId, reason, actorId = null) => {
   const appointment = await this.getAppointmentById(appointmentId);
   if (!appointment) throw new AppError('Appointment not found', 404);
   const cancelReason = reason || `Cancelled on ${new Date().toISOString()}`;
-  await pool.query(
-    `UPDATE appointments SET status = 'cancelled', reason = $1, updated_at = now() WHERE appointment_id = $2`,
-    [cancelReason, appointmentId]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE appointments SET status = 'cancelled', reason = $1, updated_at = now() WHERE appointment_id = $2`,
+      [cancelReason, appointmentId]
+    );
+
+    await require('./auditService').logAppointmentEvent({
+      userId: actorId,
+      action: 'APPOINTMENT_CANCELLED',
+      entityId: appointmentId,
+      entityType: 'appointment',
+      status: 'cancelled',
+      previousStatus: appointment.status,
+      details: { from: appointment.status, to: 'cancelled', reason: cancelReason },
+      context: {
+        ...appointmentAuditContext(appointment),
+        previousStatus: appointment.status,
+        reason: cancelReason,
+      },
+      executor: client,
+    });
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
   return this.getAppointmentById(appointmentId);
 };
 
@@ -988,7 +1148,7 @@ exports.isDateUnavailable = async (date) => {
 
 // ─── PAYMENT STATUS ──────────────────────────────────────────────────────────
 
-exports.updatePaymentStatus = async (appointmentId, paymentStatus, paymentMethod = null, paymentProofUrl = null) => {
+exports.updatePaymentStatus = async (appointmentId, paymentStatus, paymentMethod = null, paymentProofUrl = null, actorId = null) => {
   const setClauses = ['payment_status = $2'];
   const params = [appointmentId, paymentStatus];
   let idx = 3;
@@ -1004,10 +1164,60 @@ exports.updatePaymentStatus = async (appointmentId, paymentStatus, paymentMethod
 
   setClauses.push('updated_at = now()');
 
-  await pool.query(
-    `UPDATE appointments SET ${setClauses.join(', ')} WHERE appointment_id = $1 RETURNING *`,
-    params
-  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const previousRes = await client.query(
+      `SELECT a.payment_status, a.reference_code, a.appointment_type, a.scheduled_at,
+              a.user_id, u.email AS user_email,
+              u.first_name || ' ' || u.last_name AS user_name
+       FROM appointments a
+       LEFT JOIN users u ON u.user_id = a.user_id
+       WHERE a.appointment_id = $1 FOR UPDATE OF a`,
+      [appointmentId]
+    );
+
+    const updateRes = await client.query(
+      `UPDATE appointments SET ${setClauses.join(', ')} WHERE appointment_id = $1 RETURNING *`,
+      params
+    );
+
+    const previous = previousRes.rows[0];
+    const updated = updateRes.rows[0];
+
+    if (previous) {
+      await require('./auditService').logAppointmentEvent({
+        userId: actorId,
+        action: 'PAYMENT',
+        entityId: appointmentId,
+        entityType: 'appointment',
+        status: paymentStatus,
+        previousStatus: previous.payment_status,
+        details: {
+          from: previous.payment_status,
+          to: paymentStatus,
+          payment_method: paymentMethod,
+          has_payment_proof: Boolean(paymentProofUrl),
+        },
+        context: {
+          ...appointmentAuditContext(updated),
+          previousStatus: previous.payment_status,
+          paymentStatus,
+          method: paymentMethod || updated.payment_method,
+        },
+        executor: client,
+      });
+    }
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+
   return this.getAppointmentById(appointmentId);
 };
 

@@ -221,7 +221,7 @@ exports.updateAppointment = async (req, res, next) => {
 
     // Customers can update appointment_type, services, location_id, guitar_details for rescheduling
     // Perform update
-    const updated = await appointmentService.updateAppointment(id, validated);
+    const updated = await appointmentService.updateAppointment(id, validated, req.user?.user_id || null);
 
     socketService.emitToUserAndStaff(updated?.user_id, 'appointment:updated', {
       appointment: updated,
@@ -313,7 +313,8 @@ exports.updateStatus = async (req, res, next) => {
     const updated = await appointmentService.updateStatus(
       id,
       validated.new_status || validated.status,
-      validated.reason
+      validated.reason,
+      req.user?.user_id || null
     );
 
     socketService.emitToUserAndStaff(updated?.user_id, 'appointment:updated', {
@@ -354,7 +355,7 @@ exports.cancelAppointment = async (req, res, next) => {
     );
 
     // Perform cancellation
-    const cancelled = await appointmentService.cancelAppointment(id, validated.reason);
+    const cancelled = await appointmentService.cancelAppointment(id, validated.reason, req.user?.user_id || null);
 
     socketService.emitToUserAndStaff(cancelled?.user_id, 'appointment:updated', {
       appointment: cancelled,
@@ -938,7 +939,8 @@ exports.updatePaymentStatus = async (req, res, next) => {
       id,
       payment_status,
       payment_method,
-      payment_proof_url
+      payment_proof_url,
+      req.user?.user_id || null
     );
 
     res.json({

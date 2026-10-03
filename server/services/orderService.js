@@ -3,6 +3,72 @@ const { generateOrderNumber, generateRefundRequestNumber, determineOrderTypePref
 const projectRefundService = require('./projectRefundService')
 const { calculateOrderTotals } = require('../utils/orderTotals')
 
+/**
+ * Reads the customer for an order so an order event names a person, not just an
+ * order number. One extra read per event, only when the caller did not already
+ * have the customer loaded.
+ */
+const readOrderCustomer = async (orderId, knownUserId = null) => {
+  const userId = knownUserId || null;
+  if (!userId) return {};
+  try {
+    const { rows } = await pool.query(
+      `SELECT TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))) AS customer_name,
+              email AS customer_email
+       FROM users WHERE user_id = $1`,
+      [userId]
+    );
+    return rows[0] || {};
+  } catch (err) {
+    console.warn('Could not resolve order customer:', err.message);
+    return {};
+  }
+}
+
+/**
+ * Records an order status change in the audit trail.
+ *
+ * Order status transitions used to be invisible in the audit screen, so a
+ * reviewer could see a payment verification with no explanation of why the order
+ * itself moved forward. The order number, type and customer are captured here at
+ * event time.
+ */
+const logOrderStatusEvent = async ({
+  orderId,
+  previousStatus,
+  order,
+  actorId = null,
+  action = 'ORDER_STATUS_CHANGED',
+  details = {},
+  extraContext = {},
+  client = null,
+}) => {
+  const auditService = require('./auditService');
+  const customer = await readOrderCustomer(orderId, order?.user_id || extraContext.customerId || null);
+
+  await auditService.logOrderEvent({
+    userId: actorId,
+    action,
+    entityId: orderId,
+    status: order?.status ?? null,
+    previousStatus: previousStatus ?? null,
+    details,
+    context: {
+      orderId,
+      orderNumber: order?.order_number ?? extraContext.orderNumber ?? null,
+      orderType: order?.order_type ?? extraContext.orderType ?? null,
+      orderStatus: order?.status ?? null,
+      previousStatus: previousStatus ?? null,
+      paymentStatus: order?.payment_status ?? extraContext.paymentStatus ?? null,
+      totalAmount: order?.total_amount ?? extraContext.totalAmount ?? null,
+      customerName: customer.customer_name || extraContext.customerName || null,
+      customerEmail: customer.customer_email || extraContext.customerEmail || null,
+      ...extraContext,
+    },
+    executor: client,
+  });
+}
+
 const syncStockToBuilderParts = async (productId, delta) => {
   if (!productId || delta === 0) return;
   await pool.query(
@@ -1265,20 +1331,40 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
   try {
     await client.query('BEGIN')
 
-    // Get current order to check status transition
+    // Get current order to check status transition.
+    // Everything the audit trail needs (order number, customer, amount,
+    // payment method/reference) is read here so the log is written from real
+    // values instead of a second round trip at log time.
     const orderRes = await client.query(
       `SELECT
          o.payment_status,
          o.status,
          o.notes,
-         (
-           SELECT p.method::text
-           FROM payments p
-           WHERE p.order_id = o.order_id
-           ORDER BY p.created_at DESC
+         o.order_number,
+         o.order_type,
+         o.total_amount,
+         COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '') AS customer_name,
+         c.email AS customer_email,
+         latest.payment_id,
+         latest.amount AS payment_amount,
+         latest.method::text AS latest_payment_method,
+         latest.reference_number AS payment_reference_number,
+         COALESCE(latest.method::text, (
+           SELECT p2.method::text
+           FROM payments p2
+           WHERE p2.order_id = o.order_id
+           ORDER BY p2.created_at DESC
            LIMIT 1
-         ) AS payment_method
+         )) AS payment_method
        FROM orders o
+       LEFT JOIN users c ON c.user_id = o.user_id
+       LEFT JOIN LATERAL (
+         SELECT p.payment_id, p.amount, p.method, p.reference_number
+         FROM payments p
+         WHERE p.order_id = o.order_id AND p.deleted_at IS NULL
+         ORDER BY p.created_at DESC
+         LIMIT 1
+       ) latest ON TRUE
        WHERE o.order_id = $1`,
       [orderId]
     )
@@ -1361,11 +1447,8 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
     }
     const newPaymentStatus = paymentStatusMap[status] || status
 
-    const latestPaymentRes = await client.query(
-      `SELECT payment_id FROM payments WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1`,
-      [orderId]
-    )
-    const latestPaymentId = latestPaymentRes.rows[0]?.payment_id || null
+    // Already read by the order query above (latest payment row)
+    const latestPaymentId = orderRes.rows[0].payment_id || null
 
     if (latestPaymentId) {
       const paymentUpdateFields = ['status = $1', 'updated_at = CURRENT_TIMESTAMP']
@@ -1404,23 +1487,70 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
     // Log to consolidated audit_logs table
     try {
       const auditService = require('./auditService');
-      await auditService.logAction(
-        admin_user_id,
-        status === 'approved' ? 'VERIFY' : status === 'rejected' ? 'REJECT' : 'UPDATE',
-        'payment',
-        orderId,
-        {
-          previous_status: currentStatus,
-          new_status: status,
+      const auditSource = orderRes.rows[0];
+      await auditService.logPaymentEvent({
+        userId: admin_user_id,
+        action: status === 'approved' ? 'VERIFY' : status === 'rejected' ? 'REJECT' : 'UPDATE',
+        entityId: latestPaymentId || orderId,
+        status,
+        previousStatus: currentStatus,
+        details: {
           reference_number,
           rejection_reason,
           admin_notes,
           admin_name,
-          admin_email
-        }
-      );
+          admin_email,
+        },
+        context: {
+          paymentId: latestPaymentId,
+          amount: auditSource.payment_amount ?? auditSource.total_amount,
+          method: resolvedPaymentMethod || auditSource.latest_payment_method,
+          referenceNumber: reference_number || auditSource.payment_reference_number,
+          rejectionReason: rejection_reason,
+          paymentStatus: newPaymentStatus,
+          orderId,
+          orderNumber: auditSource.order_number,
+          orderType: auditSource.order_type,
+          customerName: auditSource.customer_name,
+          customerEmail: auditSource.customer_email,
+        },
+      });
     } catch (auditErr) {
       console.warn('Audit log not available:', auditErr.message);
+    }
+
+    // An approved payment can also advance the order itself from pending to
+    // processing. That transition is its own event, otherwise the order looks
+    // like it changed status without explanation.
+    if (order.status !== auditSource.status) {
+      try {
+        const auditService = require('./auditService');
+        await auditService.logOrderEvent({
+          userId: admin_user_id || null,
+          action: 'ORDER_STATUS_CHANGED',
+          entityId: orderId,
+          status: order.status,
+          previousStatus: auditSource.status,
+          details: {
+            triggered_by: `payment_${status}`,
+            payment_status: status,
+            admin_notes: admin_notes || null,
+          },
+          context: {
+            orderId,
+            orderNumber: auditSource.order_number,
+            orderType: auditSource.order_type,
+            orderStatus: order.status,
+            previousStatus: auditSource.status,
+            paymentStatus: order.payment_status,
+            totalAmount: order.total_amount,
+            customerName: auditSource.customer_name,
+            customerEmail: auditSource.customer_email,
+          },
+        });
+      } catch (auditErr) {
+        console.warn('Audit log not available:', auditErr.message);
+      }
     }
 
     return order
@@ -1439,9 +1569,24 @@ exports.approvePayment = async (orderId, options = {}) => {
   try {
     await client.query('BEGIN')
 
-    // Get current status first
+    // Get current status first, together with everything the audit trail needs
     const currentRes = await client.query(
-      'SELECT payment_status, status FROM orders WHERE order_id = $1',
+      `SELECT o.payment_status, o.status, o.order_number, o.order_type, o.total_amount,
+              COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '') AS customer_name,
+              c.email AS customer_email,
+              latest.payment_id, latest.amount AS payment_amount,
+              latest.method::text AS latest_payment_method,
+              latest.reference_number AS payment_reference_number
+       FROM orders o
+       LEFT JOIN users c ON c.user_id = o.user_id
+       LEFT JOIN LATERAL (
+         SELECT p.payment_id, p.amount, p.method, p.reference_number
+         FROM payments p
+         WHERE p.order_id = o.order_id AND p.deleted_at IS NULL
+         ORDER BY p.created_at DESC
+         LIMIT 1
+       ) latest ON TRUE
+       WHERE o.order_id = $1`,
       [orderId]
     )
     
@@ -1477,11 +1622,7 @@ exports.approvePayment = async (orderId, options = {}) => {
     const order = res.rows[0]
 
     // Sync the latest payment record to verified
-    const latestPaymentRes = await client.query(
-      `SELECT payment_id FROM payments WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1`,
-      [orderId]
-    )
-    const latestPaymentId = latestPaymentRes.rows[0]?.payment_id || null
+    const latestPaymentId = currentRes.rows[0].payment_id || null
 
     if (latestPaymentId) {
       await client.query(
@@ -1504,18 +1645,27 @@ exports.approvePayment = async (orderId, options = {}) => {
     // Log to consolidated audit_logs table
     try {
       const auditService = require('./auditService');
-      await auditService.logAction(
-        admin_user_id || null,
-        'VERIFY',
-        'payment',
-        orderId,
-        {
-          previous_status: currentStatus,
-          new_status: 'approved',
-          admin_name,
-          admin_email
-        }
-      );
+      const auditSource = currentRes.rows[0];
+      await auditService.logPaymentEvent({
+        userId: admin_user_id || null,
+        action: 'VERIFY',
+        entityId: latestPaymentId || orderId,
+        status: 'approved',
+        previousStatus: currentStatus,
+        details: { admin_name, admin_email },
+        context: {
+          paymentId: latestPaymentId,
+          amount: auditSource.payment_amount ?? auditSource.total_amount,
+          method: auditSource.latest_payment_method,
+          referenceNumber: auditSource.payment_reference_number,
+          paymentStatus: 'verified',
+          orderId,
+          orderNumber: auditSource.order_number,
+          orderType: auditSource.order_type,
+          customerName: auditSource.customer_name,
+          customerEmail: auditSource.customer_email,
+        },
+      });
     } catch (auditErr) {
       console.warn('Audit log not available:', auditErr.message);
     }
@@ -1529,7 +1679,7 @@ exports.approvePayment = async (orderId, options = {}) => {
   }
 }
 
-exports.updateShipment = async (orderId, shipmentData) => {
+exports.updateShipment = async (orderId, shipmentData, actorId = null) => {
   const { tracking_number, courier_name, rider_name, rider_contact } = shipmentData;
   
   const orderRes = await pool.query(
@@ -1568,11 +1718,25 @@ exports.updateShipment = async (orderId, shipmentData) => {
      WHERE order_id = $5 RETURNING *`,
     [tracking_number, courier_name, rider_name || null, rider_contact || null, orderId]
   );
-  
+
+  await logOrderStatusEvent({
+    orderId,
+    previousStatus: order.status,
+    order: res.rows[0],
+    actorId,
+    action: 'ORDER_SHIPPED',
+    details: {
+      tracking_number,
+      courier_name,
+      rider_name: rider_name || null,
+    },
+    extraContext: { courierName: courier_name, trackingNumber: tracking_number },
+  });
+
   return res.rows[0];
 }
 
-exports.updateOutForDelivery = async (orderId, riderData) => {
+exports.updateOutForDelivery = async (orderId, riderData, actorId = null) => {
   const { rider_name, rider_contact } = riderData;
   
   const orderRes = await pool.query(
@@ -1604,11 +1768,20 @@ exports.updateOutForDelivery = async (orderId, riderData) => {
      WHERE order_id = $3 RETURNING *`,
     [rider_name, rider_contact, orderId]
   );
-  
+
+  await logOrderStatusEvent({
+    orderId,
+    previousStatus: order.status,
+    order: res.rows[0],
+    actorId,
+    action: 'ORDER_OUT_FOR_DELIVERY',
+    details: { rider_name, out_for_delivery_at: res.rows[0].out_for_delivery_at },
+  });
+
   return res.rows[0];
 }
 
-exports.markDelivered = async (orderId) => {
+exports.markDelivered = async (orderId, actorId = null) => {
   const orderRes = await pool.query(
     `SELECT status FROM orders WHERE order_id = $1`,
     [orderId]
@@ -1632,16 +1805,42 @@ exports.markDelivered = async (orderId) => {
      WHERE order_id = $1 RETURNING *`,
     [orderId]
   );
-  
+
+  await logOrderStatusEvent({
+    orderId,
+    previousStatus: order.status,
+    order: res.rows[0],
+    actorId,
+    action: 'ORDER_MARKED_DELIVERED',
+    details: { delivered_at: res.rows[0].delivered_at },
+  });
+
   return res.rows[0];
 }
 
-exports.cancelOrder = async (orderId) => {
+exports.cancelOrder = async (orderId, actorId = null) => {
+  const currentRes = await pool.query(
+    `SELECT status, order_number, order_type, total_amount, user_id FROM orders WHERE order_id = $1`,
+    [orderId]
+  );
+  if (currentRes.rows.length === 0) return null;
+  const current = currentRes.rows[0];
+
   const res = await pool.query(
     `UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE order_id = $1 RETURNING *`,
     [orderId]
   );
   if (res.rows.length === 0) return null;
+
+  await logOrderStatusEvent({
+    orderId,
+    previousStatus: current.status,
+    order: res.rows[0],
+    actorId,
+    action: 'ORDER_CANCELLED',
+    extraContext: { customerId: current.user_id },
+  });
+
   return res.rows[0];
 }
 
@@ -1754,7 +1953,24 @@ exports.cancelMyOrder = async (orderId, userId, reason) => {
       }
     }
 
+    // Recorded inside the transaction so the cancellation and its audit entry can
+    // never disagree.
+    await logOrderStatusEvent({
+      orderId,
+      previousStatus: status,
+      order: res.rows[0],
+      actorId: userId,
+      action: 'ORDER_CANCELLED',
+      details: {
+        reason,
+        cancelled_by: 'customer',
+        refund_request_created: Boolean(latestPayment),
+      },
+      client,
+    });
+
     await client.query('COMMIT');
+
     return res.rows[0];
   } catch (error) {
     await client.query('ROLLBACK');
@@ -1784,6 +2000,16 @@ exports.markAsReceived = async (orderId, userId) => {
     `UPDATE orders SET status = 'received', received_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE order_id = $1 RETURNING *`,
     [orderId]
   );
+
+  await logOrderStatusEvent({
+    orderId,
+    previousStatus: order.status,
+    order: res.rows[0],
+    actorId: userId,
+    action: 'ORDER_MARKED_RECEIVED',
+    details: { received_at: res.rows[0].received_at },
+  });
+
   return res.rows[0];
 }
 

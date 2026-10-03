@@ -28,13 +28,21 @@ exports.getPart = async (req, res, next) => {
 exports.createPart = async (req, res, next) => {
   try {
     const part = await builderPartsService.createPart(req.body);
-    await auditService.logCreate(
-      req.user?.user_id || null,
-      'guitar_builder_parts',
-      part.part_id,
-      part,
-      req.ip
-    );
+    await auditService.logProductEvent({
+      userId: req.user?.user_id || null,
+      action: 'INSERT',
+      entityId: part.part_id,
+      entityType: 'guitar_builder_parts',
+      details: part,
+      context: {
+        productId: part.product_id,
+        name: part.name,
+        price: part.price,
+        stock: part.stock,
+        category: part.guitar_type,
+      },
+      ipAddress: req.ip,
+    });
 
     socketService.emitBroadcast('builder-part:created', { part, partId: part.part_id });
 
@@ -49,14 +57,22 @@ exports.updatePart = async (req, res, next) => {
 
     const part = await builderPartsService.updatePart(req.params.id, req.body);
     if (!part) throw new AppError('Part not found', 404);
-    await auditService.logUpdate(
-      req.user?.user_id || null,
-      'guitar_builder_parts',
-      part.part_id,
-      existing,
-      part,
-      req.ip
-    );
+    await auditService.logProductEvent({
+      userId: req.user?.user_id || null,
+      action: 'UPDATE',
+      entityId: part.part_id,
+      entityType: 'guitar_builder_parts',
+      details: { old: existing, new: part },
+      context: {
+        productId: part.product_id,
+        name: part.name,
+        price: part.price,
+        stock: part.stock,
+        category: part.guitar_type,
+      },
+      changes: auditService.auditContext.buildChanges(existing, part),
+      ipAddress: req.ip,
+    });
 
     socketService.emitBroadcast('builder-part:updated', {
       part,
@@ -79,25 +95,41 @@ exports.deletePart = async (req, res, next) => {
     if (permanent) {
       const part = await builderPartsService.hardDeletePart(req.params.id);
       if (!part) throw new AppError('Part not found', 404);
-      await auditService.logDelete(
-        req.user?.user_id || null,
-        'guitar_builder_parts',
-        part.part_id,
-        existing,
-        req.ip
-      );
+      await auditService.logProductEvent({
+        userId: req.user?.user_id || null,
+        action: 'DELETE',
+        entityId: part.part_id,
+        entityType: 'guitar_builder_parts',
+        details: existing,
+        context: {
+          productId: part.product_id,
+          name: existing.name,
+          price: existing.price,
+          stock: existing.stock,
+          category: existing.guitar_type,
+        },
+        ipAddress: req.ip,
+      });
       return res.json({ status: 'success', message: 'Part permanently deleted', data: { part } });
     }
 
     const part = await builderPartsService.deletePart(req.params.id);
     if (!part) throw new AppError('Part not found', 404);
-    await auditService.logDelete(
-      req.user?.user_id || null,
-      'guitar_builder_parts',
-      part.part_id,
-      existing,
-      req.ip
-    );
+    await auditService.logProductEvent({
+      userId: req.user?.user_id || null,
+      action: 'DELETE',
+      entityId: part.part_id,
+      entityType: 'guitar_builder_parts',
+      details: existing,
+      context: {
+        productId: part.product_id,
+        name: existing.name,
+        price: existing.price,
+        stock: existing.stock,
+        category: existing.guitar_type,
+      },
+      ipAddress: req.ip,
+    });
 
     socketService.emitBroadcast('builder-part:deleted', { partId: req.params.id, part });
 

@@ -134,7 +134,7 @@ exports.updateOrder = asyncHandler(async (req, res, next) => {
 })
 
 exports.cancelOrder = asyncHandler(async (req, res, next) => {
-  const order = await orderService.cancelOrder(req.params.id)
+  const order = await orderService.cancelOrder(req.params.id, req.user?.id ?? null)
   if (!order) throw new AppError('Order not found', 404)
   socketService.emitToUserAndStaff(order.user_id, 'order:updated', { order, action: 'order_cancelled' });
   res.status(200).json({ status: 'success', data: order })
@@ -208,7 +208,7 @@ exports.updateShipment = asyncHandler(async (req, res, next) => {
     courier_name,
     rider_name,
     rider_contact
-  })
+  }, req.user?.id ?? null)
   if (!order) throw new AppError('Order not found', 404)
   socketService.emitToUserAndStaff(order.user_id, 'order:updated', { order, action: 'shipment_updated' });
   res.status(200).json({ status: 'success', data: order })
@@ -224,14 +224,14 @@ exports.updateOutForDelivery = asyncHandler(async (req, res, next) => {
   const order = await orderService.updateOutForDelivery(req.params.id, {
     rider_name,
     rider_contact
-  })
+  }, req.user?.id ?? null)
   if (!order) throw new AppError('Order not found', 404)
   socketService.emitToUserAndStaff(order.user_id, 'order:updated', { order, action: 'out_for_delivery' });
   res.status(200).json({ status: 'success', data: order })
 })
 
 exports.markDelivered = asyncHandler(async (req, res, next) => {
-  const order = await orderService.markDelivered(req.params.id)
+  const order = await orderService.markDelivered(req.params.id, req.user?.id ?? null)
   if (!order) throw new AppError('Order not found', 404)
   socketService.emitToUserAndStaff(order.user_id, 'order:updated', { order, action: 'order_delivered' });
   res.status(200).json({ status: 'success', data: order })

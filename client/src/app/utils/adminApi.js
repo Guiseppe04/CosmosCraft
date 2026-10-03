@@ -397,15 +397,16 @@ export const adminApi = {
   deleteAdminCustomizationFeedback: feedbackService.deleteAdminCustomizationFeedback,
 
   // Audit Logs
+  // Read-only: the API exposes no way to edit or delete audit records.
   getAuditLogs: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/audit-logs${qs ? '?' + qs : ''}`)
   },
   getAuditLog: (id) => request(`/api/audit-logs/${id}`),
+  getAuditActions: () => request('/api/audit-logs/actions'),
   getAuditSummary: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/audit-logs/summary${qs ? '?' + qs : ''}`)
   },
-  cleanupOldAuditLogs: (days = 90) => request(`/api/audit-logs/cleanup?days=${days}`, { method: 'DELETE' }),
 }
 

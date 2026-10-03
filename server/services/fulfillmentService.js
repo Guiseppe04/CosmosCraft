@@ -820,23 +820,32 @@ exports.confirmDelivery = async (identifier, actorId, actorRole) => {
     );
 
     // 10. Audit log
-    await client.query(
-      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-       VALUES ($1, 'CONFIRM_DELIVERY', 'fulfillment', $2, $3)`,
-      [
-        actorId,
-        currentReq.id,
-        JSON.stringify({
-          project_id: currentReq.project_id,
-          order_id: currentReq.order_id,
-          previous_status: currentReq.status,
-          new_status: 'completed',
-          confirmation_method: confirmationMethod,
-          confirmed_by: actorId,
-          role: actorRole,
-        }),
-      ]
-    );
+    await require('./auditService').logFulfillmentEvent({
+      userId: actorId,
+      action: 'CONFIRM_DELIVERY',
+      entityId: currentReq.id,
+      entityType: 'fulfillment',
+      status: 'completed',
+      previousStatus: currentReq.status,
+      details: {
+        project_id: currentReq.project_id,
+        order_id: currentReq.order_id,
+        previous_status: currentReq.status,
+        new_status: 'completed',
+        confirmation_method: confirmationMethod,
+        confirmed_by: actorId,
+        role: actorRole,
+      },
+      context: {
+        requestId: currentReq.id,
+        method: currentReq.method,
+        confirmationMethod,
+        orderId: currentReq.order_id,
+        orderNumber: currentReq.order_number,
+        trackingNumber: currentReq.tracking_number,
+      },
+      executor: client,
+    });
 
     await client.query('COMMIT');
 

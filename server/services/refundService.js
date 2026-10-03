@@ -60,14 +60,49 @@ const getRefundById = async (db, refundId) => {
     `SELECT rr.*,
             o.user_id AS customer_id,
             o.order_id,
+            o.order_number,
             o.status AS order_status,
-            o.payment_status AS order_payment_status
+            o.payment_status AS order_payment_status,
+            COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '') AS customer_name
      FROM refund_requests rr
      JOIN orders o ON o.order_id = rr.order_id
+     LEFT JOIN users c ON c.user_id = o.user_id
      WHERE rr.refund_request_id = $1 AND rr.deleted_at IS NULL`,
     [refundId]
   );
   return res.rows[0] || null;
+};
+
+/**
+ * Records a refund transition with the refund request number, the related order
+ * and the amounts, so the audit trail never shows a bare refund UUID.
+ */
+const logRefundTransition = async (db, { refund, actorId, action, from, to, extra = {} }) => {
+  const auditService = require('./auditService');
+
+  await auditService.logRefundEvent({
+    userId: actorId,
+    action,
+    entityId: refund.project_id || refund.order_id,
+    status: to,
+    previousStatus: from,
+    details: { refund_request_id: refund.refund_request_id, from, to, ...extra },
+    context: {
+      refundId: refund.refund_request_id,
+      refundNumber: refund.request_number,
+      orderId: refund.order_id,
+      orderNumber: refund.order_number,
+      projectId: refund.project_id,
+      amount: refund.amount_requested,
+      approvedAmount: refund.approved_amount ?? extra.approved_amount,
+      refundType: refund.refund_type,
+      refundStatus: to,
+      reason: refund.reason,
+      rejectionReason: extra.rejection_reason,
+      customerName: refund.customer_name,
+    },
+    executor: db,
+  });
 };
 
 const getVerifiedPaymentTotal = async (db, orderId) => {
@@ -366,17 +401,22 @@ exports.applyTransition = async (refundId, newStatus, actorId, actorRole, data =
     );
 
     // Audit log
-    await client.query(
-      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        actorId,
-        `refund_${newStatus}`,
-        refund.project_id ? 'project' : 'order',
-        refund.project_id || refund.order_id,
-        JSON.stringify({ refund_request_id: refundId, from, to: newStatus }),
-      ]
-    );
+    await logRefundTransition(client, {
+      refund,
+      actorId,
+      action: `refund_${newStatus}`,
+      from,
+      to: newStatus,
+      extra: {
+        admin_notes: data.adminNotes,
+        rejection_reason: data.rejectionReason,
+        approved_amount: data.approvedAmount,
+        adjustment_reason: data.adjustmentReason,
+        refund_method: data.refundMethod,
+        refund_reference: data.refundReference,
+        refund_fee: data.refundFee,
+      },
+    });
 
     // Notifications (only after commit for robustness, but within same process okay).
     const { entityType, entityId } = await getRefundEntityInfo(client, refund);
@@ -438,17 +478,13 @@ exports.withdrawRefund = async (refundId, userId) => {
       [refundId, userId]
     );
 
-    await client.query(
-      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        userId,
-        'refund_withdrawn',
-        refund.project_id ? 'project' : 'order',
-        refund.project_id || refund.order_id,
-        JSON.stringify({ refund_request_id: refundId, from: refund.status, to: 'withdrawn' }),
-      ]
-    );
+    await logRefundTransition(client, {
+      refund,
+      actorId: userId,
+      action: 'refund_withdrawn',
+      from: refund.status,
+      to: 'withdrawn',
+    });
 
     const { entityType, entityId } = await getRefundEntityInfo(client, refund);
     await sendRefundNotification(userId, 'Refund withdrawn', 'Your refund request was withdrawn.', entityId, entityType);
@@ -524,17 +560,19 @@ exports.updateReturnStatus = async (refundId, returnStatus, actorId, actorRole, 
       updateValues
     );
 
-    await client.query(
-      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        actorId,
-        `refund_return_${returnStatus}`,
-        refund.project_id ? 'project' : 'order',
-        refund.project_id || refund.order_id,
-        JSON.stringify({ refund_request_id: refundId, from: currentReturn, to: returnStatus }),
-      ]
-    );
+    await logRefundTransition(client, {
+      refund,
+      actorId,
+      action: `refund_return_${returnStatus}`,
+      from: currentReturn,
+      to: returnStatus,
+      extra: {
+        return_status: returnStatus,
+        return_method: data.returnMethod,
+        return_reference: data.returnReference,
+        return_notes: data.returnNotes,
+      },
+    });
 
     await client.query('COMMIT');
     return res.rows[0];

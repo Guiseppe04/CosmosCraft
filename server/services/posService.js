@@ -171,6 +171,25 @@ exports.createSale = async (
              VALUES ($1, 'stock_out', $2, 'pos_sale', $3, $4, $5)`,
             [item.product_id, -itemQuantity, sale.sale_id, `POS Sale ${sale.sale_number}`, staffId]
           );
+
+          // The audit trail needs the same deduction with its before/after
+          // quantities, otherwise a POS sale leaves stock unexplained.
+          await require('./auditService').logStockMovement({
+            userId: staffId,
+            entityId: item.product_id,
+            previousQuantity: currentStock,
+            newQuantity: currentStock - itemQuantity,
+            delta: -itemQuantity,
+            movement: 'pos_deduction',
+            source: 'pos_sale',
+            reason: `POS Sale ${sale.sale_number}`,
+            context: {
+              productName: item.name || item.item_name || 'Item',
+              sourceId: sale.sale_id,
+              saleNumber: sale.sale_number,
+            },
+            executor: client,
+          });
         }
       }
 
@@ -188,6 +207,37 @@ exports.createSale = async (
 
       sale = updatedSaleRes.rows[0] || sale;
     }
+
+    // A completed walk-in sale is the one POS event an administrator is most
+    // likely to look for ("who rang up this guitar and how was it paid?").
+    await require('./auditService').logPosEvent({
+      userId: staffId,
+      action: 'SALE_RECORDED',
+      entityId: sale.sale_id,
+      status: sale.status,
+      previousStatus: null,
+      details: {
+        sale_number: sale.sale_number,
+        customer_name: customerName || null,
+        subtotal: sale.subtotal,
+        discount_amount: sale.discount_amount,
+        tax_amount: sale.tax_amount,
+        total_amount: sale.total_amount,
+        payment_method: normalizedPaymentMethod,
+        payment_status: paymentStatus,
+        reference_number: normalizedReferenceNumber,
+        item_count: Array.isArray(items) ? items.length : 0,
+      },
+      context: {
+        saleId: sale.sale_id,
+        saleNumber: sale.sale_number,
+        amount: sale.total_amount,
+        paymentMethod: normalizedPaymentMethod,
+        paymentStatus,
+        itemCount: Array.isArray(items) ? items.length : 0,
+      },
+      executor: client,
+    });
 
     await client.query('COMMIT');
     return sale;
@@ -817,21 +867,29 @@ exports.voidSale = async (saleId, voidedBy, reason = null) => {
     );
 
     // Create audit log
-    await client.query(
-      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, previous_status, new_status, details)
-       VALUES ($1, 'VOID', 'pos', $2, 'completed', 'voided', $3)`,
-      [
-        voidedBy,
+    await require('./auditService').logPosEvent({
+      userId: voidedBy,
+      action: 'VOID',
+      entityId: saleId,
+      status: 'voided',
+      previousStatus: 'completed',
+      details: {
+        sale_number: sale.sale_number,
+        reason,
+        total_amount: sale.total_amount,
+        refund_amount: sale.total_amount,
+        items: items.map((i) => ({ item_name: i.item_name, quantity: i.quantity, restocked: true })),
+      },
+      context: {
         saleId,
-        JSON.stringify({
-          sale_number: sale.sale_number,
-          reason,
-          total_amount: sale.total_amount,
-          refund_amount: sale.total_amount,
-          items: items.map((i) => ({ item_name: i.item_name, quantity: i.quantity, restocked: true })),
-        })
-      ]
-    );
+        saleNumber: sale.sale_number,
+        amount: sale.total_amount,
+        refundAmount: sale.total_amount,
+        voidReason: reason,
+        itemCount: items.length,
+      },
+      executor: client,
+    });
 
     await client.query('COMMIT');
 
@@ -995,27 +1053,34 @@ exports.returnSale = async (saleId, returnedBy, { reason = null, items = [] } = 
     );
 
     // Create audit log
-    await client.query(
-      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, previous_status, new_status, details)
-       VALUES ($1, 'RETURN', 'pos', $2, 'completed', 'returned', $3)`,
-      [
-        returnedBy,
+    await require('./auditService').logPosEvent({
+      userId: returnedBy,
+      action: 'RETURN',
+      entityId: saleId,
+      status: 'returned',
+      previousStatus: 'completed',
+      details: {
+        sale_number: sale.sale_number,
+        reason,
+        refund_amount: totalRefund,
+        items: returnRecords.map((r) => ({
+          item_name: saleItemsById.get(String(r.item_id))?.item_name || 'Item',
+          quantity: r.quantity,
+          item_condition: r.item_condition,
+          restocked: r.restocked,
+          inventory_before: r.inventory_before,
+          inventory_after: r.inventory_after,
+        })),
+      },
+      context: {
         saleId,
-        JSON.stringify({
-          sale_number: sale.sale_number,
-          reason,
-          refund_amount: totalRefund,
-          items: returnRecords.map((r) => ({
-            item_name: saleItemsById.get(String(r.item_id))?.item_name || 'Item',
-            quantity: r.quantity,
-            item_condition: r.item_condition,
-            restocked: r.restocked,
-            inventory_before: r.inventory_before,
-            inventory_after: r.inventory_after,
-          })),
-        })
-      ]
-    );
+        saleNumber: sale.sale_number,
+        refundAmount: totalRefund,
+        returnReason: reason,
+        returnedItemCount: returnRecords.length,
+      },
+      executor: client,
+    });
 
     await client.query('COMMIT');
 

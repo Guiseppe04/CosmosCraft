@@ -489,7 +489,7 @@ exports.calculateProjectCancellationSettlement = async (projectId, userId = null
 exports.getProjectRefundEligibility = async (projectId, userId, userRole) => {
   const pRes = await pool.query(
     `SELECT p.project_id, p.order_id, p.status, o.user_id AS customer_id, o.payment_plan,
-            o.total_amount AS order_total_amount
+            o.order_number, o.total_amount AS order_total_amount
      FROM projects p
      JOIN orders o ON o.order_id = p.order_id
      WHERE p.project_id = $1 AND p.deleted_at IS NULL`,
@@ -558,6 +558,8 @@ exports.getProjectRefundEligibility = async (projectId, userId, userRole) => {
     payment_status: latestVerified?.status || null,
     payment_id: latestVerified?.payment_id || null,
     has_build_progress: settlement.progress.has_started,
+    order_id: project.order_id,
+    order_number: project.order_number,
     settlement,
     reasons,
   };
@@ -635,17 +637,32 @@ exports.createProjectRefundRequest = async (projectId, userId, userRole, data = 
       ]
     );
 
-    await client.query(
-      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        userId,
-        'refund_requested',
-        'project',
+    await require('./auditService').logRefundEvent({
+      userId,
+      action: 'refund_requested',
+      entityId: projectId,
+      entityType: 'project',
+      status: 'pending',
+      details: {
+        refund_request_id: insertRes.rows[0].refund_request_id,
+        request_number: requestNumber,
+        amount: amountRequested,
+        reason,
+        customer_notes: data.customerNotes,
+      },
+      context: {
+        refundId: insertRes.rows[0].refund_request_id,
+        refundNumber: requestNumber,
+        orderId: eligibility.order_id,
+        orderNumber: eligibility.order_number,
         projectId,
-        JSON.stringify({ refund_request_id: insertRes.rows[0].refund_request_id, amount: amountRequested }),
-      ]
-    );
+        amount: amountRequested,
+        refundStatus: 'pending',
+        reason,
+        customerNotes: data.customerNotes,
+      },
+      executor: client,
+    });
 
     await client.query('COMMIT');
     return insertRes.rows[0];
@@ -702,17 +719,36 @@ exports.transitionRefundStatusesForPayment = async (client, orderId, newPaymentS
       [...updateValues, refund.refund_request_id]
     );
 
-    await client.query(
-      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        null,
-        nextStatus === 'pending' ? 'refund_pending_payment_verified' : 'refund_pending_payment_rejected',
-        'project',
-        refund.project_id,
-        JSON.stringify({ refund_request_id: refund.refund_request_id, from: 'pending_payment_verification', to: nextStatus, order_id: orderId }),
-      ]
+const orderRes = await client.query(
+      `SELECT order_number FROM orders WHERE order_id = $1`,
+      [orderId]
     );
+
+      await require('./auditService').logRefundEvent({
+        userId: null,
+        action: nextStatus === 'pending' ? 'refund_pending_payment_verified' : 'refund_pending_payment_rejected',
+        entityId: refund.project_id,
+        entityType: 'project',
+        status: nextStatus,
+        previousStatus: 'pending_payment_verification',
+        details: {
+          refund_request_id: refund.refund_request_id,
+          from: 'pending_payment_verification',
+          to: nextStatus,
+          order_id: orderId,
+          amount: verifiedTotal,
+        },
+        context: {
+          refundId: refund.refund_request_id,
+          refundNumber: refund.request_number,
+          orderId,
+          orderNumber: orderRes.rows[0]?.order_number,
+          projectId: refund.project_id,
+          amount: verifiedTotal,
+          refundStatus: nextStatus,
+        },
+        executor: client,
+      });
   }
 };
 

@@ -16,6 +16,81 @@ let ensureInstallmentTableReady = false;
 let ensureInstallmentTablePromise = null;
 
 /**
+ * The installment joins used when an installment event has to be audited.
+ *
+ * Without the order number, the build number and the customer, an installment
+ * payment is indistinguishable from any other payment in the trail.
+ */
+const INSTALLMENT_AUDIT_SELECT = `
+  SELECT pis.*, p.order_id, p.custom_build_id, p.title AS project_title,
+         o.user_id AS customer_id, o.user_id AS order_user_id,
+         o.total_amount AS order_total, o.order_number, o.order_type,
+         TRIM(CONCAT(COALESCE(cu.first_name, ''), ' ', COALESCE(cu.last_name, ''))) AS customer_name,
+         cu.email AS customer_email
+  FROM project_installment_schedules pis
+  JOIN projects p ON p.project_id = pis.project_id
+  LEFT JOIN orders o ON o.order_id = p.order_id
+  LEFT JOIN users cu ON cu.user_id = COALESCE(o.user_id, pis.customer_id)
+`;
+
+/**
+ * Records an installment payment event with its full transaction context.
+ */
+const logInstallmentPaymentAudit = async ({
+  client,
+  actorId,
+  action,
+  payment,
+  installment,
+  status,
+  previousStatus,
+  reason,
+  notes,
+}) => {
+  await require('./auditService').logPaymentEvent({
+    userId: actorId || null,
+    action,
+    entityId: payment?.payment_id || installment?.order_id || null,
+    status,
+    previousStatus,
+    details: {
+      amount: payment?.amount ?? installment?.amount ?? null,
+      currency: payment?.currency ?? 'PHP',
+      method: payment?.method ?? null,
+      reference_number: payment?.reference_number ?? null,
+      payment_type: 'installment',
+      installment_number: installment?.installment_number ?? null,
+      schedule_id: installment?.schedule_id ?? null,
+      reason: reason || null,
+      notes: notes || null,
+      proof_provided: Boolean(payment?.proof_url),
+    },
+    context: {
+      paymentId: payment?.payment_id ?? null,
+      amount: payment?.amount ?? installment?.amount ?? null,
+      currency: payment?.currency ?? 'PHP',
+      method: payment?.method ?? null,
+      referenceNumber: payment?.reference_number ?? null,
+      rejectionReason: reason || null,
+      paymentStatus: status,
+      paymentType: 'installment',
+      installmentNumber: installment?.installment_number ?? null,
+      proofProvided: Boolean(payment?.proof_url),
+      orderId: installment?.order_id ?? null,
+      orderNumber: installment?.order_number ?? null,
+      orderType: installment?.order_type ?? null,
+      totalAmount: installment?.order_total ?? null,
+      customerName: installment?.customer_name ?? null,
+      customerEmail: installment?.customer_email ?? null,
+      projectId: installment?.project_id ?? null,
+      projectNumber: installment?.custom_build_id ?? null,
+      projectTitle: installment?.project_title ?? null,
+    },
+    executor: client || null,
+  });
+};
+
+/**
  * Ensure the project_installment_schedules table exists.
  * This is a safety net in case the migration hasn't been run.
  */
@@ -150,10 +225,15 @@ exports.submitCustomerInstallmentPayment = async ({
 
     // 1. Get the installment and project/order info
     const instRes = await client.query(
-      `SELECT pis.*, p.order_id, o.user_id AS customer_id, o.user_id AS order_user_id, o.total_amount AS order_total, o.order_number
+      `SELECT pis.*, p.order_id, p.custom_build_id, p.title AS project_title,
+              o.user_id AS customer_id, o.user_id AS order_user_id,
+              o.total_amount AS order_total, o.order_number, o.order_type,
+              TRIM(CONCAT(COALESCE(cu.first_name, ''), ' ', COALESCE(cu.last_name, ''))) AS customer_name,
+              cu.email AS customer_email
        FROM project_installment_schedules pis
        JOIN projects p ON p.project_id = pis.project_id
        LEFT JOIN orders o ON o.order_id = p.order_id
+       LEFT JOIN users cu ON cu.user_id = COALESCE(o.user_id, pis.customer_id)
        WHERE pis.schedule_id = $1 AND pis.project_id = $2`,
       [scheduleId, projectId]
     );
@@ -230,6 +310,18 @@ exports.submitCustomerInstallmentPayment = async ({
       [payment.payment_id, scheduleId]
     );
 
+    // An installment payment is the most confusing entry in the trail if it only
+    // says "payment recorded": the order, the build and the installment number
+    // are all captured here.
+    await logInstallmentPaymentAudit({
+      client,
+      actorId: userId || customerId,
+      action: 'PAYMENT_RECORDED',
+      payment,
+      installment,
+      status: payment.status,
+    });
+
     await client.query('COMMIT');
 
     // Create Customer Notification
@@ -276,12 +368,12 @@ exports.verifyInstallmentPayment = async ({
     await client.query('BEGIN');
 
     // Get installment and linked payment
+    const previousPaymentRes = installment.payment_id
+      ? await client.query(`SELECT status FROM payments WHERE payment_id = $1`, [installment.payment_id])
+      : { rows: [] };
+
     const instRes = await client.query(
-      `SELECT pis.*, p.order_id, o.user_id AS customer_id, o.user_id AS order_user_id
-       FROM project_installment_schedules pis
-       JOIN projects p ON p.project_id = pis.project_id
-       LEFT JOIN orders o ON o.order_id = p.order_id
-       WHERE pis.schedule_id = $1`,
+      `${INSTALLMENT_AUDIT_SELECT} WHERE pis.schedule_id = $1`,
       [scheduleId]
     );
 
@@ -354,6 +446,16 @@ exports.verifyInstallmentPayment = async ({
 
     await client.query('COMMIT');
 
+    await logInstallmentPaymentAudit({
+      actorId: adminUserId || null,
+      action: 'PAYMENT_VERIFIED',
+      payment,
+      installment,
+      status: 'verified',
+      previousStatus: previousPaymentRes.rows[0]?.status ?? (installment.payment_id ? null : 'unlinked'),
+      notes,
+    });
+
     const updatedInstallment = updateRes.rows[0];
     updatedInstallment.payment = payment;
 
@@ -402,11 +504,7 @@ exports.rejectInstallmentPayment = async ({
     await client.query('BEGIN');
 
     const instRes = await client.query(
-      `SELECT pis.*, p.order_id, o.user_id AS customer_id, o.user_id AS order_user_id
-       FROM project_installment_schedules pis
-       JOIN projects p ON p.project_id = pis.project_id
-       LEFT JOIN orders o ON o.order_id = p.order_id
-       WHERE pis.schedule_id = $1`,
+      `${INSTALLMENT_AUDIT_SELECT} WHERE pis.schedule_id = $1`,
       [scheduleId]
     );
 
@@ -416,6 +514,10 @@ exports.rejectInstallmentPayment = async ({
 
     const installment = instRes.rows[0];
     const customerId = installment.customer_id || installment.order_user_id;
+
+    const previousPaymentRes = installment.payment_id
+      ? await client.query(`SELECT status FROM payments WHERE payment_id = $1`, [installment.payment_id])
+      : { rows: [] };
 
     let payment = null;
     if (installment.payment_id) {
@@ -455,6 +557,17 @@ exports.rejectInstallmentPayment = async ({
     );
 
     await client.query('COMMIT');
+
+    await logInstallmentPaymentAudit({
+      actorId: adminUserId || null,
+      action: 'PAYMENT_REJECTED',
+      payment,
+      installment,
+      status: 'rejected',
+      previousStatus: previousPaymentRes.rows[0]?.status ?? null,
+      reason: reason || 'Payment verification failed',
+      notes,
+    });
 
     const updatedInstallment = updateRes.rows[0];
     updatedInstallment.payment = payment;

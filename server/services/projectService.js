@@ -2056,12 +2056,80 @@ exports.assignTeam = async (projectId, userIds) => {
 
 // ─── PROJECT TRACKING & TASKS ───────────────────────────────────────────────
 
-const logActivity = async (client, projectId, userId, actionType, details) => {
-  await client.query(
-    `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [userId, actionType, 'project', projectId, JSON.stringify(details)]
-  );
+/**
+ * Short-lived cache of project → order/customer identity.
+ *
+ * logActivity is called inside transactions many times per minute, and the
+ * project → order → customer chain never changes for a given project, so the
+ * lookup is cached briefly instead of running an extra query per event.
+ */
+const projectAuditContextCache = new Map();
+const PROJECT_CONTEXT_TTL_MS = 60_000;
+
+const readProjectAuditContext = async (client, projectId) => {
+  if (!projectId) return {};
+
+  const cached = projectAuditContextCache.get(projectId);
+  if (cached && Date.now() - cached.at < PROJECT_CONTEXT_TTL_MS) return cached.value;
+
+  let value = {};
+  try {
+    const { rows } = await client.query(
+      `SELECT p.project_id, p.order_id, p.order_number, p.title, p.body_model,
+              p.customer_id,
+              COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '') AS customer_name,
+              c.email AS customer_email
+       FROM projects p
+       LEFT JOIN users c ON c.user_id = p.customer_id
+       WHERE p.project_id = $1`,
+      [projectId]
+    );
+    const row = rows[0];
+    if (row) {
+      value = {
+        projectId: row.project_id,
+        orderId: row.order_id,
+        orderNumber: row.order_number,
+        projectTitle: row.title,
+        bodyModel: row.body_model,
+        customerName: row.customer_name,
+        customerEmail: row.customer_email,
+      };
+    }
+  } catch (err) {
+    // A failed lookup must never break the surrounding transaction.
+    console.warn('Could not resolve project audit context:', err.message);
+    return {};
+  }
+
+  projectAuditContextCache.set(projectId, { at: Date.now(), value });
+  return value;
+};
+
+/**
+ * Records a custom-guitar-build event.
+ *
+ * The project, its order number and the customer are resolved automatically so
+ * every project event in the admin audit trail is traceable to a transaction
+ * instead of showing a bare UUID.
+ */
+const logActivity = async (client, projectId, userId, actionType, details, context = {}) => {
+  const auditService = require('./auditService');
+  const resolved = await readProjectAuditContext(client, projectId);
+  const previousStatus = details?.previous_status || details?.old_status;
+  const newStatus = details?.new_status || details?.refund_status || details?.status;
+
+  await auditService.writeAudit({
+    user_id: userId,
+    action: actionType,
+    entity_type: 'project',
+    entity_id: projectId,
+    previous_status: previousStatus,
+    new_status: newStatus,
+    details,
+    context: require('./auditContext').projectContext({ ...resolved, ...context }),
+    executor: client,
+  });
 };
 
 exports.getProjectRequiredParts = async (projectId) => {
@@ -3074,24 +3142,10 @@ const ensureProjectHoldCancelColumns = async () => {
   try {
     // Always ensure 'on_hold' is a valid value in the project_status_enum
     await pool.query(`ALTER TYPE project_status_enum ADD VALUE IF NOT EXISTS 'on_hold'`).catch(() => {});
-    // Ensure audit_logs action check constraint allows hold/cancel related actions
-    await pool.query(`
-      ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_action_check;
-    `).catch(() => {});
-    await pool.query(`
-      ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_check
-        CHECK (action IN (
-          'project_claimed', 'project_unclaimed', 'project_reassigned', 'project_cancelled',
-          'project_resumed', 'build_released',
-          'hold_requested', 'hold_approved', 'hold_rejected',
-          'cancel_requested', 'cancel_approved', 'cancel_rejected',
-          'milestone_created', 'milestone_updated', 'milestone_deleted',
-          'subtask_created', 'subtask_deleted', 'subtask_status_changed',
-          'fulfillment_updated',
-          'refund_requested', 'refund_approved', 'refund_rejected',
-          'refund_processing', 'refund_refunded'
-        ));
-    `).catch(() => {});
+    // audit_logs.action is intentionally left unconstrained: the action
+    // vocabulary is open-ended (project, payment, inventory, POS, fulfilment
+    // events all share this table) and a CHECK list here silently rejects
+    // every event type it does not know about.
     // Ensure cancel_address_id and cancel_address_snapshot exist
     await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS cancel_address_id UUID REFERENCES addresses(address_id) ON DELETE SET NULL`).catch(() => {});
     await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS cancel_address_snapshot JSONB`).catch(() => {});

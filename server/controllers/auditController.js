@@ -3,9 +3,25 @@ const { AppError } = require('../middleware/errorHandler');
 
 exports.getAuditLogs = async (req, res, next) => {
   try {
-    const { entity_type, user_id, action, start_date, end_date, limit = 50, offset = 0 } = req.query;
+    const {
+      entity_type,
+      user_id,
+      action,
+      start_date,
+      end_date,
+      search,
+      limit = 50,
+      offset = 0,
+    } = req.query;
     const result = await auditService.getAuditLogs({
-      entity_type, user_id, action, start_date, end_date, limit, offset
+      entity_type,
+      user_id,
+      action,
+      start_date,
+      end_date,
+      search,
+      limit,
+      offset,
     });
     res.json({
       status: 'success',
@@ -15,8 +31,17 @@ exports.getAuditLogs = async (req, res, next) => {
         limit: result.limit,
         offset: result.offset,
         pages: Math.ceil(result.total / result.limit),
-      }
+      },
     });
+  } catch (err) { next(err); }
+};
+
+// Distinct actions present in the trail, so the admin filter only offers values
+// that can actually return results.
+exports.getAuditActions = async (req, res, next) => {
+  try {
+    const actions = await auditService.getAuditActions();
+    res.json({ status: 'success', data: actions.map((row) => row.action) });
   } catch (err) { next(err); }
 };
 
@@ -62,13 +87,8 @@ exports.getActivitySummary = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-exports.cleanupOldLogs = async (req, res, next) => {
-  try {
-    if (!['admin', 'super_admin'].includes(req.user.role)) {
-      throw new AppError('Admin access required', 403);
-    }
-    const { days = 90 } = req.query;
-    const result = await auditService.cleanupOldLogs(parseInt(days));
-    res.json({ status: 'success', ...result });
-  } catch (err) { next(err); }
-};
+/**
+ * Audit history is append-only: there is deliberately no update, edit or delete
+ * endpoint. Exposing one would let an administrator rewrite the very trail used
+ * to investigate them.
+ */
