@@ -427,6 +427,32 @@ function appointmentContext({
   });
 }
 
+/**
+ * Booking-schedule context: a date the shop will not accept bookings on, or a
+ * holiday that was reopened. The date itself is the human-readable identifier
+ * (there is no booking number), so it travels with the audit row and is what an
+ * admin searches for later.
+ */
+function scheduleContext({
+  date,
+  reason,
+  previousReason,
+  closureType,
+  isOpenOverride,
+  isRecurring,
+  affectedDate,
+} = {}) {
+  return compactContext({
+    date,
+    reason,
+    previous_reason: previousReason,
+    closure_type: closureType,
+    is_open_override: isOpenOverride,
+    is_recurring: isRecurring,
+    affected_date: affectedDate,
+  });
+}
+
 /** Point-of-sale receipt / void / return context. */
 function posContext({
   saleId,
@@ -523,6 +549,7 @@ module.exports = {
   inventoryContext,
   refundContext,
   appointmentContext,
+  scheduleContext,
   posContext,
   userContext,
   fulfillmentContext,

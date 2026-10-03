@@ -8,6 +8,7 @@ const appointmentService = require('../services/appointmentService');
 const { AppError } = require('../middleware/errorHandler');
 const { appointmentValidation } = require('../utils/appointmentValidation');
 const socketService = require('../services/socketService');
+const auditService = require('../services/auditService');
 
 // ─── HELPER: VALIDATION ──────────────────────────────────────────────────────
 
@@ -829,6 +830,57 @@ const broadcastScheduleChange = (action, date) => {
 };
 
 /**
+ * Records who changed the shop's bookable calendar.
+ *
+ * Never throws: the audit write runs on its own connection (the schedule tables
+ * are not part of a larger transaction here), and losing the trail must not roll
+ * back or fail a change the admin already made.
+ */
+const logScheduleChange = async ({ req, action, entry, previousEntry, reason, closureType }) => {
+  try {
+    const previousReason = previousEntry?.reason || null;
+    const nextReason = reason ?? entry?.reason ?? null;
+
+    // "Does this record exist" means opposite things for the two closure types:
+    // an unavailable_dates row is a closure, while an open-override row is the
+    // holiday being reopened for business.
+    const bookability = closureType === 'holiday_override'
+      ? { present: 'open', absent: 'closed' }
+      : { present: 'closed', absent: 'open' };
+
+    await auditService.logScheduleEvent({
+      userId: req.user?.user_id || null,
+      action,
+      entityId: entry?.id || previousEntry?.id || null,
+      status: entry ? bookability.present : bookability.absent,
+      previousStatus: previousEntry ? bookability.present : bookability.absent,
+      details: {
+        date: entry?.date || previousEntry?.date || null,
+        reason: nextReason,
+        previous_reason: previousReason,
+        closure_type: closureType,
+        is_open_override: entry?.is_open_override ?? previousEntry?.is_open_override ?? null,
+      },
+      context: {
+        date: entry?.date || previousEntry?.date || null,
+        reason: nextReason,
+        previousReason,
+        closureType,
+        isOpenOverride: entry?.is_open_override ?? previousEntry?.is_open_override ?? null,
+        isRecurring: entry?.is_recurring ?? previousEntry?.is_recurring ?? null,
+        affectedDate: entry?.date || previousEntry?.date || null,
+      },
+      changes:
+        previousReason !== nextReason
+          ? { reason: { from: previousReason, to: nextReason } }
+          : undefined,
+    });
+  } catch (auditErr) {
+    console.error('[audit] failed to record schedule change:', auditErr.message);
+  }
+};
+
+/**
  * POST /appointments/unavailable-dates
  * Add unavailable date
  * Access: Admin/Staff only
@@ -841,11 +893,24 @@ exports.addUnavailableDate = async (req, res, next) => {
       throw new AppError('date is required', 400);
     }
 
+    // Captured first so an upsert over an already-closed date still records what
+    // the entry looked like before.
+    const previousEntry = await appointmentService.getScheduleEntry(date);
+
     const result = await appointmentService.addUnavailableDate(
       date,
       reason,
       req.user.user_id
     );
+
+    await logScheduleChange({
+      req,
+      action: previousEntry ? 'SCHEDULE_DATE_RECLOSED' : 'SCHEDULE_DATE_CLOSED',
+      entry: result,
+      previousEntry,
+      reason: result?.reason || reason || null,
+      closureType: 'unavailable',
+    });
 
     broadcastScheduleChange('unavailable_date_added', result?.date || date);
 
@@ -870,7 +935,20 @@ exports.removeUnavailableDate = async (req, res, next) => {
   try {
     const { id } = req.params;
 
+    // Read before the delete: the row is gone afterwards, and the audit row
+    // still needs the date and the reason that was in effect.
+    const previousEntry = await appointmentService.getScheduleEntry(id);
+
     const result = await appointmentService.removeUnavailableDate(id);
+
+    await logScheduleChange({
+      req,
+      action: 'SCHEDULE_DATE_REOPENED',
+      entry: null,
+      previousEntry: result || previousEntry,
+      reason: null,
+      closureType: 'unavailable',
+    });
 
     broadcastScheduleChange('unavailable_date_removed', result?.date);
 
@@ -915,7 +993,18 @@ exports.addOpenOverride = async (req, res, next) => {
     const { date } = req.body;
     if (!date) throw new AppError('date is required', 400);
 
+    const previousEntry = await appointmentService.getScheduleEntry(date);
+
     const result = await appointmentService.addOpenOverride(date, req.user.user_id);
+
+    await logScheduleChange({
+      req,
+      action: 'SCHEDULE_HOLIDAY_REOPENED',
+      entry: result,
+      previousEntry,
+      reason: result?.reason || 'Holiday open override',
+      closureType: 'holiday_override',
+    });
 
     broadcastScheduleChange('open_override_added', result?.date || date);
 
@@ -937,8 +1026,18 @@ exports.addOpenOverride = async (req, res, next) => {
 exports.removeOpenOverride = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const previousEntry = await appointmentService.getScheduleEntry(id);
     const result = await appointmentService.removeOpenOverride(id);
     if (!result) throw new AppError('Override not found', 404);
+
+    await logScheduleChange({
+      req,
+      action: 'SCHEDULE_HOLIDAY_RECLOSED',
+      entry: null,
+      previousEntry: result || previousEntry,
+      reason: null,
+      closureType: 'holiday_override',
+    });
 
     broadcastScheduleChange('open_override_removed', result?.date);
 

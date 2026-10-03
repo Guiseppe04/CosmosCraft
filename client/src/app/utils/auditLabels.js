@@ -33,6 +33,7 @@ const ENTITY_TYPE_LABELS = {
   user: 'User',
   appointments: 'Appointment',
   appointment: 'Appointment',
+  appointment_schedule: 'Booking Schedule',
   cart: 'Cart',
   customizations: 'Customization',
   customization: 'Customization',
@@ -143,6 +144,19 @@ const APPOINTMENT_ACTION_LABELS = {
   CANCELED: 'Appointment Cancelled',
   NO_SHOW: 'Marked No-Show',
   RESCHEDULED: 'Appointment Rescheduled',
+}
+
+/**
+ * Booking-calendar actions. These close or reopen a date rather than touching a
+ * booking, so they are listed explicitly instead of sharing the appointment
+ * status labels above.
+ */
+const SCHEDULE_ACTION_LABELS = {
+  SCHEDULE_DATE_CLOSED: 'Booking Date Closed',
+  SCHEDULE_DATE_RECLOSED: 'Booking Date Re-closed',
+  SCHEDULE_DATE_REOPENED: 'Booking Date Reopened',
+  SCHEDULE_HOLIDAY_REOPENED: 'Holiday Reopened for Bookings',
+  SCHEDULE_HOLIDAY_RECLOSED: 'Holiday Closed Again',
 }
 
 /**
@@ -390,6 +404,7 @@ export function formatStatus(status) {
 export function formatAction(action) {
   const raw = cleanText(action)
   if (!raw) return 'Activity'
+  if (SCHEDULE_ACTION_LABELS[raw]) return SCHEDULE_ACTION_LABELS[raw]
   if (ACTION_LABELS[raw]) return ACTION_LABELS[raw]
   if (ACTION_LABELS[raw.toUpperCase()]) return ACTION_LABELS[raw.toUpperCase()]
 

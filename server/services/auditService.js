@@ -11,6 +11,7 @@ const {
   inventoryContext,
   refundContext,
   appointmentContext,
+  scheduleContext,
   posContext,
   userContext,
   fulfillmentContext,
@@ -37,6 +38,10 @@ const MODULES = {
   POS: 'pos',
   FULFILLMENT: 'fulfillment',
   REFUND: 'refund',
+  // Shop-closure records (a date closed for bookings, or a reopened holiday).
+  // Kept apart from APPOINTMENTS so filtering the appointment trail is not
+  // buried in schedule maintenance.
+  APPOINTMENT_SCHEDULE: 'appointment_schedule',
 };
 
 const ACTIONS = {
@@ -428,6 +433,28 @@ async function logAppointmentEvent({ userId, action, entityId, status, previousS
   });
 }
 
+/**
+ * Booking-schedule events: closing a date for bookings, reopening a holiday,
+ * or restoring a date. Recorded as its own module because the date — not a
+ * booking reference — is what identifies the record, and because shop-closure
+ * maintenance is a different question from "what happened to appointment X?".
+ */
+async function logScheduleEvent({ userId, action, entityId, status, previousStatus, details, context, changes, executor, ipAddress }) {
+  return writeAudit({
+    user_id: userId,
+    action,
+    entity_type: MODULES.APPOINTMENT_SCHEDULE,
+    entity_id: entityId,
+    previous_status: previousStatus,
+    new_status: status,
+    details,
+    context: scheduleContext(context),
+    changes,
+    executor,
+    ip_address: ipAddress,
+  });
+}
+
 async function logUserEvent({ userId, action, entityId, details, context, changes, executor, ipAddress }) {
   return writeAudit({
     user_id: userId,
@@ -726,8 +753,9 @@ module.exports = {
   logProductEvent,
   logStockMovement,
   logRefundEvent,
-  logAppointmentEvent,
-  logUserEvent,
+logAppointmentEvent,
+logScheduleEvent,
+logUserEvent,
   logFulfillmentEvent,
   logPosEvent,
   // reads

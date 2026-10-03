@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import {
   History, Search, Filter, ChevronDown, ChevronLeft, ChevronRight, Eye,
   X, ArrowRight, Briefcase, ShoppingBag, CreditCard, Truck, Wallet,
-  Package, Layers, Wrench, Shield,
+  Package, Layers, Wrench, Shield, CalendarOff,
 } from 'lucide-react'
 import { adminApi } from '../../../../utils/adminApi'
 import { SectionLoader } from '../shared/SectionLoader'
@@ -29,6 +29,7 @@ const MODULE_OPTIONS = [
   { value: 'products', label: 'Products', icon: Package },
   { value: 'guitar_builder_parts', label: 'Guitar Parts', icon: Layers },
   { value: 'appointments', label: 'Appointments', icon: Truck },
+  { value: 'appointment_schedule', label: 'Booking Schedule', icon: CalendarOff },
   { value: 'services', label: 'Services', icon: Wrench },
   { value: 'users', label: 'Users', icon: Shield },
 ]
@@ -44,6 +45,7 @@ const MODULE_ICONS = {
   products: Package,
   guitar_builder_parts: Layers,
   appointments: Truck,
+  appointment_schedule: CalendarOff,
   services: Wrench,
   users: Shield,
 }

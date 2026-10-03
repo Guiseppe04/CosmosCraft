@@ -1187,6 +1187,33 @@ exports.removeUnavailableDate = async (dateId) => {
   return result.rows[0];
 };
 
+/**
+ * Reads one schedule entry by date or by id.
+ *
+ * Used before a mutation so the audit row can record what the entry looked like
+ * beforehand (an upsert of an already-closed date still produces a real
+ * before -> after change instead of a bare "updated").
+ */
+exports.getScheduleEntry = async (dateOrId) => {
+  const isDate = /^\d{4}-\d{2}-\d{2}$/.test(String(dateOrId).trim());
+  const result = await pool.query(
+    `SELECT
+       id,
+       date::text AS date,
+       reason,
+       is_recurring,
+       is_open_override,
+       created_by,
+       created_at,
+       updated_at
+     FROM unavailable_dates
+     WHERE ${isDate ? 'date = $1::timestamptz::date' : 'id = $1'}
+     LIMIT 1`,
+    [dateOrId]
+  );
+  return result.rows[0] || null;
+};
+
 exports.isDateUnavailable = async (date) => {
   const result = await pool.query(
     `SELECT id FROM unavailable_dates WHERE date = ($1::timestamptz)::date`,

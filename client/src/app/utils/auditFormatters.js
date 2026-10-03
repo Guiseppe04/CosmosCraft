@@ -908,6 +908,83 @@ export function formatAppointmentAudit(log = {}) {
   return result
 }
 
+/**
+ * Shop booking calendar: a date closed for bookings, a holiday reopened, or a
+ * closure lifted. There is no booking reference here — the date is the
+ * identifier — so it is rendered as the subject of the entry.
+ */
+export function formatScheduleAudit(log = {}) {
+  const context = getContext(log)
+  const details = getDetails(log)
+  const result = emptyResult('appointment_schedule')
+
+  const date = pick(context, details, ['date', 'affected_date'])
+  const reason = pick(context, details, ['reason'])
+  const previousReason = pick(context, details, ['previous_reason'])
+  const closureType = pick(context, details, ['closure_type'])
+  const isRecurring = pick(context, details, ['is_recurring'])
+  const from = text(log.previous_status)
+  const to = text(log.new_status)
+
+  const label = formatScheduleDate(date)
+  // Decided by the closure type, not the resulting status: a reopened closure
+  // is also "open" but it is still a plain unavailable date, not a holiday.
+  const isHolidayOverride = closureType === 'holiday_override'
+
+  if (log.action === 'SCHEDULE_DATE_CLOSED' || log.action === 'SCHEDULE_DATE_RECLOSED') {
+    const reclosed = log.action === 'SCHEDULE_DATE_RECLOSED'
+    result.title = reclosed ? 'Booking Date Re-closed' : 'Booking Date Closed'
+    result.tone = 'danger'
+    result.description = reason
+      ? `${label} was marked unavailable for bookings — ${reason}.`
+      : `${label} was marked unavailable for bookings.`
+  } else if (log.action === 'SCHEDULE_DATE_REOPENED') {
+    result.title = 'Booking Date Reopened'
+    result.tone = 'success'
+    result.description = `${label} is bookable again${
+      previousReason ? ` — the closure “${previousReason}” was removed` : ''
+    }.`
+  } else if (log.action === 'SCHEDULE_HOLIDAY_REOPENED') {
+    result.title = 'Holiday Reopened for Bookings'
+    result.tone = 'success'
+    result.description = `${label} is a holiday but is open for bookings.`
+  } else if (log.action === 'SCHEDULE_HOLIDAY_RECLOSED') {
+    result.title = 'Holiday Closed Again'
+    result.tone = 'danger'
+    result.description = `${label} is back to closed for bookings.`
+  } else {
+    result.title = 'Booking Schedule Updated'
+    result.tone = 'gold'
+    result.description = label
+      ? `The booking calendar changed for ${label}.`
+      : 'The booking calendar was updated.'
+  }
+
+  if (label) {
+    result.entity = { label: isHolidayOverride ? 'Holiday' : 'Date', value: label, mono: false }
+  }
+
+  if (from && to && from !== to) {
+    result.change = { label: 'Bookability', from: formatStatus(from), to: formatStatus(to), delta: null }
+  } else if (previousReason && reason && previousReason !== reason) {
+    result.change = { label: 'Reason', from: previousReason, to: reason, delta: null }
+  }
+
+  if (isRecurring === true || isRecurring === 'true') {
+    result.metadata.push({ label: 'Recurring', value: 'Yes — applies to every occurrence' })
+  }
+
+  if (reason) result.metadata.push({ label: 'Reason', value: reason })
+  // Only worth listing when the Changes section is not already showing it.
+  if (previousReason && previousReason !== reason && !result.change) {
+    result.metadata.push({ label: 'Previous Reason', value: previousReason })
+  }
+
+  result.secondary = joinFacts([label, reason])
+
+  return result
+}
+
 /** Accounts and role-based access changes. */
 export function formatUserAudit(log = {}) {
   const context = getContext(log)
@@ -1123,6 +1200,7 @@ const FORMATTERS = {
   refunds: formatRefundAudit,
   appointment: formatAppointmentAudit,
   appointments: formatAppointmentAudit,
+  appointment_schedule: formatScheduleAudit,
   users: formatUserAudit,
   user: formatUserAudit,
   rbac: formatUserAudit,
@@ -1166,4 +1244,24 @@ const shortId = (value) => {
   const raw = text(value)
   if (!raw) return null
   return /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(raw) ? raw.slice(0, 8).toUpperCase() : raw
+}
+
+/**
+ * `2026-11-11` → `November 11, 2026`.
+ *
+ * Built from the year/month/day parts rather than `new Date(raw)`, because that
+ * parses as UTC midnight and would show the previous day west of Greenwich.
+ */
+function formatScheduleDate(value) {
+  const raw = text(value)
+  if (!raw) return null
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw)
+  if (!match) return raw
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  if (Number.isNaN(date.getTime())) return raw
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
 }
