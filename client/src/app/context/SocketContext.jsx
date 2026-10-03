@@ -43,6 +43,16 @@ export function SocketProvider({ children }) {
      * `user?.id` and `isAuthenticated` stay in the dependency list on purpose:
      * the room set is fixed at connect time, so signing in or out must tear the
      * socket down and reconnect it rather than reuse the anonymous connection.
+     *
+     * Socket.IO server URL
+     *
+     * Development:
+     * VITE_SOCKET_URL=http://localhost:5000
+     *
+     * Production / Coolify:
+     * VITE_SOCKET_URL=https://api.yourdomain.com
+     *
+     * Socket.IO URL must NOT contain /api.
      */
     const socketUrl =
       import.meta.env.VITE_SOCKET_URL ||
@@ -59,7 +69,7 @@ export function SocketProvider({ children }) {
     /**
      * Get the current authentication token.
      */
-    const token = getAuthToken()
+    const token = isAuthenticated ? getAuthToken() : null
 
     /**
      * Create Socket.IO connection.
@@ -204,7 +214,7 @@ export function SocketProvider({ children }) {
      * Cleanup.
      *
      * This runs when:
-     * - user logs out
+     * - user logs out (reconnect as a guest)
      * - user changes
      * - authentication state changes
      * - SocketProvider unmounts

@@ -624,6 +624,8 @@ export function DashboardPage() {
 
   const [myAppointments, setMyAppointments] = useState([])
   const [isAppointmentsLoading, setIsAppointmentsLoading] = useState(false)
+  const [isPurchasesLoading, setIsPurchasesLoading] = useState(false)
+  const purchasesRequestsRef = useRef(0)
   const [appointmentSearch, setAppointmentSearch] = useState('')
   const [appointmentSort, setAppointmentSort] = useState('created_latest')
   const [appointmentStatusFilter, setAppointmentStatusFilter] = useState('all')
@@ -766,6 +768,8 @@ export function DashboardPage() {
 
   const fetchMyOrders = () => {
     const requestId = ++ordersSyncRef.current
+    purchasesRequestsRef.current += 1
+    setIsPurchasesLoading(true)
 
     adminApi.getMyOrders()
       .then(res => {
@@ -775,6 +779,10 @@ export function DashboardPage() {
         setMyOrders(res.data?.orders || [])
       })
       .catch(console.error)
+      .finally(() => {
+        purchasesRequestsRef.current -= 1
+        if (purchasesRequestsRef.current === 0) setIsPurchasesLoading(false)
+      })
   }
 
   /**
@@ -2107,7 +2115,13 @@ const filteredOrders = myOrders.filter(order => {
             </div>
           </div>
 
-          {myOrders.length === 0 ? (
+          {isPurchasesLoading ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center" role="status">
+              <Loader2 className="w-8 h-8 animate-spin text-[var(--gold-primary)] mb-3" />
+              <p className="text-white font-medium text-sm">Loading your Orders...</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">Please wait while we fetch your orders.</p>
+            </div>
+          ) : myOrders.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10">
               <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
                 <Package className="w-8 h-8 text-[var(--text-muted)]" />

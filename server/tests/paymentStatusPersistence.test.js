@@ -5,8 +5,10 @@ const orderService = require('../services/orderService')
 async function run() {
   const originalConnect = database.pool.connect
   const auditService = require('../services/auditService')
-  const originalLogAction = auditService.logAction
-  auditService.logAction = async () => {}
+  const originalLogPaymentEvent = auditService.logPaymentEvent
+  const originalLogOrderEvent = auditService.logOrderEvent
+  auditService.logPaymentEvent = async () => {}
+  auditService.logOrderEvent = async () => {}
   try {
     for (const target of ['under_review', 'failed']) {
       let storedStatus = target === 'failed' ? 'approved' : 'proof_submitted'
@@ -14,12 +16,12 @@ async function run() {
       database.pool.connect = async () => ({
         async query(sql, params = []) {
           if (sql.includes('AS payment_method')) {
-            return { rows: [{ payment_status: storedStatus, status: 'pending', payment_method: 'gcash' }] }
+            return { rows: [{ payment_status: storedStatus, status: 'pending', payment_method: 'gcash', payment_id: 'payment-1' }] }
           }
           if (sql.startsWith('SELECT payment_id')) return { rows: [{ payment_id: 'payment-1' }] }
           if (sql.startsWith('UPDATE orders')) {
             storedStatus = params[0]
-            return { rows: [{ order_id: 'order-1', payment_status: storedStatus }] }
+            return { rows: [{ order_id: 'order-1', status: 'pending', payment_status: storedStatus }] }
           }
           if (sql.startsWith('UPDATE payments')) {
             // Simulate the existing database trigger overwriting the order.
@@ -37,7 +39,8 @@ async function run() {
     }
   } finally {
     database.pool.connect = originalConnect
-    auditService.logAction = originalLogAction
+    auditService.logPaymentEvent = originalLogPaymentEvent
+    auditService.logOrderEvent = originalLogOrderEvent
   }
 }
 run().then(() => console.log('payment status persistence test passed')).catch(error => {

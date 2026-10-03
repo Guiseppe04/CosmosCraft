@@ -1374,7 +1374,8 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
       return null
     }
     
-    const currentStatus = orderRes.rows[0].payment_status
+    const auditSource = orderRes.rows[0]
+    const currentStatus = auditSource.payment_status
     const resolvedPaymentMethod = resolveOrderPaymentMethod(
       { notes: orderRes.rows[0].notes, payment_method: orderRes.rows[0].payment_method },
       null
@@ -1497,7 +1498,6 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
     // Log to consolidated audit_logs table
     try {
       const auditService = require('./auditService');
-      const auditSource = orderRes.rows[0];
       await auditService.logPaymentEvent({
         userId: admin_user_id,
         action: status === 'approved' ? 'VERIFY' : status === 'rejected' ? 'REJECT' : 'UPDATE',
