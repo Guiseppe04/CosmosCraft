@@ -100,6 +100,7 @@ router.post('/', contactSubmissionLimiter, async (req, res) => {
       replyTo: email,
       name: fullName,
       message,
+      theme: req.body.theme === 'dark' ? 'dark' : 'light',
     });
 
     res.status(200).json({ success: true, message: 'Your message has been sent.' });

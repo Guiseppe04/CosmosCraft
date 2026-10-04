@@ -59,4 +59,16 @@ test('contact form delivery uses the updated site email', async () => {
   assert.equal(res.statusCode, 200);
   assert.equal(messages[0].to, settings.email);
   assert.equal(messages[0].replyTo, 'customer@example.test');
+  assert.equal(messages[0].theme, 'light');
+});
+
+test('contact emails follow the customer theme and default to light for unknown values', async () => {
+  for (const [theme, expected] of [['dark', 'dark'], ['light', 'light'], ['system', 'light'], ['<script>', 'light']]) {
+    const res = response();
+    await handler('post', '/')({ body: {
+      firstName: 'Test', lastName: 'Customer', email: 'customer@example.test', message: 'Theme check', theme,
+    } }, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(messages.at(-1).theme, expected);
+  }
 });
