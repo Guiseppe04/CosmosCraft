@@ -8,6 +8,7 @@ import {
   X,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useTheme } from '../context/ThemeContext.jsx'
 import { ImageWithFallback } from '../components/figma/ImageWithFallback.jsx'
 import { TestimonialCarousel } from '../components/TestimonialCarousel.jsx'
 import { FacebookIcon, InstagramIcon, TikTokIcon, YouTubeIcon, SocialMediaLink } from '../components/social/SocialMediaIcons.jsx'
@@ -126,6 +127,7 @@ const footerGroups = [
 
 export function LandingPage() {
   const { isAuthenticated, user } = useAuth()
+  const { theme } = useTheme()
   const contactInfo = useSiteContact()
   const [serviceCards, setServiceCards] = useState(() => readLandingServiceCards())
   const footerGroupsForPage = footerGroups.map((group) => group.title === 'Services'
@@ -154,7 +156,7 @@ export function LandingPage() {
       const response = await fetch(`${API}/api/contact`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(contactForm),
+        body: JSON.stringify({ ...contactForm, theme }),
       })
       const result = await response.json()
       if (!response.ok) throw new Error(result.message || 'Could not send your message')

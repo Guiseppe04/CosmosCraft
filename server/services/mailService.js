@@ -168,7 +168,7 @@ exports.sendMail = async (options) => {
   }
 };
 
-exports.sendContactMessageEmail = async ({ to, replyTo, name, message }) => {
+exports.sendContactMessageEmail = async ({ to, replyTo, name, message, theme = 'light' }) => {
   const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({
     '&': '&amp;',
     '<': '&lt;',
@@ -180,9 +180,13 @@ exports.sendContactMessageEmail = async ({ to, replyTo, name, message }) => {
   const safeReplyTo = escapeHtml(replyTo);
   const safeMessage = escapeHtml(message).replace(/\r?\n/g, '<br>');
   const replyUrl = escapeHtml(`mailto:${encodeURIComponent(replyTo).replace(/%40/g, '@')}?subject=${encodeURIComponent('Re: Your CosmosCraft inquiry')}`);
-  // Use the site's warm brown, cream and gold palette with inline email styles.
+  const emailTheme = theme === 'dark' ? 'dark' : 'light';
+  // Resolve colors on the server so email clients need no CSS variables or scripts.
+  const palette = emailTheme === 'dark'
+    ? { background: '#1D1912', surface: '#2B251B', elevated: '#3A3124', text: '#F3F3E6', muted: '#D6CFBB', border: '#514530', accent: '#EECD5C', badgeBorder: '#6B5830' }
+    : { background: '#F3F3E6', surface: '#FFFFFF', elevated: '#F7F4EC', text: '#1D1912', muted: '#655D4E', border: '#DDD5C5', accent: '#806015', badgeBorder: '#D2A63C' };
   const html = `<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="${emailTheme}">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -198,39 +202,39 @@ exports.sendContactMessageEmail = async ({ to, replyTo, name, message }) => {
       }
     </style>
   </head>
-  <body style="margin:0;padding:0;background-color:#1D1912;color:#F3F3E6;font-family:Arial,Helvetica,sans-serif;">
+  <body style="margin:0;padding:0;background-color:${palette.background};color:${palette.text};font-family:Arial,Helvetica,sans-serif;">
     <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">New website inquiry from ${safeName}. Read their message and reply directly.</div>
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#1D1912" style="background-color:#1D1912;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="${palette.background}" style="background-color:${palette.background};">
       <tr>
         <td class="email-shell" align="center" style="padding:40px 16px;">
           <!--[if mso]><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" align="center"><tr><td><![endif]-->
-          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" align="center" style="max-width:600px;table-layout:fixed;background-color:#2B251B;border:1px solid #514530;border-top:4px solid #EECD5C;border-radius:16px;border-collapse:separate;overflow:hidden;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" align="center" style="max-width:600px;table-layout:fixed;background-color:${palette.surface};border:1px solid ${palette.border};border-top:4px solid ${palette.accent};border-radius:16px;border-collapse:separate;overflow:hidden;">
             <tr>
-              <td class="email-padding" style="padding:28px 36px;border-bottom:1px solid #514530;">
-                <p style="margin:0;color:#EECD5C;font-size:24px;line-height:1.3;font-weight:700;letter-spacing:0.5px;">CosmosCraft</p>
-                <p style="margin:6px 0 0;color:#D6CFBB;font-size:10px;line-height:1.5;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Custom guitars. Crafted for you.</p>
+              <td class="email-padding" style="padding:28px 36px;border-bottom:1px solid ${palette.border};">
+                <p style="margin:0;color:${palette.accent};font-size:24px;line-height:1.3;font-weight:700;letter-spacing:0.5px;">CosmosCraft</p>
+                <p style="margin:6px 0 0;color:${palette.muted};font-size:10px;line-height:1.5;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Custom guitars. Crafted for you.</p>
               </td>
             </tr>
             <tr>
               <td class="email-padding" style="padding:30px 36px 24px;">
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;">
                   <tr>
-                    <td bgcolor="#3A3124" style="padding:7px 12px;border:1px solid #6B5830;border-radius:6px;color:#EECD5C;font-size:10px;line-height:1.4;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Website inquiry</td>
+                    <td bgcolor="${palette.elevated}" style="padding:7px 12px;border:1px solid ${palette.badgeBorder};border-radius:6px;color:${palette.accent};font-size:10px;line-height:1.4;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Website inquiry</td>
                   </tr>
                 </table>
-                <h1 class="email-title" style="margin:18px 0 10px;color:#F3F3E6;font-size:32px;line-height:1.2;font-weight:700;letter-spacing:-0.5px;">A new conversation<br>starts here.</h1>
-                <p style="margin:0;color:#D6CFBB;font-size:14px;line-height:1.7;">Someone reached out through Contact Us. Their details and message are ready for your review.</p>
+                <h1 class="email-title" style="margin:18px 0 10px;color:${palette.text};font-size:32px;line-height:1.2;font-weight:700;letter-spacing:-0.5px;">A new conversation<br>starts here.</h1>
+                <p style="margin:0;color:${palette.muted};font-size:14px;line-height:1.7;">Someone reached out through Contact Us. Their details and message are ready for your review.</p>
               </td>
             </tr>
             <tr>
               <td class="email-padding" style="padding:0 36px 24px;">
-                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="table-layout:fixed;background-color:#3A3124;border:1px solid #514530;border-radius:12px;border-collapse:separate;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="table-layout:fixed;background-color:${palette.elevated};border:1px solid ${palette.border};border-radius:12px;border-collapse:separate;">
                   <tr>
                     <td style="padding:20px 22px;word-wrap:break-word;overflow-wrap:break-word;">
-                      <p style="margin:0 0 7px;color:#D6CFBB;font-size:10px;line-height:1.5;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">From</p>
-                      <p style="margin:0;color:#F3F3E6;font-size:18px;line-height:1.5;font-weight:700;">${safeName}</p>
-                      <p style="margin:16px 0 7px;color:#D6CFBB;font-size:10px;line-height:1.5;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Email address</p>
-                      <p style="margin:0;font-size:14px;line-height:1.6;word-break:break-all;"><a href="${replyUrl}" style="color:#EECD5C;text-decoration:underline;">${safeReplyTo}</a></p>
+                      <p style="margin:0 0 7px;color:${palette.muted};font-size:10px;line-height:1.5;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">From</p>
+                      <p style="margin:0;color:${palette.text};font-size:18px;line-height:1.5;font-weight:700;">${safeName}</p>
+                      <p style="margin:16px 0 7px;color:${palette.muted};font-size:10px;line-height:1.5;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Email address</p>
+                      <p style="margin:0;font-size:14px;line-height:1.6;word-break:break-all;"><a href="${replyUrl}" style="color:${palette.accent};text-decoration:underline;">${safeReplyTo}</a></p>
                     </td>
                   </tr>
                 </table>
@@ -238,10 +242,10 @@ exports.sendContactMessageEmail = async ({ to, replyTo, name, message }) => {
             </tr>
             <tr>
               <td class="email-padding" style="padding:0 36px 28px;">
-                <p style="margin:0 0 12px;color:#D6CFBB;font-size:10px;line-height:1.5;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Customer message</p>
-                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="table-layout:fixed;background-color:#1D1912;border:1px solid #514530;border-left:3px solid #EECD5C;border-radius:0 10px 10px 0;border-collapse:separate;">
+                <p style="margin:0 0 12px;color:${palette.muted};font-size:10px;line-height:1.5;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Customer message</p>
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="table-layout:fixed;background-color:${palette.background};border:1px solid ${palette.border};border-left:3px solid ${palette.accent};border-radius:0 10px 10px 0;border-collapse:separate;">
                   <tr>
-                    <td style="padding:22px;color:#F3F3E6;font-size:15px;line-height:1.8;word-wrap:break-word;overflow-wrap:break-word;">
+                    <td style="padding:22px;color:${palette.text};font-size:15px;line-height:1.8;word-wrap:break-word;overflow-wrap:break-word;">
                       <p style="margin:0;">${safeMessage}</p>
                     </td>
                   </tr>
@@ -257,13 +261,13 @@ exports.sendContactMessageEmail = async ({ to, replyTo, name, message }) => {
                     </td>
                   </tr>
                 </table>
-                <p style="margin:14px 0 0;color:#D6CFBB;font-size:12px;line-height:1.7;">Use the button above or reply to this email to contact the sender directly.</p>
+                <p style="margin:14px 0 0;color:${palette.muted};font-size:12px;line-height:1.7;">Use the button above or reply to this email to contact the sender directly.</p>
               </td>
             </tr>
             <tr>
-              <td class="email-padding" style="padding:22px 36px;border-top:1px solid #514530;">
-                <p style="margin:0;color:#EECD5C;font-size:12px;line-height:1.6;font-weight:700;">CosmosCraft &middot; Contact Us</p>
-                <p style="margin:5px 0 0;color:#D6CFBB;font-size:11px;line-height:1.7;">Sent from the CosmosCraft website contact form.</p>
+              <td class="email-padding" style="padding:22px 36px;border-top:1px solid ${palette.border};">
+                <p style="margin:0;color:${palette.accent};font-size:12px;line-height:1.6;font-weight:700;">CosmosCraft &middot; Contact Us</p>
+                <p style="margin:5px 0 0;color:${palette.muted};font-size:11px;line-height:1.7;">Sent from the CosmosCraft website contact form.</p>
               </td>
             </tr>
           </table>
