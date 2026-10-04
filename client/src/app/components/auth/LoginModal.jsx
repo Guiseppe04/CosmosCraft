@@ -109,7 +109,6 @@ export function LoginModal() {
                 <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-12 w-auto object-contain" />
               </div>
               <h2 className="text-2xl font-bold text-[var(--text-light)] mb-1">Login to CosmosCraft</h2>
-              <p className="text-sm text-[var(--text-muted)]"style={{ color: '#ef4444' }}>Sign in to continue your purchase</p>
             </div>
 
             {error && <p className="mb-4 text-sm text-red-500">{error}</p>}

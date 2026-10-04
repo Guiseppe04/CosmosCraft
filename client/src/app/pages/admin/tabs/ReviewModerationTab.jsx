@@ -18,6 +18,7 @@ import {
   X
 } from 'lucide-react'
 import { adminApi } from '../../../utils/adminApi'
+import { ConfirmModal } from '../../../components/ui/ConfirmModal'
 
 function StarRating({ rating, size = 'w-3.5 h-3.5' }) {
   return (
@@ -53,6 +54,9 @@ export default function ReviewModerationTab({ showToast = () => {}, user }) {
   // Reject / Note Modal
   const [rejectModalTarget, setRejectModalTarget] = useState(null)
   const [adminNotes, setAdminNotes] = useState('')
+
+  // Delete Confirm Modal
+  const [deleteTarget, setDeleteTarget] = useState(null)
 
   const fetchReviews = useCallback(async (page = 1) => {
     try {
@@ -115,10 +119,6 @@ export default function ReviewModerationTab({ showToast = () => {}, user }) {
   }
 
   const handleDelete = async (item) => {
-    if (!window.confirm('Are you sure you want to remove this review? This action cannot be undone.')) {
-      return
-    }
-
     setActionLoadingId(item.id)
     try {
       if (item.feedback_type === 'product') {
@@ -127,10 +127,12 @@ export default function ReviewModerationTab({ showToast = () => {}, user }) {
         await adminApi.deleteAdminCustomizationFeedback(item.id)
       }
       showToast('Review removed successfully.')
+      setDeleteTarget(null)
       fetchReviews(pagination.page)
     } catch (err) {
       console.error('Failed to delete review:', err)
       showToast(err.message || 'Failed to delete review.')
+      setDeleteTarget(null)
     } finally {
       setActionLoadingId(null)
     }
@@ -383,7 +385,7 @@ export default function ReviewModerationTab({ showToast = () => {}, user }) {
                     <button
                       type="button"
                       disabled={isLoading}
-                      onClick={() => handleDelete(item)}
+                      onClick={() => setDeleteTarget(item)}
                       className="p-1.5 rounded-xl text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                       title="Delete review"
                     >
@@ -478,6 +480,19 @@ export default function ReviewModerationTab({ showToast = () => {}, user }) {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Delete Confirm Modal */}
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="Delete Review"
+        description="Are you sure you want to remove this review? This action cannot be undone."
+        confirmLabel="Delete Review"
+        cancelLabel="Cancel"
+        variant="danger"
+        isBusy={actionLoadingId === deleteTarget?.id}
+        onConfirm={() => handleDelete(deleteTarget)}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   )
 }

@@ -31,6 +31,7 @@ import {
   deriveInventoryPartCategory,
   normalizeInventoryPartCategory,
 } from './admin/utils/partHelpers'
+import { buildProjectPaginationView } from './admin/utils/projectPagination'
 import {
   INVENTORY_PART_CATEGORY_LABELS,
   PROJECT_RULES,
@@ -55,6 +56,15 @@ function normalizeArray(payload, key) {
   if (Array.isArray(payload?.data?.[key])) return payload.data[key]
   if (Array.isArray(payload?.[key])) return payload[key]
   return []
+}
+
+// Largest page the projects endpoints accept; the staff workspace filters and pages
+// the fetched rows locally.
+const STAFF_PROJECTS_FETCH_SIZE = 100
+
+function pageRows(rows, page, pageSize) {
+  const start = (Math.max(Number(page) || 1, 1) - 1) * pageSize
+  return rows.slice(start, start + pageSize)
 }
 
 function resolveInventoryImage(item) {
@@ -121,7 +131,6 @@ export function StaffDashboard() {
 
   // ── Data Entities ─────────────────────────────────────────────────────────
   const [projects, setProjects] = useState([])
-  const [projectsPagination, setProjectsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
   const [archivedProjects, setArchivedProjects] = useState([])
   const [archivedProjectsPagination, setArchivedProjectsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
   const [projectArchiveTab, setProjectArchiveTab] = useState('active')
@@ -197,7 +206,7 @@ export function StaffDashboard() {
   const [projectCompletionFilter, setProjectCompletionFilter] = useState('all')
   const [projectSort, setProjectSort] = useState('updated')
   const [projectPage, setProjectPage] = useState(1)
-  const PROJECTS_PAGE_SIZE = 10
+  const [projectPageSize, setProjectPageSize] = useState(10)
 
   // ── Tabs Navigation List ─────────────────────────────────────────────────
   const tabs = [
@@ -374,19 +383,19 @@ export function StaffDashboard() {
     return requestPromise
   }, [debouncedSearch, showToast])
 
+  // Staff filters and pages both project lists in the browser, so the API is asked for
+  // its largest allowed page. Without an explicit page_size the endpoint silently
+  // returned its own default of 20 rows, which capped the list and left the paginator
+  // describing rows that were never rendered.
   const fetchProjects = useCallback(async () => {
     try {
       const res = await staffApi.getAllProjects({
         search: debouncedSearch,
         include_tasks: true,
+        page: 1,
+        page_size: STAFF_PROJECTS_FETCH_SIZE,
       })
-      const rows = normalizeArray(res, 'projects')
-      setProjects(rows)
-      setProjectsPagination((prev) => ({
-        ...prev,
-        total: rows.length,
-        totalPages: Math.max(1, Math.ceil(rows.length / PROJECTS_PAGE_SIZE)),
-      }))
+      setProjects(normalizeArray(res, 'projects'))
     } catch (e) {
       showToast(e.message, 'error')
     }
@@ -397,14 +406,10 @@ export function StaffDashboard() {
       const res = await adminApi.getArchivedProjects({
         search: debouncedSearch,
         include_tasks: true,
+        page: 1,
+        page_size: STAFF_PROJECTS_FETCH_SIZE,
       })
-      const rows = normalizeArray(res, 'projects')
-      setArchivedProjects(rows)
-      setArchivedProjectsPagination((prev) => ({
-        ...prev,
-        total: rows.length,
-        totalPages: Math.max(1, Math.ceil(rows.length / PROJECTS_PAGE_SIZE)),
-      }))
+      setArchivedProjects(normalizeArray(res, 'projects'))
     } catch {
       // ignore
     }
@@ -873,6 +878,44 @@ export function StaffDashboard() {
   const visibleProjects = useMemo(() => filterProjectList(projects), [filterProjectList, projects])
   const visibleArchivedProjects = useMemo(() => filterProjectList(archivedProjects), [filterProjectList, archivedProjects])
 
+  // Both paginators are derived from the rows that are actually rendered, so the
+  // "per page" value, the total and the page buttons always describe the same list.
+  const projectsPagination = useMemo(
+    () => buildProjectPaginationView({ page: projectPage, pageSize: projectPageSize, total: visibleProjects.length }),
+    [projectPage, projectPageSize, visibleProjects.length]
+  )
+
+  const pagedProjects = useMemo(
+    () => pageRows(visibleProjects, projectsPagination.page, projectPageSize),
+    [visibleProjects, projectsPagination.page, projectPageSize]
+  )
+
+  const pagedArchivedProjects = useMemo(
+    () => pageRows(visibleArchivedProjects, archivedProjectsPagination.page, archivedProjectsPagination.pageSize),
+    [visibleArchivedProjects, archivedProjectsPagination.page, archivedProjectsPagination.pageSize]
+  )
+
+  // Archives and deletes can shrink a list past the page the user is on.
+  useEffect(() => {
+    if (projectPage !== projectsPagination.page) setProjectPage(projectsPagination.page)
+  }, [projectPage, projectsPagination.page])
+
+  useEffect(() => {
+    setArchivedProjectsPagination((prev) => {
+      const totalPages = Math.max(1, Math.ceil(visibleArchivedProjects.length / prev.pageSize))
+      const page = Math.min(prev.page, totalPages)
+      return prev.page === page && prev.total === visibleArchivedProjects.length
+        ? prev
+        : { ...prev, page, total: visibleArchivedProjects.length, totalPages }
+    })
+  }, [visibleArchivedProjects.length, archivedProjectsPagination.pageSize])
+
+  // A narrower filter, sort or page size invalidates the stored offset.
+  useEffect(() => {
+    setProjectPage(1)
+    setArchivedProjectsPagination((prev) => ({ ...prev, page: 1 }))
+  }, [debouncedSearch, projectPageSize, projectAssignedFilter, projectCompletionFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectGuitarTypeFilter, projectSort, projectStatusFilter])
+
   // ── Modal Actions & Handlers ─────────────────────────────────────────────
   const openModal = (type, data = null) => {
     let initialForm = data ? { ...data } : {}
@@ -1273,8 +1316,8 @@ export function StaffDashboard() {
           {/* ── PROJECTS TAB ──────────────────────────────────────────────── */}
           {activeTab === 'projects' && (
             <ProjectsTab
-              visibleProjects={visibleProjects}
-              visibleArchivedProjects={visibleArchivedProjects}
+              visibleProjects={pagedProjects}
+              visibleArchivedProjects={pagedArchivedProjects}
               projects={projects}
               archivedProjects={archivedProjects}
               users={users}
@@ -1310,7 +1353,7 @@ export function StaffDashboard() {
               archivedProjectsPagination={archivedProjectsPagination}
               setArchivedProjectsPagination={setArchivedProjectsPagination}
               projectsPagination={projectsPagination}
-              PROJECTS_PAGE_SIZE={PROJECTS_PAGE_SIZE}
+              setProjectPageSize={setProjectPageSize}
               isAdmin={isSuperAdmin}
               debouncedSearch={debouncedSearch}
             />

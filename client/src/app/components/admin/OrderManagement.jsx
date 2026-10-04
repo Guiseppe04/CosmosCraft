@@ -21,6 +21,7 @@ import {
 import { useDebounce } from '../../hooks/useDebounce'
 import { normalizeRiderContact } from '../../utils/phone'
 import PhoneInput from '../PhoneInput'
+import { useSocketEvent } from '../../context/SocketContext'
 
 const ORDER_STATUS_LIFECYCLE = [
   { value: 'pending', label: 'Pending', color: '#f59e0b', bgColor: 'bg-amber-500/20', textColor: 'text-amber-400', borderColor: 'border-amber-500/30' },
@@ -453,7 +454,7 @@ function ReceiptPanel({ order }) {
   )
 }
 
-function OrderFulfillmentPanel({ order, onUpdateOrder, onManageProject }) {
+function OrderFulfillmentPanel({ order, onRefreshOrder, onManageProject }) {
   const [fulfillmentData, setFulfillmentData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
@@ -512,7 +513,7 @@ function OrderFulfillmentPanel({ order, onUpdateOrder, onManageProject }) {
 
       setSuccessMessage(`Fulfillment stage advanced to ${targetStatus.replace(/_/g, ' ')}.`)
       await loadFulfillment()
-      onUpdateOrder?.()
+      onRefreshOrder?.()
     } catch (err) {
       console.error('Failed to update fulfillment status:', err)
       setError(err.message || 'Failed to advance fulfillment stage')
@@ -834,7 +835,7 @@ function OrderFulfillmentPanel({ order, onUpdateOrder, onManageProject }) {
   )
 }
 
-function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrderStatus, onVerifyPayment, onMarkUnderReview, onMarkProcessing, onManageProject, user, initialSection = 'details' }) {
+function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrderStatus, onVerifyPayment, onMarkUnderReview, onMarkProcessing, onManageProject, onRefreshOrder, user, initialSection = 'details' }) {
   const [activeSection, setActiveSection] = useState(initialSection)
   const [isStartingReview, setIsStartingReview] = useState(false)
   const [reviewError, setReviewError] = useState('')
@@ -1151,9 +1152,7 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
           {activeSection === 'fulfillment' && (
             <OrderFulfillmentPanel
               order={order}
-              onUpdateOrder={() => {
-                if (onUpdateOrderStatus) onUpdateOrderStatus()
-              }}
+              onRefreshOrder={onRefreshOrder}
               onManageProject={onManageProject}
             />
           )}
@@ -1608,19 +1607,28 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
   const [selectedSection, setSelectedSection] = useState('details')
   const [isUpdatingPayment, setIsUpdatingPayment] = useState(false)
   const [isUpdatingOrder, setIsUpdatingOrder] = useState(false)
+  // True once a page request has settled. Rows normally arrive through the
+  // socket subscription below, so only the first ever load may show skeletons.
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(orders.length > 0)
 
   const onRefreshRef = useRef(onRefresh)
   onRefreshRef.current = onRefresh
 
   const inFlightKeyRef = useRef('')
   const activeRequestIdRef = useRef(0)
+  const pageRequestIdRef = useRef(0)
+  const pageRef = useRef(page)
+  const pendingRefreshRef = useRef(false)
+
+  useEffect(() => {
+    pageRef.current = page
+  }, [page])
 
   const isDataLoading = Boolean(loading || isPageLoading)
-  // Keep the last successful page visible while a new page is loading. Replacing
-  // populated rows with skeletons on every poll makes the table look like it is
-  // continuously re-downloading.
-  const showInitialSkeleton = isDataLoading && orders.length === 0
-  const showBackgroundProgress = isDataLoading && orders.length > 0
+  // Rows are delivered by websocket-driven reloads, so only the very first load
+  // (no rows yet) may render skeletons. A background reload must never blank the
+  // populated table or show a "refreshing" indicator.
+  const showInitialSkeleton = isDataLoading && orders.length === 0 && !hasLoadedOnce
 
   const totalPages = Math.max(1, Number(pagination?.totalPages || pagination?.total_pages || pagination?.pages || 1))
   const paginationTotalPagesRef = useRef(totalPages)
@@ -1700,20 +1708,26 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
     return params
   }, [debouncedSearch, orderTypeFilter, statusFilter, paymentStatusFilter, paymentMethodFilter, dateFrom, dateTo, sortField, sortDirection, pageSize])
 
-  const requestOrdersPage = useCallback(async (targetPage = 1) => {
+  const requestOrdersPage = useCallback(async (targetPage = 1, { silent = false } = {}) => {
     const maxPages = Math.max(1, paginationTotalPagesRef.current || 1)
     const safePage = Math.max(1, Math.min(targetPage, maxPages))
     const params = buildQuery(safePage)
     const requestKey = JSON.stringify(params)
 
     if (inFlightKeyRef.current === requestKey) {
+      // The same page is already loading. Queue one more reload so a change that
+      // landed after that request started is not missed.
+      if (silent) pendingRefreshRef.current = true
       return
     }
 
     const requestId = ++activeRequestIdRef.current
     inFlightKeyRef.current = requestKey
-    setPage(safePage)
-    setIsPageLoading(true)
+    if (!silent) {
+      pageRequestIdRef.current = requestId
+      setPage(safePage)
+      setIsPageLoading(true)
+    }
 
     try {
       if (onRefreshRef.current) {
@@ -1722,12 +1736,32 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
     } catch (err) {
       if (import.meta.env.DEV) console.error('[OrderManagement] requestOrdersPage error:', err)
     } finally {
+      setHasLoadedOnce(true)
       if (activeRequestIdRef.current === requestId) {
-        setIsPageLoading(false)
         inFlightKeyRef.current = ''
       }
+      if (!silent && pageRequestIdRef.current === requestId) {
+        setIsPageLoading(false)
+      }
+      if (pendingRefreshRef.current) {
+        pendingRefreshRef.current = false
+        requestOrdersPage(pageRef.current, { silent: true })
+      }
     }
-  }, [buildQuery])
+  }, [buildQuery]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reload the visible page whenever an order, payment or refund changes. This is
+  // the only data source of updates: there is no interval-based polling.
+  const reloadFromSocket = useCallback(() => {
+    requestOrdersPage(pageRef.current, { silent: true })
+  }, [requestOrdersPage])
+
+  useSocketEvent('order:created', reloadFromSocket)
+  useSocketEvent('order:updated', reloadFromSocket)
+  useSocketEvent('payment:created', reloadFromSocket)
+  useSocketEvent('payment:updated', reloadFromSocket)
+  useSocketEvent('refund:created', reloadFromSocket)
+  useSocketEvent('refund:updated', reloadFromSocket)
 
   // When search or any filter changes, reset to page 1 and fetch
   useEffect(() => {
@@ -1744,7 +1778,8 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
         admin_name: user?.firstName ? `${user.firstName}${user.lastName ? ' ' + user.lastName : ''}` : user?.email,
         admin_email: user?.email
       })
-      onRefresh(buildQuery(page))
+      // The server broadcasts order:updated / payment:updated, which reloads the
+      // list through the socket subscription above.
       setSelectedOrder(prev => prev ? { ...prev, payment_status: newStatus } : null)
     } catch (error) {
       console.error('Failed to update payment status:', error)
@@ -1759,7 +1794,6 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
     try {
       const response = await adminApi.updatePaymentStatus(orderId, 'under_review')
       setSelectedOrder(prev => prev?.order_id === orderId ? { ...prev, ...response.data, payment_status: response.data?.payment_status || 'under_review' } : prev)
-      onRefresh(buildQuery(page))
     } catch (error) {
       console.warn('Could not mark payment as under review:', error)
       throw error
@@ -1772,7 +1806,6 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
   const handleMarkProcessing = async (orderId) => {
     try {
       await adminApi.updateOrder(orderId, { status: 'processing' })
-      onRefresh(buildQuery(page))
       setSelectedOrder(prev => prev ? { ...prev, status: 'processing' } : null)
     } catch (error) {
       console.warn('Could not mark order as processing:', error)
@@ -1803,7 +1836,6 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
         }
       }
       await adminApi.updateOrder(orderId, updateData)
-      onRefresh(buildQuery(page))
       setSelectedOrder(prev => prev ? {
         ...prev,
         status: newStatus,
@@ -1829,7 +1861,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
         admin_name: adminName,
         admin_email: user?.email
       })
-      onRefresh(buildQuery(page))
+      // Payment updates arrive over the socket and reload the visible page.
       setSelectedOrder(prev => prev ? { ...prev, payment_status: newStatus } : null)
     } catch (error) {
       console.error('Failed to verify payment:', error)
@@ -2019,7 +2051,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
       </div>
 
       {/* Orders Table & Pagination Content */}
-      {!isDataLoading && orders.length === 0 ? (
+      {hasLoadedOnce && !isDataLoading && orders.length === 0 ? (
         <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-2xl p-12 text-center flex flex-col items-center justify-center">
           <div className="w-16 h-16 rounded-2xl bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/20 flex items-center justify-center text-[var(--gold-primary)] mb-4">
             <ShoppingBag className="w-8 h-8" />
@@ -2042,14 +2074,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-sm relative">
-            {/* Top subtle progress bar during background loading */}
-            {showBackgroundProgress && (
-              <div className="absolute top-0 left-0 right-0 h-0.5 bg-[var(--gold-primary)]/30 overflow-hidden z-20">
-                <div className="h-full bg-[var(--gold-primary)] animate-[shimmer_1.5s_infinite_linear] w-1/3" />
-              </div>
-            )}
-
+          <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-[var(--bg-primary)] text-[var(--text-muted)] uppercase tracking-wider font-bold border-b border-[var(--border)]">
@@ -2293,20 +2318,13 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
                 <option value={100} className="text-black bg-white">100</option>
               </select>
             </div>
-
-                {showBackgroundProgress && (
-                  <div className="flex items-center gap-1.5 text-xs text-[var(--gold-primary)] bg-[var(--gold-primary)]/10 px-2.5 py-0.5 rounded-full border border-[var(--gold-primary)]/20">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>Refreshing...</span>
-                  </div>
-                )}
               </div>
 
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => requestOrdersPage(Math.max(1, page - 1))}
-                  disabled={page <= 1 || isDataLoading}
+                  disabled={page <= 1 || isPageLoading}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] hover:border-[var(--gold-primary)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
@@ -2316,7 +2334,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
                 <button
                   type="button"
                   onClick={() => requestOrdersPage(Math.min(totalPages, page + 1))}
-                  disabled={page >= totalPages || isDataLoading}
+                  disabled={page >= totalPages || isPageLoading}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] hover:border-[var(--gold-primary)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                 >
                   <span>Next</span>
@@ -2340,6 +2358,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
             onMarkUnderReview={handleMarkUnderReview}
             onMarkProcessing={handleMarkProcessing}
             onManageProject={onManageProject}
+            onRefreshOrder={reloadFromSocket}
             user={user}
             initialSection={selectedSection}
           />

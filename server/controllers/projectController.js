@@ -23,6 +23,9 @@ exports.getProject = asyncHandler(async (req, res, next) => {
 
 exports.createProject = asyncHandler(async (req, res, next) => {
   const project = await projectService.createProject(req.body);
+  // Staff workspaces list projects over websocket, so a new project has to reach the
+  // other open sessions instead of waiting for a manual refresh.
+  socketService.emitToStaff('project:updated', { project, projectId: project.project_id });
   res.status(201).json({ status: 'success', data: project });
 });
 
@@ -49,12 +52,14 @@ exports.cancelProject = asyncHandler(async (req, res, next) => {
 exports.deleteProject = asyncHandler(async (req, res, next) => {
   const project = await projectService.deleteProject(req.params.id, req.user?.id || null);
   if (!project) throw new AppError('Project not found', 404);
+  socketService.emitToStaff('project:updated', { project, projectId: req.params.id, archived: true });
   res.json({ status: 'success', data: project });
 });
 
 exports.restoreProject = asyncHandler(async (req, res, next) => {
   const project = await projectService.restoreProject(req.params.id);
   if (!project) throw new AppError('Project not found', 404);
+  socketService.emitToStaff('project:updated', { project, projectId: req.params.id, restored: true });
   res.json({ status: 'success', data: project });
 });
 
@@ -66,6 +71,7 @@ exports.getArchivedProjects = asyncHandler(async (req, res, next) => {
 exports.assignTeam = asyncHandler(async (req, res, next) => {
   const { user_ids } = req.body;
   await projectService.assignTeam(req.params.id, user_ids);
+  socketService.emitToStaff('project:updated', { projectId: req.params.id, teamAssigned: true });
   res.json({ status: 'success', message: 'Team successfully assigned' });
 });
 
@@ -236,34 +242,46 @@ exports.initializeWorkflow = asyncHandler(async (req, res, next) => {
 });
 
 // --- HOLD / RESUME ---
+// Hold, resume and cancellation flows all change columns the staff project list shows,
+// so each one notifies the staff room instead of relying on a manual refresh.
+const notifyStaffOfProjectChange = (req) => {
+  socketService.emitToStaff('project:updated', { projectId: req.params.id });
+};
+
 exports.requestHold = asyncHandler(async (req, res, next) => {
   const result = await projectService.requestProjectHold(req.params.id, req.user.id, req.user.role, req.body);
+  notifyStaffOfProjectChange(req);
   res.json({ status: 'success', data: result, message: 'Hold request submitted' });
 });
 
 exports.approveHold = asyncHandler(async (req, res, next) => {
   const result = await projectService.approveProjectHold(req.params.id, req.user.id, req.body);
+  notifyStaffOfProjectChange(req);
   res.json({ status: 'success', data: result, message: 'Hold request processed' });
 });
 
 exports.resumeProject = asyncHandler(async (req, res, next) => {
   const result = await projectService.resumeProject(req.params.id, req.user.id, req.user.role);
+  notifyStaffOfProjectChange(req);
   res.json({ status: 'success', data: result, message: 'Project resumed' });
 });
 
 // --- CANCEL WITH OPTIONS ---
 exports.requestCancel = asyncHandler(async (req, res, next) => {
   const result = await projectService.requestProjectCancel(req.params.id, req.user.id, req.user.role, req.body);
+  notifyStaffOfProjectChange(req);
   res.json({ status: 'success', data: result, message: 'Cancellation request submitted' });
 });
 
 exports.approveCancel = asyncHandler(async (req, res, next) => {
   const result = await projectService.approveProjectCancel(req.params.id, req.user.id, req.body);
+  notifyStaffOfProjectChange(req);
   res.json({ status: 'success', data: result, message: 'Cancellation request processed' });
 });
 
 exports.cancelCancelRequest = asyncHandler(async (req, res, next) => {
   const result = await projectService.cancelProjectCancelRequest(req.params.id, req.user.id, req.user.role);
+  notifyStaffOfProjectChange(req);
   res.json({ status: 'success', data: result, message: 'Cancellation request withdrawn' });
 });
 

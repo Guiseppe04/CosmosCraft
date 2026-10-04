@@ -89,6 +89,7 @@ import {
   makePartIdentityKey,
 } from './admin/utils/partHelpers'
 import { updateIfChanged } from './admin/utils/slug'
+import { buildProjectPaginationView, normalizeProjectPagination } from './admin/utils/projectPagination'
 import { extractOrderPaymentMethod, isCashOnDeliveryOrder } from './admin/utils/orderHelpers'
 import { StatusBadge } from './admin/components/shared/StatusBadge'
 import { EmptyState } from './admin/components/shared/EmptyState'
@@ -340,6 +341,17 @@ export function AdminPage() {
   const visibleOrders = orders || []
   const visibleProjects = projects || []
   const visibleArchivedProjects = archivedProjects || []
+  // The paginators render from the tab's own page and page-size state plus the server
+  // total. Only the rows come from a request, so an in-flight refresh or a websocket
+  // update can never repaint the control with a different page size.
+  const projectsPaginationView = useMemo(
+    () => buildProjectPaginationView({ page: projectPage, pageSize: projectPageSize, total: projectsPagination.total }),
+    [projectPage, projectPageSize, projectsPagination.total]
+  )
+  const archivedProjectsPaginationView = useMemo(
+    () => buildProjectPaginationView({ page: archivedProjectsPagination.page, pageSize: archivedProjectsPagination.pageSize, total: archivedProjectsPagination.total }),
+    [archivedProjectsPagination.page, archivedProjectsPagination.pageSize, archivedProjectsPagination.total]
+  )
   const visibleAppointments = useMemo(() => appointments || [], [appointments])
   const visibleCalendarAppointments = useMemo(() => calendarAppointments || [], [calendarAppointments])
   const normalizedUnavailableDates = useMemo(() => unavailableDates.map((entry) => entry?.date || entry).filter(Boolean), [unavailableDates])
@@ -718,6 +730,18 @@ export function AdminPage() {
     return params
   }, [debouncedSearch, projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, projectSortDirection, projectPageSize])
 
+  // Every projects read reuses the shared page size, and the Projects tab adds its
+  // active page, filters and sort. A bare fetchProjects() falls back to the API default
+  // page size of 20, which both repainted the shared paginator with 20 and left 20 rows
+  // in the store — opening the tab then rendered those rows before the real page
+  // arrived. Dashboard reads stay capped at one page of the same size so the stored
+  // rows never outgrow what the tab can show.
+  const refreshProjects = useCallback(() => (
+    activeTab === 'projects'
+      ? fetchProjects(buildProjectQuery(projectPage))
+      : fetchProjects({ page: 1, page_size: projectPageSize })
+  ), [activeTab, buildProjectQuery, fetchProjects, projectPage, projectPageSize])
+
   // Appointment action handlers
   const handleAppointmentStatusChange = useCallback(async (id, status, reason) => {
     try {
@@ -812,12 +836,12 @@ export function AdminPage() {
       'product-categories': () => { fetchCategories(); },
       'users': fetchUsers,
       'orders': fetchOrders,
-      'projects': fetchProjects,
+      'projects': refreshProjects,
       'appointments': () => { fetchAppointments(); fetchCalendarAppointments(); fetchServices(); fetchUnavailableDates(); fetchAvailableDates(); },
       'inventory': () => { fetchInventory(); fetchParts(); fetchProducts(); },
       'pos': () => { fetchInventory(); fetchProducts(); },
       'sales-report': fetchSalesReport,
-      'dashboard': () => { fetchOrders(); fetchProjects(); fetchAppointments(); fetchCalendarAppointments(); fetchSalesReport() },
+      'dashboard': () => { fetchOrders(); refreshProjects(); fetchAppointments(); fetchCalendarAppointments(); fetchSalesReport() },
     }
     loaders[activeTab]?.()
   }, [activeTab]) // run only when switching tabs
@@ -837,10 +861,12 @@ export function AdminPage() {
      if (activeTab === 'services') {
        setServiceQuery(prev => (prev.page === 1 ? prev : { ...prev, page: 1 }))
      }
-     if (activeTab === 'users') fetchUsers()
-     if (activeTab === 'orders') fetchOrders()
-     if (activeTab === 'projects') fetchProjects()
-     if (activeTab === 'appointments') { fetchAppointments(); fetchCalendarAppointments(); }
+      if (activeTab === 'users') fetchUsers()
+      if (activeTab === 'orders') fetchOrders()
+      // Projects are handled by the query effect below: it rebuilds the request with the
+      // new search term, and a bare fetchProjects() here would race it back to the
+      // API default page size.
+      if (activeTab === 'appointments') { fetchAppointments(); fetchCalendarAppointments(); }
      if (activeTab === 'inventory') { fetchInventory(); fetchParts(); }
      if (activeTab === 'pos') fetchInventory()
     }, [debouncedSearch]) // eslint-disable-line
@@ -914,7 +940,7 @@ export function AdminPage() {
   })
 
   useSocketEvent('project:updated', () => {
-    fetchProjects()
+    refreshProjects()
   })
 
   useSocketEvent('stock:updated', () => {
@@ -976,14 +1002,14 @@ export function AdminPage() {
       'guitar-parts': fetchParts,
       'product-categories': fetchCategories,
       'orders': fetchOrders,
-      'projects': fetchProjects,
+      'projects': refreshProjects,
       'services': fetchServices,
       'users': async () => { await fetchUsers(); await fetchAppointmentCapacity(); },
       'appointments': async () => { await fetchAppointments({ silent: true }); fetchCalendarAppointments(); },
       'inventory': () => fetchInventory({ silent: true }),
       'pos': () => fetchInventory({ silent: true }),
       'sales-report': fetchSalesReport,
-      'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments({ silent: true }); fetchCalendarAppointments(); await fetchSalesReport() },
+      'dashboard': async () => { await fetchOrders(); await refreshProjects(); await fetchAppointments({ silent: true }); fetchCalendarAppointments(); await fetchSalesReport() },
     }
     map[activeTab]?.()?.finally(() => setIsLoading(false))
   }
@@ -1162,7 +1188,7 @@ export function AdminPage() {
     setFormErrors({})
     setOrderStatusDropdownOpen(false)
     setPaymentStatusDropdownOpen(false)
-    if (shouldRefreshProjects) fetchProjects()
+    if (shouldRefreshProjects) refreshProjects()
   }
 
   // ── Form validation helper ───────────────────────────────────────────────
@@ -1294,25 +1320,33 @@ export function AdminPage() {
     })
   }
 
-  const migrateCurrentCatalog = async (guitarType) => {
+  const migrateCurrentCatalog = (guitarType) => {
     const label = guitarType === 'bass' ? 'Bass' : 'Electric'
-    if (!window.confirm(`Sync the current ${label} Customization catalog into Guitar Parts without deleting the other guitar type's catalog?`)) return
-    try {
-      const result = await adminApi.seedCustomizeBuilderParts(guitarType)
-      setPartQuery((prev) => ({
-        ...prev,
-        guitar_type: guitarType,
-        is_active: 'true',
-        page: 1,
-      }))
-      const seeded = result.data?.seeded || {}
-      const created = seeded.created || 0
-      const updated = seeded.updated || 0
-      showToast(`${label} catalog synced: ${created} new, ${updated} updated.`)
-      await fetchParts()
-    } catch (error) {
-      showToast(error.message, 'error')
-    }
+    openConfirm({
+      title: `Sync ${label} Customization catalog?`,
+      description: `Sync the current ${label} Customization catalog into Guitar Parts without deleting the other guitar type's catalog?`,
+      confirmLabel: 'Sync Catalog',
+      cancelLabel: 'Cancel',
+      variant: 'info',
+      onConfirm: async () => {
+        try {
+          const result = await adminApi.seedCustomizeBuilderParts(guitarType)
+          setPartQuery((prev) => ({
+            ...prev,
+            guitar_type: guitarType,
+            is_active: 'true',
+            page: 1,
+          }))
+          const seeded = result.data?.seeded || {}
+          const created = seeded.created || 0
+          const updated = seeded.updated || 0
+          showToast(`${label} catalog synced: ${created} new, ${updated} updated.`)
+          await fetchParts()
+        } catch (error) {
+          showToast(error.message, 'error')
+        }
+      },
+    })
   }
 
   const clearPartFilters = () => {
@@ -1650,7 +1684,7 @@ export function AdminPage() {
         await adminApi.createProject(form)
         showToast('Project created!')
       }
-      fetchProjects(); closeModal()
+      refreshProjects(); closeModal()
     } catch (e) { showToast(e.message, 'error') }
     finally { setIsSaving(false) }
   }
@@ -1705,7 +1739,7 @@ export function AdminPage() {
           return next
         })
       } else {
-        await fetchProjects()
+        await refreshProjects()
       }
 
       closeProjectArchiveFeedback()
@@ -1751,7 +1785,7 @@ export function AdminPage() {
       })
       const newData = Array.isArray(res.data) ? res.data : res.data?.projects || []
       setArchivedProjects(newData)
-      setArchivedProjectsPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
+      setArchivedProjectsPagination(normalizeProjectPagination(res.pagination, queryParams))
     } catch (e) {
       showToast(e.message, 'error')
     }
@@ -1769,13 +1803,15 @@ export function AdminPage() {
       completion_percentage: projectCompletionFilter === 'all' ? undefined : projectCompletionFilter,
       include_tasks: true,
       page: pageNum,
-      page_size: projectPageSize,
+      // The archived list carries its own page size, so changing it refetches that
+      // page instead of leaving the control describing rows that were not requested.
+      page_size: archivedProjectsPagination.pageSize || projectPageSize,
       sort_by: ({ updated: 'updated_at', created: 'created_at', name: 'project_name', customer: 'customer_name', progress: 'progress', due: 'estimated_completion_date', status: 'status' })[projectSort] || 'updated_at',
       sort_dir: projectSortDirection,
     }
     Object.keys(params).forEach((key) => params[key] === undefined && delete params[key])
     return params
-  }, [projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, projectSortDirection, projectPageSize])
+  }, [projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, projectSortDirection, projectPageSize, archivedProjectsPagination.pageSize])
 
   useEffect(() => {
     if (activeTab === 'projects' && projectArchiveTab === 'archived') {
@@ -1787,7 +1823,7 @@ export function AdminPage() {
     try {
       await adminApi.assignTeam(projectId, userIds)
       showToast('Team assigned!')
-      fetchProjects()
+      refreshProjects()
     } catch (e) { showToast(e.message, 'error') }
   }
 
@@ -2760,10 +2796,9 @@ export function AdminPage() {
               restoreProject={restoreProject}
               projectArchiveTab={projectArchiveTab}
               setProjectArchiveTab={setProjectArchiveTab}
-              archivedProjectsPagination={archivedProjectsPagination}
+              archivedProjectsPagination={archivedProjectsPaginationView}
               setArchivedProjectsPagination={setArchivedProjectsPagination}
-              projectsPagination={projectsPagination}
-              projectPageSize={projectPageSize}
+              projectsPagination={projectsPaginationView}
               setProjectPageSize={setProjectPageSize}
               isAdmin={isSuperAdmin}
               debouncedSearch={debouncedSearch}

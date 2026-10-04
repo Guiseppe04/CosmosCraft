@@ -47,7 +47,6 @@ export function ProjectsTab({
   archivedProjectsPagination,
   setArchivedProjectsPagination,
   projectsPagination,
-  projectPageSize,
   setProjectPageSize,
   debouncedSearch,
 }) {
@@ -287,7 +286,7 @@ export function ProjectsTab({
       </div>
 
       {projectArchiveTab === 'active' ? (
-        projects.length === 0 ? (
+        visibleProjects.length === 0 ? (
           <EmptyState
             icon={Briefcase}
             label={debouncedSearch ? 'No projects match your search' : 'No projects found'}
@@ -418,7 +417,7 @@ export function ProjectsTab({
           </>
         )
       ) : (
-        archivedProjects.length === 0 ? (
+        visibleArchivedProjects.length === 0 ? (
           <EmptyState
             icon={Archive}
             label={debouncedSearch ? 'No archived projects match your search' : 'No archived projects'}
