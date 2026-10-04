@@ -34,21 +34,17 @@ export function OrdersTab({ orders, fetchOrders, user, pagination, showToast, on
     fetchNewRefundCount()
   })
 
-  useSocketEvent('order:created', () => {
-    fetchOrders?.()
-  })
+  // OrderManagement reloads itself on these events while the orders view is open.
+  // Only refresh when another sub-tab is active so the order count stays correct
+  // without issuing a second request for the same event.
+  const refreshOrdersWhenHidden = () => {
+    if (view !== 'orders') fetchOrders?.()
+  }
 
-  useSocketEvent('order:updated', () => {
-    fetchOrders?.()
-  })
-
-  useSocketEvent('payment:created', () => {
-    fetchOrders?.()
-  })
-
-  useSocketEvent('payment:updated', () => {
-    fetchOrders?.()
-  })
+  useSocketEvent('order:created', refreshOrdersWhenHidden)
+  useSocketEvent('order:updated', refreshOrdersWhenHidden)
+  useSocketEvent('payment:created', refreshOrdersWhenHidden)
+  useSocketEvent('payment:updated', refreshOrdersWhenHidden)
 
   const handleRefresh = async () => {
     setIsRefreshing(true)

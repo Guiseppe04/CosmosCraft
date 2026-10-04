@@ -6,6 +6,8 @@ import { adminApi } from '../../utils/adminApi';
 import { staffApi } from '../../utils/staffApi';
 
 import { useAuth } from '../../context/AuthContext';
+import { ConfirmModal } from '../ui/ConfirmModal';
+import { useToast } from '../ui/Toast';
 import BuildClaimManager from './BuildClaimManager';
 
 const formatStatusLabel = (status) => String(status || '')
@@ -80,6 +82,7 @@ const formatDisplayDate = (value) => {
 
 export default function ProjectTaskTracker({ projectId, projectName, isAdmin = false, parts = [], projectData = null, showTracker = true, onRestockPart = null, staffMembers = [], onProjectChange = null }) {
   const { user } = useAuth();
+  const toast = useToast();
   const [hierarchy, setHierarchy] = useState(null);
   const [requiredParts, setRequiredParts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -115,6 +118,16 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const [restockNotes, setRestockNotes] = useState('');
   const [restockSaving, setRestockSaving] = useState(false);
   const [restockFeedback, setRestockFeedback] = useState(null);
+
+  // Mark-all-as-done confirmation and per-milestone busy state
+  const [pendingCompleteAll, setPendingCompleteAll] = useState(null);
+  const [completingMilestoneId, setCompletingMilestoneId] = useState(null);
+
+  // Delete confirmations and their busy states
+  const [pendingDeleteMilestone, setPendingDeleteMilestone] = useState(null);
+  const [deletingMilestoneId, setDeletingMilestoneId] = useState(null);
+  const [pendingDeleteSubtask, setPendingDeleteSubtask] = useState(null);
+  const [deletingSubtaskId, setDeletingSubtaskId] = useState(null);
 
   // Cancellation request review (admin only)
   const [cancelReviewLoading, setCancelReviewLoading] = useState(false);
@@ -344,7 +357,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
           .slice(milestoneIndex + 1)
           .some((milestone) => milestone.subtasks?.some((item) => item.status === 'completed'));
         if (hasCompletedFollowingMilestone) {
-          alert('Complete or reopen tasks in later milestones before reopening this task.');
+          toast.warning('Complete or reopen tasks in later milestones before reopening this task.');
           return;
         }
         setPendingUncheckSubtask(subtask);
@@ -388,7 +401,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
         await loadData();
       }
     } catch (err) {
-      alert("Failed to update task: " + err.message);
+      toast.error('Failed to update task: ' + err.message);
     } finally {
       setTogglingSubtaskId(null);
     }
@@ -438,7 +451,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
         await loadData();
       }
     } catch (err) {
-      alert("Failed to update task: " + err.message);
+      toast.error('Failed to update task: ' + err.message);
     } finally {
       setTogglingSubtaskId(null);
     }
@@ -447,23 +460,42 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   // Admin Actions
   const handleAddMilestone = async () => {
     if (isOnHold) return;
+    setTaskMutationBusy(true);
     try {
       await adminApi.createMilestone(projectId, { title: form.milestoneTitle, description: form.milestoneDesc });
       setIsAddingMilestone(false);
       setForm({});
-      loadData();
+      setTaskFeedback({ type: 'success', message: 'Milestone created.' });
+      await loadData();
     } catch (err) {
-      alert(err.message);
+      setTaskFeedback({ type: 'error', message: err.message });
+    } finally {
+      setTaskMutationBusy(false);
     }
   };
 
-  const handleDeleteMilestone = async (mId) => {
-    if (isOnHold) return;
-    if(!window.confirm("Are you sure? This deletes all subtasks within this milestone.")) return;
+  const requestDeleteMilestone = (milestone) => {
+    if (isOnHold || taskMutationBusy) return;
+    setPendingDeleteMilestone(milestone);
+  };
+
+  const confirmDeleteMilestone = async () => {
+    if (!pendingDeleteMilestone || deletingMilestoneId) return;
+    const milestone = pendingDeleteMilestone;
+
+    setDeletingMilestoneId(milestone.milestone_id);
+    setTaskMutationBusy(true);
     try {
-      await adminApi.deleteMilestone(mId);
-      loadData();
-    } catch (err) { alert(err.message); }
+      await adminApi.deleteMilestone(milestone.milestone_id);
+      setTaskFeedback({ type: 'success', message: `Milestone "${milestone.title}" deleted.` });
+      await loadData();
+    } catch (err) {
+      setTaskFeedback({ type: 'error', message: err.message });
+    } finally {
+      setPendingDeleteMilestone(null);
+      setDeletingMilestoneId(null);
+      setTaskMutationBusy(false);
+    }
   };
 
   const handleTaskSaved = async (_result) => {
@@ -472,37 +504,65 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     setTaskFeedback({ type: 'success', message: 'Task saved successfully.' });
     await loadData();
   };
-  const handleDeleteSubtask = async (sId) => {
+
+  const requestDeleteSubtask = (subtask) => {
     if (isOnHold || taskMutationBusy) return;
-    if (!window.confirm('Delete this task?')) return;
-    setTaskMutationBusy(true);
-    try {
-      await adminApi.deleteSubtask(sId);
-      setTaskFeedback({ type: 'success', message: 'Task deleted successfully.' });
-      await loadData();
-    } catch (err) { setTaskFeedback({ type: 'error', message: err.message }); }
-    finally { setTaskMutationBusy(false); }
+    setPendingDeleteSubtask(subtask);
   };
 
-  const completeAllSubtasks = async (milestone) => {
+  const confirmDeleteSubtask = async () => {
+    if (!pendingDeleteSubtask || deletingSubtaskId) return;
+    const subtask = pendingDeleteSubtask;
+
+    setDeletingSubtaskId(subtask.subtask_id);
+    setTaskMutationBusy(true);
+    try {
+      await adminApi.deleteSubtask(subtask.subtask_id);
+      setTaskFeedback({ type: 'success', message: 'Task deleted successfully.' });
+      await loadData();
+    } catch (err) {
+      setTaskFeedback({ type: 'error', message: err.message });
+    } finally {
+      setPendingDeleteSubtask(null);
+      setDeletingSubtaskId(null);
+      setTaskMutationBusy(false);
+    }
+  };
+
+  // Mark-all-as-done asks for confirmation through the branded modal, then reports
+  // progress on the milestone it is working on.
+  const requestCompleteAllSubtasks = (milestone) => {
     if (!isAdmin || isOnHold || isMilestoneLocked(milestone) || taskMutationBusy || togglingSubtaskId) return;
     const remainingTasks = (milestone.subtasks || []).filter((subtask) => subtask.status !== 'completed');
     if (!remainingTasks.length) return;
-    if (!window.confirm(`Mark all ${remainingTasks.length} remaining tasks in "${milestone.title}" as completed?`)) return;
+    setPendingCompleteAll({ milestone, remainingCount: remainingTasks.length });
+  };
 
+  const cancelCompleteAllSubtasks = () => {
+    if (completingMilestoneId) return;
+    setPendingCompleteAll(null);
+  };
+
+  const completeAllSubtasks = async () => {
+    if (!pendingCompleteAll || completingMilestoneId) return;
+    const { milestone, remainingCount } = pendingCompleteAll;
+
+    setCompletingMilestoneId(milestone.milestone_id);
     setTaskMutationBusy(true);
     setTaskFeedback(null);
     let completedCount = 0;
     try {
-      for (const subtask of remainingTasks) {
+      for (const subtask of (milestone.subtasks || []).filter((subtask) => subtask.status !== 'completed')) {
         await adminApi.updateSubtask(subtask.subtask_id, { status: 'completed' });
         completedCount += 1;
       }
       setTaskFeedback({ type: 'success', message: 'All tasks in this milestone are completed.' });
     } catch (err) {
-      setTaskFeedback({ type: 'error', message: `${completedCount} of ${remainingTasks.length} tasks completed. Could not complete the remaining tasks: ${err.message}` });
+      setTaskFeedback({ type: 'error', message: `${completedCount} of ${remainingCount} tasks completed. Could not complete the remaining tasks: ${err.message}` });
     } finally {
+      setPendingCompleteAll(null);
       await loadData();
+      setCompletingMilestoneId(null);
       setTaskMutationBusy(false);
     }
   };
@@ -515,7 +575,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
       await loadData();
       setIsEditingCompletion(false);
     } catch (err) {
-      alert('Failed to update estimated completion: ' + err.message);
+      toast.error('Failed to update estimated completion: ' + err.message);
     }
   };
 
@@ -1496,21 +1556,31 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                      <div className="flex items-center gap-3">
                        {isAdmin && milestone.status !== 'completed' && milestone.subtasks?.some((subtask) => subtask.status !== 'completed') && (
                          <button 
-                           onClick={(e) => { e.stopPropagation(); completeAllSubtasks(milestone); }}
+                           onClick={(e) => { e.stopPropagation(); requestCompleteAllSubtasks(milestone); }}
                            disabled={isOnHold || isLockedMilestone || taskMutationBusy || Boolean(togglingSubtaskId)}
                            className="p-2 hover:bg-green-500/10 rounded-lg text-green-400 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                            title="Complete all tasks in this milestone"
                            aria-label={`Complete all tasks in ${milestone.title}`}
                          >
-                           <Flag className="w-4 h-4" />
+                           {completingMilestoneId === milestone.milestone_id
+                             ? <Loader2 className="w-4 h-4 animate-spin" />
+                             : <Flag className="w-4 h-4" />}
                          </button>
                        )}
                        {isAdmin && milestone.status === 'completed' && (
                          <span className="text-xs font-semibold text-green-400 bg-green-500/10 px-2 py-1 rounded-lg border border-green-500/30">Done</span>
                        )}
                        {isAdmin && (
-                         <button onClick={(e) => { e.stopPropagation(); handleDeleteMilestone(milestone.milestone_id); }} className="p-2 hover:bg-red-500/10 rounded-lg text-red-500 transition-colors">
-                           <Trash2 className="w-4 h-4" />
+                         <button
+                           onClick={(e) => { e.stopPropagation(); requestDeleteMilestone(milestone); }}
+                           disabled={isOnHold || taskMutationBusy}
+                           className="p-2 hover:bg-red-500/10 rounded-lg text-red-500 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                           title={`Delete milestone ${milestone.title}`}
+                           aria-label={`Delete milestone ${milestone.title}`}
+                         >
+                           {deletingMilestoneId === milestone.milestone_id
+                             ? <Loader2 className="w-4 h-4 animate-spin" />
+                             : <Trash2 className="w-4 h-4" />}
                          </button>
                        )}
                        <div className="p-2 bg-[var(--bg-primary)] rounded-lg">
@@ -1518,6 +1588,14 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                        </div>
                      </div>
                   </div>
+
+                  {/* Mark-all-as-done progress for this milestone */}
+                  {completingMilestoneId === milestone.milestone_id && (
+                    <p role="status" className="flex items-center gap-2 border-t border-[var(--border)] bg-emerald-500/5 px-5 py-3 text-xs font-semibold text-emerald-300">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Marking all remaining tasks as done. Please wait...
+                    </p>
+                  )}
 
                   {/* Subtasks Block */}
                   <AnimatePresence>
@@ -1572,11 +1650,20 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                                     </div>
                                   </div>
                                   {isAdmin && !isOnHold && <button type="button" aria-label={`Edit task ${subtask.title}`} onClick={() => { setEditingTaskId(subtask.subtask_id); setAddingSubtaskTo(null); }} className="p-1.5 hover:bg-white/10 rounded"><Edit3 className="w-4 h-4" /></button>}
-                                  {isAdmin && (
-                                     <button disabled={taskMutationBusy || isOnHold} onClick={() => handleDeleteSubtask(subtask.subtask_id)} className="p-1.5 hover:bg-red-500/10 text-[var(--text-muted)] hover:text-red-400 rounded">
-                                       <Trash2 className="w-4 h-4" />
+{isAdmin && (
+                                     <button
+                                       type="button"
+                                       disabled={taskMutationBusy || isOnHold}
+                                       onClick={() => requestDeleteSubtask(subtask)}
+                                       title={`Delete task ${subtask.title}`}
+                                       aria-label={`Delete task ${subtask.title}`}
+                                       className="p-1.5 hover:bg-red-500/10 text-[var(--text-muted)] hover:text-red-400 rounded disabled:cursor-not-allowed disabled:opacity-50"
+                                     >
+                                       {deletingSubtaskId === subtask.subtask_id
+                                         ? <Loader2 className="w-4 h-4 animate-spin" />
+                                         : <Trash2 className="w-4 h-4" />}
                                      </button>
-                                  )}
+                                   )}
                                 </div>
                               );
                             })
@@ -1611,10 +1698,13 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                  <div className="space-y-4">
                    <input type="text" placeholder="Milestone Title (e.g. Body Construction)" value={form.milestoneTitle || ''} onChange={e => setForm({...form, milestoneTitle: e.target.value})} className="w-full px-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white outline-none focus:border-[var(--gold-primary)]" />
                    <textarea placeholder="Description (optional)" value={form.milestoneDesc || ''} onChange={e => setForm({...form, milestoneDesc: e.target.value})} className="w-full px-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white outline-none focus:border-[var(--gold-primary)] min-h-[80px]" />
-                   <div className="flex gap-3">
-                      <button onClick={handleAddMilestone} className="flex-1 py-2.5 bg-[var(--gold-primary)] text-black font-bold rounded-xl">Create Milestone</button>
-                      <button onClick={() => setIsAddingMilestone(false)} className="flex-1 py-2.5 bg-white/10 text-white font-medium rounded-xl">Cancel</button>
-                   </div>
+<div className="flex gap-3">
+                      <button type="button" onClick={handleAddMilestone} disabled={taskMutationBusy} className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 bg-[var(--gold-primary)] text-black font-bold rounded-xl disabled:opacity-60">
+                        {taskMutationBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                        {taskMutationBusy ? 'Creating...' : 'Create Milestone'}
+                      </button>
+                      <button type="button" onClick={() => setIsAddingMilestone(false)} className="flex-1 py-2.5 bg-white/10 text-white font-medium rounded-xl">Cancel</button>
+                    </div>
                  </div>
                </div>
              ) : (
@@ -1710,6 +1800,46 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ConfirmModal
+        open={Boolean(pendingCompleteAll)}
+        title="Mark all tasks as done?"
+        description={pendingCompleteAll
+          ? `All ${pendingCompleteAll.remainingCount} remaining task${pendingCompleteAll.remainingCount === 1 ? '' : 's'} in "${pendingCompleteAll.milestone.title}" will be marked as completed.`
+          : ''}
+        confirmLabel="Mark all as done"
+        cancelLabel="Cancel"
+        variant="info"
+        isBusy={Boolean(completingMilestoneId)}
+        onConfirm={completeAllSubtasks}
+        onCancel={cancelCompleteAllSubtasks}
+      />
+
+      <ConfirmModal
+        open={Boolean(pendingDeleteMilestone)}
+        title={pendingDeleteMilestone ? `Delete "${pendingDeleteMilestone.title}"?` : ''}
+        description={pendingDeleteMilestone
+          ? `This deletes the milestone and every task inside it (${(pendingDeleteMilestone.subtasks || []).length} task(s)). This cannot be undone.`
+          : ''}
+        confirmLabel="Delete Milestone"
+        cancelLabel="Cancel"
+        variant="danger"
+        isBusy={Boolean(deletingMilestoneId)}
+        onConfirm={confirmDeleteMilestone}
+        onCancel={() => { if (!deletingMilestoneId) setPendingDeleteMilestone(null); }}
+      />
+
+      <ConfirmModal
+        open={Boolean(pendingDeleteSubtask)}
+        title="Delete this task?"
+        description={pendingDeleteSubtask ? `"${pendingDeleteSubtask.title}" will be removed from this milestone.` : ''}
+        confirmLabel="Delete Task"
+        cancelLabel="Cancel"
+        variant="danger"
+        isBusy={Boolean(deletingSubtaskId)}
+        onConfirm={confirmDeleteSubtask}
+        onCancel={() => { if (!deletingSubtaskId) setPendingDeleteSubtask(null); }}
+      />
     </div>
   );
 }

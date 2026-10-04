@@ -32,6 +32,7 @@ import {
   deriveInventoryPartCategory,
   normalizeInventoryPartCategory,
 } from './admin/utils/partHelpers'
+import { buildProjectPaginationView, normalizeProjectPagination } from './admin/utils/projectPagination'
 import {
   INVENTORY_PART_CATEGORY_LABELS,
   PROJECT_RULES,
@@ -402,15 +403,13 @@ export function StaffDashboard() {
 
   const fetchProjects = useCallback(async () => {
     try {
-      const res = await staffApi.getAllProjects(buildProjectQuery(projectPage, projectPageSize))
+      const query = buildProjectQuery(projectPage, projectPageSize)
+      const res = await staffApi.getAllProjects(query)
       const rows = normalizeArray(res, 'projects')
       setProjects(rows)
-      setProjectsPagination({
-        page: projectPage,
-        pageSize: projectPageSize,
-        total: res.pagination?.total ?? rows.length,
-        totalPages: res.pagination?.totalPages ?? res.pagination?.total_pages ?? 1,
-      })
+      const pagination = normalizeProjectPagination(res.pagination, query)
+      setProjectsPagination(pagination)
+      if (pagination.page > pagination.totalPages) setProjectPage(pagination.totalPages)
     } catch (e) {
       showToast(e.message, 'error')
     }
@@ -418,13 +417,16 @@ export function StaffDashboard() {
 
   const fetchArchivedProjects = useCallback(async () => {
     try {
-      const res = await adminApi.getArchivedProjects(buildProjectQuery(archivedProjectsPagination.page, archivedProjectsPagination.pageSize))
+      const query = buildProjectQuery(archivedProjectsPagination.page, archivedProjectsPagination.pageSize)
+      const res = await adminApi.getArchivedProjects(query)
       const rows = normalizeArray(res, 'projects')
       setArchivedProjects(rows)
+      const pagination = normalizeProjectPagination(res.pagination, query)
       setArchivedProjectsPagination((prev) => ({
         ...prev,
-        total: res.pagination?.total ?? rows.length,
-        totalPages: res.pagination?.totalPages ?? res.pagination?.total_pages ?? 1,
+        page: Math.min(prev.page, pagination.totalPages),
+        total: pagination.total,
+        totalPages: pagination.totalPages,
       }))
     } catch {
       // ignore
@@ -838,6 +840,15 @@ export function StaffDashboard() {
   // ── Filtered Projects ────────────────────────────────────────────────────
   const visibleProjects = projects
   const visibleArchivedProjects = archivedProjects
+  // Keep the incoming pagination UI stable while server-paginated rows refresh.
+  const projectsPaginationView = useMemo(
+    () => buildProjectPaginationView({ page: projectPage, pageSize: projectPageSize, total: projectsPagination.total }),
+    [projectPage, projectPageSize, projectsPagination.total]
+  )
+  const archivedProjectsPaginationView = useMemo(
+    () => buildProjectPaginationView({ page: archivedProjectsPagination.page, pageSize: archivedProjectsPagination.pageSize, total: archivedProjectsPagination.total }),
+    [archivedProjectsPagination.page, archivedProjectsPagination.pageSize, archivedProjectsPagination.total]
+  )
 
   const openModal = (type, data = null) => {
     let initialForm = data ? { ...data } : {}
@@ -1243,10 +1254,9 @@ export function StaffDashboard() {
               restoreProject={restoreProject}
               projectArchiveTab={projectArchiveTab}
               setProjectArchiveTab={setProjectArchiveTab}
-              archivedProjectsPagination={archivedProjectsPagination}
+              archivedProjectsPagination={archivedProjectsPaginationView}
               setArchivedProjectsPagination={setArchivedProjectsPagination}
-              projectsPagination={projectsPagination}
-              projectPageSize={projectPageSize}
+              projectsPagination={projectsPaginationView}
               setProjectPageSize={setProjectPageSize}
               isAdmin={isSuperAdmin}
               debouncedSearch={debouncedSearch}

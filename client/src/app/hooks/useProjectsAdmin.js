@@ -1,10 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { adminApi } from '../utils/adminApi'
 import { updateIfChanged } from '../pages/admin/utils/slug'
+import { DEFAULT_PROJECT_PAGE_SIZE, normalizeProjectPagination } from '../pages/admin/utils/projectPagination'
 
 export function useProjectsAdmin({ debouncedSearch, showToast }) {
   const [projects, setProjects] = useState([])
-  const [projectsPagination, setProjectsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
+  const [projectsPagination, setProjectsPagination] = useState({ page: 1, pageSize: DEFAULT_PROJECT_PAGE_SIZE, total: 0, totalPages: 1 })
   const projectsRef = useRef(projects)
   const inFlightRequestRef = useRef(null)
   const latestRequestIdRef = useRef(0)
@@ -31,7 +32,7 @@ export function useProjectsAdmin({ debouncedSearch, showToast }) {
         projectsRef.current = newData
         setProjects(newData)
       }
-      setProjectsPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
+      setProjectsPagination(normalizeProjectPagination(res.pagination, queryParams))
     } catch (e) {
       if (latestRequestIdRef.current === requestId) showToast(e.message, 'error')
     } finally {

@@ -6,6 +6,7 @@ import {
   ArrowUp, ArrowDown
 } from 'lucide-react'
 import { adminApi } from '../../utils/adminApi'
+import { ConfirmModal } from '../ui/ConfirmModal'
 
 export default function DefaultWorkflowEditor({ isOpen, onClose }) {
   const [steps, setSteps] = useState([])
@@ -16,6 +17,16 @@ export default function DefaultWorkflowEditor({ isOpen, onClose }) {
   const [expandedSteps, setExpandedSteps] = useState(new Set())
   const [editingStepIndex, setEditingStepIndex] = useState(null)
   const [editingTaskKey, setEditingTaskKey] = useState(null) // "stepIdx:taskIdx"
+  const [confirm, setConfirm] = useState({
+    open: false,
+    title: '',
+    description: '',
+    confirmLabel: 'Delete',
+    cancelLabel: 'Cancel',
+    variant: 'danger',
+    isBusy: false,
+    onConfirm: null,
+  })
 
   const generateTempId = () => `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
@@ -65,6 +76,34 @@ export default function DefaultWorkflowEditor({ isOpen, onClose }) {
     })
   }
 
+  const openConfirm = ({ title, description, confirmLabel, cancelLabel, variant = 'danger', onConfirm }) => {
+    setConfirm({
+      open: true,
+      title,
+      description,
+      confirmLabel: confirmLabel || 'Confirm',
+      cancelLabel: cancelLabel || 'Cancel',
+      variant,
+      isBusy: false,
+      onConfirm,
+    })
+  }
+
+  const closeConfirm = () => {
+    setConfirm((prev) => ({ ...prev, open: false, isBusy: false, onConfirm: null }))
+  }
+
+  const handleConfirmAction = async () => {
+    if (!confirm.onConfirm) return
+    setConfirm((prev) => ({ ...prev, isBusy: true }))
+    try {
+      await confirm.onConfirm()
+      closeConfirm()
+    } catch (err) {
+      setConfirm((prev) => ({ ...prev, isBusy: false }))
+    }
+  }
+
   const handleAddStep = () => {
     const newSteps = [...steps]
     newSteps.push({
@@ -79,11 +118,17 @@ export default function DefaultWorkflowEditor({ isOpen, onClose }) {
   }
 
   const handleDeleteStep = (idx) => {
-    if (!window.confirm(`Delete step "${steps[idx].step_name || 'Untitled'}"? This cannot be undone.`)) return
-    const newSteps = steps.filter((_, i) => i !== idx)
-    // Reindex sort_order
-    newSteps.forEach((s, i) => (s.sort_order = i + 1))
-    setSteps(newSteps)
+    openConfirm({
+      title: 'Delete Step?',
+      description: `"${steps[idx].step_name || 'Untitled'}" will be permanently removed from the default workflow. This cannot be undone.`,
+      confirmLabel: 'Delete Step',
+      onConfirm: () => {
+        const newSteps = steps.filter((_, i) => i !== idx)
+        // Reindex sort_order
+        newSteps.forEach((s, i) => (s.sort_order = i + 1))
+        setSteps(newSteps)
+      },
+    })
   }
 
   const handleMoveStep = (idx, direction) => {
@@ -119,13 +164,19 @@ export default function DefaultWorkflowEditor({ isOpen, onClose }) {
 
   const handleDeleteTask = (stepIdx, taskIdx) => {
     const task = steps[stepIdx].tasks[taskIdx]
-    if (!window.confirm(`Delete task "${task.task_name || 'Untitled'}"?`)) return
-    const newSteps = [...steps]
-    const step = { ...newSteps[stepIdx] }
-    step.tasks = step.tasks.filter((_, i) => i !== taskIdx)
-    step.tasks.forEach((t, i) => (t.sort_order = i + 1))
-    newSteps[stepIdx] = step
-    setSteps(newSteps)
+    openConfirm({
+      title: 'Delete Task?',
+      description: `"${task.task_name || 'Untitled'}" will be permanently removed from the default workflow.`,
+      confirmLabel: 'Delete Task',
+      onConfirm: () => {
+        const newSteps = [...steps]
+        const step = { ...newSteps[stepIdx] }
+        step.tasks = step.tasks.filter((_, i) => i !== taskIdx)
+        step.tasks.forEach((t, i) => (t.sort_order = i + 1))
+        newSteps[stepIdx] = step
+        setSteps(newSteps)
+      },
+    })
   }
 
   const handleMoveTask = (stepIdx, taskIdx, direction) => {
@@ -501,6 +552,19 @@ export default function DefaultWorkflowEditor({ isOpen, onClose }) {
           </div>
         </div>
       </motion.div>
+
+      {/* Confirmation Dialog */}
+      <ConfirmModal
+        open={confirm.open}
+        title={confirm.title}
+        description={confirm.description}
+        confirmLabel={confirm.confirmLabel}
+        cancelLabel={confirm.cancelLabel}
+        variant={confirm.variant}
+        isBusy={confirm.isBusy}
+        onConfirm={handleConfirmAction}
+        onCancel={closeConfirm}
+      />
     </div>
   )
 }
