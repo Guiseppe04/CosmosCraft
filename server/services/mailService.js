@@ -179,31 +179,101 @@ exports.sendContactMessageEmail = async ({ to, replyTo, name, message }) => {
   const safeName = escapeHtml(name);
   const safeReplyTo = escapeHtml(replyTo);
   const safeMessage = escapeHtml(message).replace(/\r?\n/g, '<br>');
+  const replyUrl = escapeHtml(`mailto:${encodeURIComponent(replyTo).replace(/%40/g, '@')}?subject=${encodeURIComponent('Re: Your CosmosCraft inquiry')}`);
+  // Use the site's warm brown, cream and gold palette with inline email styles.
   const html = `<!doctype html>
 <html lang="en">
-  <body style="margin:0;padding:32px 16px;background-color:#09090b;color:#a1a1aa;font-family:Arial,Helvetica,sans-serif;">
-    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;margin:0 auto;background-color:#18181b;">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CosmosCraft contact message</title>
+    <style>
+      body { margin:0; padding:0; -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
+      table { mso-table-lspace:0pt; mso-table-rspace:0pt; }
+      @media only screen and (max-width:480px) {
+        .email-shell { padding:20px 12px !important; }
+        .email-padding { padding-left:22px !important; padding-right:22px !important; }
+        .email-title { font-size:28px !important; }
+        .reply-button { display:block !important; text-align:center !important; }
+      }
+    </style>
+  </head>
+  <body style="margin:0;padding:0;background-color:#1D1912;color:#F3F3E6;font-family:Arial,Helvetica,sans-serif;">
+    <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">New website inquiry from ${safeName}. Read their message and reply directly.</div>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#1D1912" style="background-color:#1D1912;">
       <tr>
-        <td style="padding:32px;">
-          <h1 style="margin:0 0 12px;color:#fafafa;font-size:28px;line-height:1.3;">New contact message</h1>
-          <p style="margin:0 0 24px;color:#a1a1aa;font-size:16px;line-height:1.6;">A customer sent a message through the CosmosCraft website.</p>
-          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#27272a;border-radius:8px;">
+        <td class="email-shell" align="center" style="padding:40px 16px;">
+          <!--[if mso]><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" align="center"><tr><td><![endif]-->
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" align="center" style="max-width:600px;table-layout:fixed;background-color:#2B251B;border:1px solid #514530;border-top:4px solid #EECD5C;border-radius:16px;border-collapse:separate;overflow:hidden;">
             <tr>
-              <td style="padding:18px 20px;color:#a1a1aa;font-size:14px;line-height:1.6;">
-                <p style="margin:0 0 8px;"><strong style="color:#fafafa;">Name:</strong> ${safeName}</p>
-                <p style="margin:0 0 16px;"><strong style="color:#fafafa;">Email:</strong> ${safeReplyTo}</p>
-                <p style="margin:0 0 6px;"><strong style="color:#fafafa;">Message</strong></p>
-                <p style="margin:0;color:#fafafa;">${safeMessage}</p>
+              <td class="email-padding" style="padding:28px 36px;border-bottom:1px solid #514530;">
+                <p style="margin:0;color:#EECD5C;font-size:24px;line-height:1.3;font-weight:700;letter-spacing:0.5px;">CosmosCraft</p>
+                <p style="margin:6px 0 0;color:#D6CFBB;font-size:10px;line-height:1.5;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Custom guitars. Crafted for you.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="email-padding" style="padding:30px 36px 24px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;">
+                  <tr>
+                    <td bgcolor="#3A3124" style="padding:7px 12px;border:1px solid #6B5830;border-radius:6px;color:#EECD5C;font-size:10px;line-height:1.4;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Website inquiry</td>
+                  </tr>
+                </table>
+                <h1 class="email-title" style="margin:18px 0 10px;color:#F3F3E6;font-size:32px;line-height:1.2;font-weight:700;letter-spacing:-0.5px;">A new conversation<br>starts here.</h1>
+                <p style="margin:0;color:#D6CFBB;font-size:14px;line-height:1.7;">Someone reached out through Contact Us. Their details and message are ready for your review.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="email-padding" style="padding:0 36px 24px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="table-layout:fixed;background-color:#3A3124;border:1px solid #514530;border-radius:12px;border-collapse:separate;">
+                  <tr>
+                    <td style="padding:20px 22px;word-wrap:break-word;overflow-wrap:break-word;">
+                      <p style="margin:0 0 7px;color:#D6CFBB;font-size:10px;line-height:1.5;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">From</p>
+                      <p style="margin:0;color:#F3F3E6;font-size:18px;line-height:1.5;font-weight:700;">${safeName}</p>
+                      <p style="margin:16px 0 7px;color:#D6CFBB;font-size:10px;line-height:1.5;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Email address</p>
+                      <p style="margin:0;font-size:14px;line-height:1.6;word-break:break-all;"><a href="${replyUrl}" style="color:#EECD5C;text-decoration:underline;">${safeReplyTo}</a></p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td class="email-padding" style="padding:0 36px 28px;">
+                <p style="margin:0 0 12px;color:#D6CFBB;font-size:10px;line-height:1.5;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Customer message</p>
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="table-layout:fixed;background-color:#1D1912;border:1px solid #514530;border-left:3px solid #EECD5C;border-radius:0 10px 10px 0;border-collapse:separate;">
+                  <tr>
+                    <td style="padding:22px;color:#F3F3E6;font-size:15px;line-height:1.8;word-wrap:break-word;overflow-wrap:break-word;">
+                      <p style="margin:0;">${safeMessage}</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td class="email-padding" style="padding:0 36px 32px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" class="reply-button" style="border-collapse:separate;">
+                  <tr>
+                    <td align="center" bgcolor="#EECD5C" style="border-radius:8px;background-color:#EECD5C;mso-padding-alt:15px 24px;">
+                      <a class="reply-button" href="${replyUrl}" style="display:inline-block;padding:15px 24px;border:1px solid #EECD5C;border-radius:8px;color:#1D1912;font-size:14px;line-height:1.3;font-weight:700;text-decoration:none;mso-padding-alt:0;">Reply to customer &rarr;</a>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:14px 0 0;color:#D6CFBB;font-size:12px;line-height:1.7;">Use the button above or reply to this email to contact the sender directly.</p>
+              </td>
+            </tr>
+            <tr>
+              <td class="email-padding" style="padding:22px 36px;border-top:1px solid #514530;">
+                <p style="margin:0;color:#EECD5C;font-size:12px;line-height:1.6;font-weight:700;">CosmosCraft &middot; Contact Us</p>
+                <p style="margin:5px 0 0;color:#D6CFBB;font-size:11px;line-height:1.7;">Sent from the CosmosCraft website contact form.</p>
               </td>
             </tr>
           </table>
-          <p style="margin:24px 0 0;text-align:center;color:#a1a1aa;font-size:13px;line-height:1.5;">CosmosCraft | Contact message</p>
+          <!--[if mso]></td></tr></table><![endif]-->
         </td>
       </tr>
     </table>
   </body>
 </html>`;
-  const text = `New contact message\n\nFrom: ${name}\nEmail: ${replyTo}\n\n${message}`;
+  const text = `CosmosCraft | New website inquiry\n\nFrom: ${name}\nEmail: ${replyTo}\n\nCustomer message\n${message}\n\nReply to this email to contact the sender directly.\n\nSent from the CosmosCraft website contact form.`;
 
   return exports.sendMail({
     to,
