@@ -48,11 +48,11 @@ export function AppointmentRefundAdmin() {
   return <section className="mb-6 p-5 border border-[var(--border)] rounded-xl text-white"><h2 className="text-xl font-bold">Appointment No-Show Refunds</h2><button onClick={load}>Refresh</button>{error && <p role="alert" className="text-red-400">{error}</p>}
     {rows.length === 0 && <p>No appointment refund requests.</p>}
     {rows.map(r => <div key={r.refund_request_id} className="p-4 my-3 border border-[var(--border)] rounded-lg">
-      <p>{r.first_name} {r.last_name} ? {r.email}</p><p>{r.reference_code} ? {new Date(r.scheduled_at).toLocaleString()} ? {r.appointment_type}</p>
-      <p>{labels[r.status]} ? ?{Number(r.amount_requested).toFixed(2)}</p>
-      <p>Original approved payment: {r.original_payment.payment_method} ? ?{r.original_payment.amount}</p>
+      <p>{r.first_name} {r.last_name} {r.email}</p><p>{r.reference_code} {new Date(r.scheduled_at).toLocaleString()} {r.appointment_type}</p>
+      <p>{labels[r.status]} {Number(r.amount_requested).toFixed(2)}</p>
+      <p>Original approved payment: {r.original_payment.payment_method} {r.original_payment.amount}</p>
       {r.original_payment.payment_proof_url && <a href={r.original_payment.payment_proof_url} target="_blank" rel="noreferrer">Original payment proof</a>}
-      <p>Refund destination: {r.refund_method} ? {r.account_holder} ? {r.account_number}</p><p>Reason: {r.reason || 'Customer no-show'}</p>
+      <p>Refund destination: {r.refund_method}  {r.account_holder}  {r.account_number}</p><p>Reason: {r.reason || 'Customer no-show'}</p>
       {r.refund_reference && <p>Refund reference: {r.refund_reference}</p>}{r.admin_notes && <p>{r.admin_notes}</p>}{r.proof_url && <a href={r.proof_url} target="_blank" rel="noreferrer">Completed refund proof</a>}
       {['pending','processing'].includes(r.status) && <>
         {[['refund_reference','Refund transaction reference'],['proof_url','Refund proof HTTPS link'],['admin_notes','Admin notes / rejection reason']].map(([key,label]) => <label key={key} className="block my-2">{label}<input maxLength={2000} className="block w-full p-2 bg-white/10 rounded" value={draft[r.refund_request_id]?.[key] || ''} onChange={e => setDraft({...draft,[r.refund_request_id]:{...draft[r.refund_request_id],[key]:e.target.value}})} /></label>)}
