@@ -127,7 +127,6 @@ const footerGroups = [
 export function LandingPage() {
   const { isAuthenticated, user } = useAuth()
   const contactInfo = useSiteContact()
-  const [showMoreAbout, setShowMoreAbout] = useState(false)
   const [serviceCards, setServiceCards] = useState(() => readLandingServiceCards())
   const footerGroupsForPage = footerGroups.map((group) => group.title === 'Services'
     ? { ...group, links: serviceCards.map(({ title, href }) => ({ label: title, href })) }
@@ -457,23 +456,14 @@ export function LandingPage() {
                 effortless, inspiring, and dependable.
               </p>
 
-              <button
-                type="button"
-                onClick={() => setShowMoreAbout((expanded) => !expanded)}
-                aria-expanded={showMoreAbout}
-                aria-controls="more-about-content"
+              <a
+                href="https://www.facebook.com/CosmosGuitars"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="mt-7 inline-flex items-center justify-center rounded-full bg-[var(--gold-secondary)] px-6 py-3 text-sm font-semibold text-[var(--text-dark)] transition-colors hover:bg-[var(--gold-primary)]"
               >
-                {showMoreAbout ? 'Show Less' : 'More About'}
-              </button>
-              {showMoreAbout && (
-                <div id="more-about-content" className="mt-5 space-y-3 text-sm leading-relaxed text-[var(--text-muted)]">
-                  <p>Explore our services to learn more about the work we offer, or contact us to discuss your instrument.</p>
-                  {serviceCards.map((service) => (
-                    <p key={service.title}><Link to={service.href} className="font-semibold text-[var(--gold-primary)] hover:underline">{service.title}</Link>{service.text && <> — {service.text}</>}</p>
-                  ))}
-                </div>
-              )}
+                More About
+              </a>
             </div>
 
             <div className="relative mx-auto w-full max-w-[420px] h-auto">

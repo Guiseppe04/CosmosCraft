@@ -428,7 +428,7 @@ export function AddressForm({
           <p className="text-xs text-red-400 mt-1.5">{zipError}</p>
         )}
         {!errors.postalZipCode && isPhilippines && formData.city && formData.postalZipCode.trim() && !zipLoading && zipValid === true && (
-          <p className="text-xs text-green-400 mt-1.5">Valid ZIP code for the selected city ✓</p>
+          <p className="text-xs text-green-400 mt-1.5"><span style={{ color: '#10b981' }}>Valid ZIP code for the selected city ✓</span></p>
         )}
       </div>
 

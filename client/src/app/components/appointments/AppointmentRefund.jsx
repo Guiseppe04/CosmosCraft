@@ -21,7 +21,7 @@ export default function AppointmentRefund({ apt }) {
     refundRequest(`/${apt.appointment_id}/refund-requests`).then(data => { if (live) { setRefund(data.refund_requests?.[0] || null); setLoaded(true) } }).catch(e => { if (live) setError(e.message) })
     return () => { live = false }
   }, [apt.appointment_id, apt.payment_status])
-  if (apt.status !== 'no_show') return null
+  if (!['no_show', 'cancelled'].includes(String(apt.status || '').toLowerCase())) return null
   const eligible = apt.payment_status === 'approved' && Number(apt.approved_payment_amount) > 0
   return <div className="mt-4 p-4 border border-[var(--border)] rounded-xl text-sm text-white">
     {error && <p role="alert" className="text-red-400">{error}</p>}
@@ -34,7 +34,7 @@ export default function AppointmentRefund({ apt }) {
         {[['refund_method','E-wallet / bank'],['account_holder','Account holder name'],['account_number','Account number / registered mobile number'],['reason','Reason']].map(([key,label]) => <label key={key} className="block my-2">{label}<input required={key !== 'reason'} maxLength={key === 'reason' ? 2000 : key === 'account_holder' ? 200 : 100} value={form[key]} onChange={e => setForm({...form,[key]:e.target.value})} className="block w-full p-2 rounded bg-white/10" /></label>)}
         <button disabled={busy} className="p-2 border rounded">{busy ? 'Submitting?' : 'Submit refund request'}</button>
       </form>}
-    </> : <p>Refund requests require an approved payment with a confirmed amount.</p>}
+    </> : <><button type="button" disabled className="text-[var(--gold-primary)] opacity-50 cursor-not-allowed">Request Refund</button><p className="mt-2 text-[var(--text-muted)]">Refund requests require an approved payment with a confirmed amount.</p></>}
   </div>
 }
 export function AppointmentRefundAdmin() {

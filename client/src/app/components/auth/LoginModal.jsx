@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { useNavigate } from 'react-router'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { API } from '../../utils/apiConfig'
-import { Loader2 } from 'lucide-react'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
 
 export function LoginModal() {
   const { loginOpen, closeLogin, login, fetchUser } = useAuth()
@@ -140,9 +140,10 @@ export function LoginModal() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(prev => !prev)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                     className="absolute inset-y-0 right-3 flex items-center text-xs text-[var(--text-muted)] hover:text-[var(--gold-primary)]"
                   >
-                    {showPassword ? 'Hide' : 'Show'}
+                    {showPassword ? <EyeOff className="w-4 h-4" aria-hidden="true" /> : <Eye className="w-4 h-4" aria-hidden="true" />}
                   </button>
                 </div>
               </div>

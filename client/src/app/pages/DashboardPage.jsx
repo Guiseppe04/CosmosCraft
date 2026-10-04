@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
-import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, Bike, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon, Check, RefreshCw, Printer, Info, Camera, Filter, CircleDot, CalendarDays, ArrowDownWideNarrow, ListFilter, DollarSign } from 'lucide-react'
+import { Eye, EyeOff, User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, Bike, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon, Check, RefreshCw, Printer, Info, Camera, Filter, CircleDot, CalendarDays, ArrowDownWideNarrow, ListFilter, DollarSign } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
@@ -660,8 +660,6 @@ export function DashboardPage() {
   const [cancelAppointmentReason, setCancelAppointmentReason] = useState('')
   const [isCancellingAppointment, setIsCancellingAppointment] = useState(false)
   const [isPaymentConfirmedModalOpen, setIsPaymentConfirmedModalOpen] = useState(false)
-  const [isRequestRefundModalOpen, setIsRequestRefundModalOpen] = useState(false)
-  const [isRequestingRefund, setIsRequestingRefund] = useState(false)
 
   const DIGITAL_PAYMENT_METHODS = ['gcash', 'e_wallet', 'e_bank', 'bank_transfer']
   const isDigitalPayment = (method) => DIGITAL_PAYMENT_METHODS.includes(method?.toLowerCase())
@@ -1808,44 +1806,13 @@ export function DashboardPage() {
     if (isDigital && confirmed) {
       setCancelAppointmentTarget(apt)
       setIsPaymentConfirmedModalOpen(true)
-    } else if (isDigital && !confirmed) {
-      setCancelAppointmentTarget(apt)
-      setRefundReason('')
-      setIsRequestRefundModalOpen(true)
     } else {
       openCancelAppointmentModal(apt)
     }
   }
 
-  const handleRequestRefund = async () => {
-    if (!cancelAppointmentTarget?.appointment_id) return
-    try {
-      setIsRequestingRefund(true)
-      await adminApi.createRefundRequest({
-        appointment_id: cancelAppointmentTarget.appointment_id,
-        payment_reference: cancelAppointmentTarget.payment_reference || cancelAppointmentTarget.payment_proof_url || '',
-        amount: cancelAppointmentTarget.amount || null,
-        reason: refundReason.trim(),
-      })
-      setToastMessage('Refund request submitted successfully. You may now cancel your appointment.')
-      setIsRequestRefundModalOpen(false)
-      setRefundReason('')
-      openCancelAppointmentModal(cancelAppointmentTarget)
-    } catch (err) {
-      setToastMessage(`Failed to submit refund request: ${err.message}`)
-    } finally {
-      setIsRequestingRefund(false)
-    }
-  }
-
-  const handleContinueWithoutRefund = () => {
-    setIsRequestRefundModalOpen(false)
-    openCancelAppointmentModal(cancelAppointmentTarget)
-  }
-
   const handleKeepAppointment = () => {
     setIsPaymentConfirmedModalOpen(false)
-    setIsRequestRefundModalOpen(false)
     setCancelAppointmentTarget(null)
   }
 
@@ -1967,6 +1934,8 @@ export function DashboardPage() {
   })
 
   const [isEditingProfile, setIsEditingProfile] = useState(false)
+  const [profileErrors, setProfileErrors] = useState({})
+  const [profileSaveError, setProfileSaveError] = useState('')
   const [profileLoading, setProfileLoading] = useState(false)
   const [confirm, setConfirm] = useState({ open: false, addressId: null, isBusy: false })
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false)
@@ -2074,6 +2043,8 @@ export function DashboardPage() {
   }
 
   const handleInputChange = (field, value) => {
+    setProfileErrors(prev => ({ ...prev, [field]: '' }))
+    setProfileSaveError('')
     // Phone fields accept digits only (plus a leading "+" for +63 format).
     setProfileData(prev => ({ ...prev, [field]: field === 'phone' ? sanitizePhoneInput(value) : value }))
   }
@@ -3661,13 +3632,19 @@ const filteredOrders = myOrders.filter(order => {
   }
 
   const handleSaveProfile = async () => {
+    const errors = {}
+    for (const [field, label] of [['firstName', 'First name'], ['lastName', 'Last name']]) {
+      if (!String(profileData[field] || '').trim()) errors[field] = `${label} is required.`
+    }
+    const trimmedPhone = String(profileData.phone || '').trim()
+    if (trimmedPhone && !isValidPhoneNumber(trimmedPhone)) errors.phone = PHONE_ERROR_MESSAGE
+    setProfileErrors(errors)
+    setProfileSaveError('')
+    if (Object.keys(errors).length) {
+      document.getElementById(`profile-${Object.keys(errors)[0]}`)?.focus()
+      return
+    }
     try {
-      const trimmedPhone = String(profileData.phone || '').trim()
-      if (trimmedPhone && !isValidPhoneNumber(trimmedPhone)) {
-        setToastMessage(PHONE_ERROR_MESSAGE)
-        return
-      }
-
       const avatarPayload = profileImage && profileImage.startsWith('data:')
         ? { avatarUrl: profileImage }
         : {}
@@ -3695,7 +3672,17 @@ const filteredOrders = myOrders.filter(order => {
       setToastMessage('Profile updated successfully!')
       setIsEditingProfile(false)
     } catch (err) {
-      alert("Failed to update profile: " + err.message)
+      const fieldErrors = {}
+      const otherErrors = []
+      for (const error of err.fieldErrors || []) {
+        if (['firstName', 'lastName', 'middleName', 'phone'].includes(error.field)) {
+          fieldErrors[error.field] = error.message
+        } else {
+          otherErrors.push(error.message)
+        }
+      }
+      setProfileErrors(fieldErrors)
+      setProfileSaveError(otherErrors.join(' ') || (Object.keys(fieldErrors).length ? '' : (err.message || 'Unable to update your profile. Please try again.')))
     }
   }
 
@@ -3877,7 +3864,7 @@ const filteredOrders = myOrders.filter(order => {
                 Photo
                 <input type="file" accept="image/*" onChange={handleImageChange} disabled={!isEditingProfile} className="hidden" />
               </label>
-              <button type="button" onClick={() => setIsEditingProfile(!isEditingProfile)} className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--border)] text-xs font-semibold text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors">
+              <button type="button" onClick={() => { setIsEditingProfile(!isEditingProfile); setProfileErrors({}); setProfileSaveError('') }} className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--border)] text-xs font-semibold text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors">
                 {isEditingProfile ? 'Cancel Edit' : 'Edit Profile'}
               </button>
             </div>
@@ -3885,26 +3872,29 @@ const filteredOrders = myOrders.filter(order => {
         </div>
         <div className="grid md:grid-cols-2 gap-6">
           <div>
-            <label className="block text-xs font-semibold text-white mb-2">First Name</label>
-            <input type="text" value={profileData.firstName} onChange={e => handleInputChange('firstName', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" />
+            <label htmlFor="profile-firstName" className="block text-xs font-semibold text-white mb-2">First Name{isEditingProfile && !String(profileData.firstName || '').trim() && <span style={{ color: '#ef4444' }} className="text-red-500" aria-label="required"><span style={{ color: '#ef4444' }}> *</span></span>}</label>
+            <input id="profile-firstName" aria-invalid={Boolean(profileErrors.firstName)} aria-describedby={profileErrors.firstName ? 'profile-firstName-error' : undefined} required type="text" value={profileData.firstName} onChange={e => handleInputChange('firstName', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" />
+            {profileErrors.firstName && <p id="profile-firstName-error" style={{ color: '#ef4444' }} role="alert" className="text-xs text-red-400 mt-1">{profileErrors.firstName}</p>}
           </div>
           <div>
-            <label className="block text-xs font-semibold text-white mb-2">Last Name</label>
-            <input type="text" value={profileData.lastName} onChange={e => handleInputChange('lastName', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" />
+            <label htmlFor="profile-lastName" className="block text-xs font-semibold text-white mb-2">Last Name{isEditingProfile && !String(profileData.lastName || '').trim() && <span style={{ color: '#ef4444' }} className="text-red-500" aria-label="required"><span style={{ color: '#ef4444' }}> *</span></span>}</label>
+            <input id="profile-lastName" aria-invalid={Boolean(profileErrors.lastName)} aria-describedby={profileErrors.lastName ? 'profile-lastName-error' : undefined} required type="text" value={profileData.lastName} onChange={e => handleInputChange('lastName', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" />
+            {profileErrors.lastName && <p id="profile-lastName-error" style={{ color: '#ef4444' }} role="alert" className="text-xs text-red-400 mt-1">{profileErrors.lastName}</p>}
           </div>
           <div>
-            <label className="block text-xs font-semibold text-white mb-2">Middle Initial (Optional)</label>
-            <input type="text" value={profileData.middleName} maxLength={1} onChange={e => handleInputChange('middleName', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" />
+            <label htmlFor="profile-middleName" className="block text-xs font-semibold text-white mb-2">Middle Initial (Optional)</label>
+            <input id="profile-middleName" aria-invalid={Boolean(profileErrors.middleName)} aria-describedby={profileErrors.middleName ? 'profile-middleName-error' : undefined} type="text" value={profileData.middleName} maxLength={1} onChange={e => handleInputChange('middleName', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" />
+            {profileErrors.middleName && <p id="profile-middleName-error" role="alert" className="text-xs text-red-400 mt-1">{profileErrors.middleName}</p>}
           </div>
           <div>
             <label className="block text-xs font-semibold text-white mb-2">Email</label>
             <input type="email" value={profileData.email} disabled className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] disabled:opacity-50" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-white mb-2">Phone Number</label>
-            <PhoneInput value={profileData.phone} onChange={e => handleInputChange('phone', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
-            {isEditingProfile && String(profileData.phone || '').trim() && !isValidPhoneNumber(profileData.phone) && (
-              <p className="text-[11px] text-red-400 mt-1">{PHONE_ERROR_MESSAGE}</p>
+            <label htmlFor="profile-phone" className="block text-xs font-semibold text-white mb-2">Phone Number</label>
+            <PhoneInput id="profile-phone" aria-invalid={Boolean(profileErrors.phone || (isEditingProfile && profileData.phone && !isValidPhoneNumber(profileData.phone)))} aria-describedby={profileErrors.phone || (isEditingProfile && profileData.phone && !isValidPhoneNumber(profileData.phone)) ? 'profile-phone-error' : undefined} value={profileData.phone} onChange={e => handleInputChange('phone', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
+            {isEditingProfile && (profileErrors.phone || (String(profileData.phone || '').trim() && !isValidPhoneNumber(profileData.phone))) && (
+              <p id="profile-phone-error" style={{ color: '#ef4444' }} role="alert" className="text-[11px] text-red-400 mt-1">{profileErrors.phone || PHONE_ERROR_MESSAGE}</p>
             )}
           </div>
           <div>
@@ -3922,6 +3912,7 @@ const filteredOrders = myOrders.filter(order => {
             </div>
           </div>
         </div>
+        {isEditingProfile && profileSaveError && <p role="alert" className="mt-6 text-sm text-red-400">{profileSaveError}</p>}
         {isEditingProfile && (
           <button type="button" onClick={handleSaveProfile} className="mt-8 inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-sm font-semibold text-[var(--text-dark)] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition">
             <Save className="w-4 h-4" />
@@ -5559,87 +5550,7 @@ const filteredOrders = myOrders.filter(order => {
         )}
       </AnimatePresence>
 
-      {/* ─── Request Refund Modal ─────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {isRequestRefundModalOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center"
-            onClick={(event) => {
-              if (event.target === event.currentTarget) handleKeepAppointment()
-            }}
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 16, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 16, scale: 0.96 }}
-              className="relative w-full max-w-lg rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 sm:p-7 shadow-2xl"
-            >
-              <button
-                type="button"
-                onClick={handleKeepAppointment}
-                disabled={isRequestingRefund}
-                className="absolute right-4 top-4 rounded-lg p-2 text-[var(--text-muted)] hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-                aria-label="Close"
-              >
-                <X className="h-4 w-4" />
-              </button>
 
-              <h3 className="text-xl font-bold text-white mb-2">Request Refund</h3>
-              <p className="mt-2 text-sm text-[var(--text-muted)] mb-4">
-                Your payment has <strong>not yet been confirmed</strong> by the administrator.
-                You may submit a refund request before cancelling this appointment.
-                Once your refund request is reviewed, the administrator will approve or
-                reject it based on your payment status.
-              </p>
-
-              <div className="mt-4">
-                <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-2">
-                  Reason (optional)
-                </label>
-                <textarea
-                  value={refundReason}
-                  onChange={(e) => setRefundReason(e.target.value)}
-                  rows={3}
-                  disabled={isRequestingRefund}
-                  className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-white text-sm focus:border-[var(--gold-primary)] focus:outline-none resize-none disabled:opacity-50"
-                  placeholder="Briefly explain the reason for the refund..."
-                />
-              </div>
-
-              <div className="mt-6 flex flex-col gap-3">
-                <button
-                  type="button"
-                  onClick={handleRequestRefund}
-                  disabled={isRequestingRefund}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-[var(--gold-primary)] py-3 text-sm font-bold text-black hover:bg-[var(--gold-secondary)] transition-colors disabled:opacity-60"
-                >
-                  {isRequestingRefund && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {isRequestingRefund ? 'Submitting...' : 'Request Refund'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleContinueWithoutRefund}
-                  disabled={isRequestingRefund}
-                  className="rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-50"
-                >
-                  Continue Without Refund
-                </button>
-                <button
-                  type="button"
-                  onClick={handleKeepAppointment}
-                  disabled={isRequestingRefund}
-                  className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] py-3 text-sm font-semibold text-[var(--text-muted)] hover:text-white transition-colors disabled:opacity-50"
-                >
-                  Keep Appointment
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
         <div className="grid xl:grid-cols-[1fr_1.4fr] gap-4 sm:gap-6 items-start">
@@ -5795,9 +5706,10 @@ const filteredOrders = myOrders.filter(order => {
                       <button
                         type="button"
                         onClick={() => setShowNewPassword(prev => !prev)}
+                        aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-[var(--text-muted)] hover:text-white transition-colors"
                       >
-                        {showNewPassword ? 'Hide' : 'Show'}
+                        {showNewPassword ? <EyeOff className="w-4 h-4" aria-hidden="true" /> : <Eye className="w-4 h-4" aria-hidden="true" />}
                       </button>
                     </div>
                     {/* Password Requirements Checklist */}
@@ -5840,9 +5752,10 @@ const filteredOrders = myOrders.filter(order => {
                       <button
                         type="button"
                         onClick={() => setShowConfirmPassword(prev => !prev)}
+                        aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-[var(--text-muted)] hover:text-white transition-colors"
                       >
-                        {showConfirmPassword ? 'Hide' : 'Show'}
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" aria-hidden="true" /> : <Eye className="w-4 h-4" aria-hidden="true" />}
                       </button>
                     </div>
                   </div>

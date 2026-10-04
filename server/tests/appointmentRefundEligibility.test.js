@@ -8,6 +8,7 @@ test('refund creation rejects unapproved payments, wrong owners, wrong appointme
     const cases = [
       [{payment_status:'pending'}, /Approved/], [{payment_status:'rejected'}, /Approved/],
       [{payment_status:'verified'}, /Approved/], [{payment_status:null}, /Approved/],
+      [{status:'cancelled',payment_status:'pending'}, /Approved/],
       [{user_id:'other'}, /Only the appointment customer/], [{status:'confirmed'}, /No Show/],
       [{approved_payment_amount:null}, /confirm/],
     ];
@@ -23,6 +24,36 @@ test('refund creation rejects unapproved payments, wrong owners, wrong appointme
       assert.ok(rolledBack);
     }
   } finally { pool.connect = original; }
+});
+test('cancelled appointments reuse the refund flow and prevent duplicate requests', async () => {
+  const original = { connect: pool.connect, recordEvent: service.recordEvent, notify: service.notify };
+  let existing = false;
+  const statements = [];
+  try {
+    service.recordEvent = async () => {};
+    service.notify = async () => {};
+    pool.connect = async () => ({ query: async (sql, params) => {
+      statements.push(sql);
+      if (sql.startsWith('SELECT * FROM appointments')) return { rows: [{ appointment_id: 'a', user_id: 'u', status: 'cancelled', payment_status: 'approved', approved_payment_amount: 500 }] };
+      if (sql.startsWith('SELECT 1 FROM appointment_refunds')) return { rows: existing ? [{}] : [] };
+      if (sql.startsWith('INSERT INTO appointment_refunds')) {
+        assert.equal(params[2], 500);
+        existing = true;
+        return { rows: [{ refund_request_id: 'r', amount_requested: 500 }] };
+      }
+      return { rows: [] };
+    }, release() {} });
+    const data = { appointment_id: 'a', user_id: 'u', refund_method: 'GCash', account_holder: 'Customer', account_number: '09123456789' };
+    assert.equal((await service.create(data)).refund_request_id, 'r');
+    assert.ok(statements.includes('COMMIT'));
+    await assert.rejects(service.create(data), /already been requested/);
+    assert.equal(statements.filter(sql => sql.startsWith('INSERT INTO appointment_refunds')).length, 1);
+    assert.ok(statements.includes('ROLLBACK'));
+  } finally {
+    pool.connect = original.connect;
+    service.recordEvent = original.recordEvent;
+    service.notify = original.notify;
+  }
 });
 test('refund completion requires processing and a transaction reference', async () => {
   const original = pool.connect;

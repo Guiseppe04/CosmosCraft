@@ -61,6 +61,7 @@ exports.createSale = async (req, res, next) => {
 exports.listSales = async (req, res, next) => {
   try {
     const {
+      search,
       staffId,
       status,
       paymentStatus,
@@ -71,6 +72,7 @@ exports.listSales = async (req, res, next) => {
     } = req.query;
 
     const sales = await posService.listSales({
+      search,
       staffId,
       status,
       paymentStatus,
@@ -81,9 +83,12 @@ exports.listSales = async (req, res, next) => {
     });
 
     const count = await posService.getSalesCount({
+      search,
       staffId,
       status,
-      paymentStatus
+      paymentStatus,
+      startDate,
+      endDate
     });
 
     res.json({

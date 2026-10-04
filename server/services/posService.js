@@ -300,6 +300,7 @@ exports.getSaleById = async (saleId) => {
  * List POS sales with filters
  */
 exports.listSales = async ({
+  search = null,
   staffId = null,
   status = null,
   paymentStatus = null,
@@ -311,6 +312,15 @@ exports.listSales = async ({
   let where = [];
   let params = [];
   let idx = 1;
+
+  if (search && String(search).trim()) {
+    where.push(`(ps.sale_number ILIKE $${idx} OR ps.customer_name ILIKE $${idx} OR EXISTS (
+      SELECT 1 FROM users search_staff WHERE search_staff.user_id = ps.staff_id
+      AND CONCAT_WS(' ', search_staff.first_name, search_staff.last_name) ILIKE $${idx}
+    ))`);
+    params.push(`%${String(search).trim()}%`);
+    idx++;
+  }
 
   if (staffId) {
     where.push(`ps.staff_id = $${idx}`);
@@ -362,13 +372,25 @@ exports.listSales = async ({
  * Get sales count
  */
 exports.getSalesCount = async ({
+  search = null,
   staffId = null,
   status = null,
-  paymentStatus = null
+  paymentStatus = null,
+  startDate = null,
+  endDate = null
 } = {}) => {
   let where = [];
   let params = [];
   let idx = 1;
+
+  if (search && String(search).trim()) {
+    where.push(`(pos_sales.sale_number ILIKE $${idx} OR pos_sales.customer_name ILIKE $${idx} OR EXISTS (
+      SELECT 1 FROM users search_staff WHERE search_staff.user_id = pos_sales.staff_id
+      AND CONCAT_WS(' ', search_staff.first_name, search_staff.last_name) ILIKE $${idx}
+    ))`);
+    params.push(`%${String(search).trim()}%`);
+    idx++;
+  }
 
   if (staffId) {
     where.push(`staff_id = $${idx}`);
@@ -384,6 +406,15 @@ exports.getSalesCount = async ({
     where.push(`payment_status = $${idx}`);
     params.push(paymentStatus);
     idx++;
+  }
+
+  if (startDate) {
+    where.push(`created_at >= $${idx++}`);
+    params.push(new Date(startDate));
+  }
+  if (endDate) {
+    where.push(`created_at < $${idx++}`);
+    params.push(new Date(endDate));
   }
 
   const condition = where.length ? `WHERE ${where.join(' AND ')}` : '';
