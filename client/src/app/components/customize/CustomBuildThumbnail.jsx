@@ -14,7 +14,7 @@ export default function CustomBuildThumbnail({ item }) {
   const isBass = Boolean(build.isBass || savedConfig.bassType || String(build.guitar_type || savedConfig.guitarType || '').toLowerCase().includes('bass'))
   const config = { ...(isBass ? BASS_DEFAULT_CONFIG : DEFAULT_CONFIG), ...savedConfig }
   const Preview = isBass ? BassPreview : GuitarPreview
-  const mask = isBass ? BASS_BODY_OPTIONS[config.body]?.bodySrc : BODY_OPTIONS[config.body]?.bodySrc
+  const mask = isBass ? BASS_BODY_OPTIONS[config.bassType]?.bodySrc : BODY_OPTIONS[config.body]?.bodySrc
   const stickers = parse(build.stickers, [])
   const previewImage = build.preview_image || item.preview_image
   if (previewImage) return <img src={previewImage} alt={item.name || 'Custom guitar'} className="h-full w-full object-contain" />

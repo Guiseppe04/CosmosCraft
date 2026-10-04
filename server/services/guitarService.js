@@ -287,11 +287,11 @@ exports.createMyCustomization = async (userId, payload, db = pool, customization
   return res.rows[0];
 };
 
-// Assignment creates a customer-owned build and its cart entry in one transaction.
+// Sending creates only a customer-owned saved build. Checkout is the customer's choice.
 // The request's UUID is also the build ID, making retries safe without another table.
 exports.assignWalkInCustomization = async (adminId, payload) => {
   await ensureCustomizationColumns();
-  const { customer_id, customization_id, quantity = 1, design } = payload;
+  const { customer_id, customization_id, design } = payload;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -321,15 +321,6 @@ exports.assignWalkInCustomization = async (adminId, payload) => {
       } };
       customization = await exports.createMyCustomization(customer_id,
         { ...design, config_json: config, is_saved: true }, client, customization_id);
-      const { getOrCreateCart, recalculateCartTotals } = require('./cartService');
-      const cart = await getOrCreateCart(customer_id, client);
-      await client.query('SELECT cart_id FROM carts WHERE cart_id = $1 FOR UPDATE', [cart.cart_id]);
-      await client.query(
-        `INSERT INTO cart_items (cart_id, customization_id, quantity, unit_price)
-         VALUES ($1, $2, $3, $4)`,
-        [cart.cart_id, customization.customization_id, quantity, customization.total_price]
-      );
-      await recalculateCartTotals(cart.cart_id, client);
     }
     await client.query('COMMIT');
     return { customization, alreadyAssigned };

@@ -89,7 +89,7 @@ export function WalkInAssignmentPanel({ config, summary, pricingBreakdown, lineI
       await adminApi.assignWalkInCustomization(pending.current)
       sessionStorage.setItem(storageKey, JSON.stringify({ payload: pending.current, customer, assigned: true }))
       setAssigned(true)
-      setMessage(`Sent to ${customer.first_name} ${customer.last_name} (${customer.email}). The design is ready in their Saved Builds and Cart.`)
+      setMessage(`Sent to ${customer.first_name} ${customer.last_name} (${customer.email}). The design is ready in their Saved Builds.`)
       onAssigned?.(customer, pending.current.design)
     } catch (error) {
       if (error.status === 400) {

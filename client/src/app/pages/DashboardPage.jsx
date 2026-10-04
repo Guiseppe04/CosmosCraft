@@ -7,7 +7,12 @@ import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
 import { BASS_BODY_OPTIONS } from '../lib/bassBuilderData.js'
 import { adminApi } from '../utils/adminApi.js'
-import { mergeWalkInSavedBuilds } from '../utils/walkInSavedBuilds.js'
+import { mergeWalkInSavedBuilds, readSavedBuilds } from '../utils/walkInSavedBuilds.js'
+import { formatBuildCreatedAt, getBuildCreatedAt } from '../utils/buildCreatedAt.js'
+import { getCustomBuildSummaryLines } from '../utils/customBuildSummary.js'
+import CustomBuildThumbnail from '../components/customize/CustomBuildThumbnail.jsx'
+import CustomBuildPreviewModal from '../components/customize/CustomBuildPreviewModal.jsx'
+import CustomBuildDetails from '../components/customize/CustomBuildDetails.jsx'
 import { buildInvoiceHtml } from '../utils/invoiceBuilder.js'
 import { formatPaymentMethod } from '../utils/paymentMethodUtils'
 import { getPaymentStatusConfig } from '../utils/orderPaymentStatus'
@@ -15,8 +20,6 @@ import { useDebounce } from '../hooks/useDebounce'
 import { uploadToCloudinary } from '../utils/cloudinary.js'
 import { formatCurrency } from '../utils/formatCurrency.js'
 import CustomerProjectTracker from '../components/projects/CustomerProjectTracker.jsx'
-import GuitarPreview from '../components/guitar/GuitarPreview.jsx'
-import BassPreview from '../components/bass/BassPreview.jsx'
 import { AddressForm } from '../components/AddressForm.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
 import { Country } from 'country-state-city'
@@ -491,8 +494,9 @@ export function DashboardPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { logout, user, updateUser } = useAuth()
-  if (dashboardCache.userId !== user?.id) {
-    dashboardCache = { userId: user?.id, orders: null, appointments: null }
+  const currentUserId = user?.id || user?.user_id
+  if (dashboardCache.userId !== currentUserId) {
+    dashboardCache = { userId: currentUserId, orders: null, appointments: null }
   }
   const {
     cart,
@@ -539,6 +543,7 @@ export function DashboardPage() {
   const [profileImage, setProfileImage] = useState('')
   const [showSelectInstrumentModal, setShowSelectInstrumentModal] = useState(false)
   const [viewingBuild, setViewingBuild] = useState(null)
+  const [previewingBuild, setPreviewingBuild] = useState(null)
   const [toastMessage, setToastMessage] = useState(location.state?.message || null)
   const [refreshCounter, setRefreshCounter] = useState(0)
   const [buildToDelete, setBuildToDelete] = useState(null)
@@ -561,6 +566,7 @@ export function DashboardPage() {
   const [myProjectsPagination, setMyProjectsPagination] = useState({ page: 1, pageSize: 6, total: 0, totalPages: 1 })
   const debouncedMyProjectSearch = useDebounce(myProjectSearch, 300)
   const [myCustomizations, setMyCustomizations] = useState([])
+  const [customizationsError, setCustomizationsError] = useState('')
   const [activeProjectView, setActiveProjectView] = useState(null)
   const [trackerShowingInstallmentSchedule, setTrackerShowingInstallmentSchedule] = useState(false)
   const [activeBuildTab, setActiveBuildTab] = useState('build-projects')
@@ -717,7 +723,7 @@ export function DashboardPage() {
       fetchMyProjects()
       fetchMyCustomizations()
     }
-  }, [activeSection, user?.id])
+  }, [activeSection, currentUserId])
 
   useEffect(() => {
     setMyProjectPage(1)
@@ -993,22 +999,34 @@ export function DashboardPage() {
   }
 
   const fetchMyCustomizations = () => {
-    const requestedUserId = user?.id || user?.user_id
+    const requestedUserId = currentUserId
     if (!requestedUserId) return
+    setCustomizationsError('')
     adminApi.getMyCustomizations().then(res => {
       if (dashboardCache.userId !== requestedUserId) return
-      const customizations = res.data || []
-      for (const [key, type] of [['cosmoscraft_saved_builds', 'electric'], ['cosmoscraft_saved_bass_builds', 'bass']]) {
-        const localBuilds = JSON.parse(window.localStorage.getItem(key) || '[]')
-        const builds = mergeWalkInSavedBuilds(Array.isArray(localBuilds) ? localBuilds : [], customizations, requestedUserId, type)
-        window.localStorage.setItem(key, JSON.stringify(builds))
-      }
+      const customizations = Array.isArray(res.data) ? res.data : []
       setMyCustomizations(customizations)
-    }).catch(console.error)
+      for (const [key, type] of [['cosmoscraft_saved_builds', 'electric'], ['cosmoscraft_saved_bass_builds', 'bass']]) {
+        try {
+          const builds = mergeWalkInSavedBuilds(readSavedBuilds(window.localStorage, key), customizations, requestedUserId, type)
+          window.localStorage.setItem(key, JSON.stringify(builds))
+        } catch (error) {
+          console.warn('Could not cache received builds:', error.message)
+        }
+      }
+    }).catch(error => {
+      if (dashboardCache.userId !== requestedUserId) return
+      setCustomizationsError(error.message || 'Unable to load your saved builds. Please try again.')
+    })
   }
 
   useSocketEvent('cart:updated', (data) => {
     if (data?.customization_id) fetchMyCustomizations()
+  })
+
+  useSocketEvent('customization:created', () => {
+    fetchMyCustomizations()
+    setToastMessage('The shop sent you a guitar design. Review it in My Guitar → Saved Builds.')
   })
 
   useSocketEvent('connect', () => {
@@ -1859,10 +1877,10 @@ export function DashboardPage() {
   const confirmDelete = async () => {
     if (!buildToDelete) return;
 
-    let deletedCustomizationId = null
+    let deletedCustomizationId = myCustomizations.find(build => build.customization_id === buildToDelete)?.customization_id || null
 
     for (const storageKey of ['cosmoscraft_saved_builds', 'cosmoscraft_saved_bass_builds']) {
-      const builds = JSON.parse(window.localStorage.getItem(storageKey) || '[]');
+      const builds = readSavedBuilds(window.localStorage, storageKey);
       const deletedBuild = builds.find(b => b.id === buildToDelete)
       const filtered = builds.filter(b => b.id !== buildToDelete);
       if (builds.length !== filtered.length) {
@@ -1901,36 +1919,6 @@ export function DashboardPage() {
       navigate(location.pathname, { replace: true, state: { ...location.state, message: undefined } })
     }
   }, [location, navigate])
-
-  const updateAdditionalPartQuantity = (buildId, partIndex, newQuantity) => {
-    if (viewingBuild && getBuildLockState(viewingBuild).isLocked) {
-      handleLockedBuildAction()
-      return
-    }
-
-    const updatedBuild = { ...viewingBuild };
-    const partsArray = [...updatedBuild.additionalParts];
-
-    if (newQuantity <= 0) {
-      partsArray.splice(partIndex, 1);
-    } else {
-      partsArray[partIndex] = { ...partsArray[partIndex], quantity: newQuantity };
-    }
-    updatedBuild.additionalParts = partsArray;
-
-    setViewingBuild(updatedBuild);
-
-    for (const key of ['cosmoscraft_saved_builds', 'cosmoscraft_saved_bass_builds']) {
-      const builds = JSON.parse(window.localStorage.getItem(key) || '[]');
-      const bIndex = builds.findIndex(b => b.id === buildId);
-      if (bIndex !== -1) {
-        builds[bIndex] = updatedBuild;
-        window.localStorage.setItem(key, JSON.stringify(builds));
-        setRefreshCounter(prev => prev + 1);
-        break;
-      }
-    }
-  }
 
   const [profileData, setProfileData] = useState({
     username: '',
@@ -3347,12 +3335,13 @@ const filteredOrders = myOrders.filter(order => {
       return renderProjectsContent()
     }
 
-    const savedGuitarBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_builds') || '[]').map(b => ({ ...b, isBass: false }))
-    const savedBassBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_bass_builds') || '[]').map(b => ({ ...b, isBass: true }))
+    const savedGuitarBuilds = mergeWalkInSavedBuilds(readSavedBuilds(window.localStorage, 'cosmoscraft_saved_builds'), myCustomizations, currentUserId, 'electric').map(b => ({ ...b, isBass: false }))
+    const savedBassBuilds = mergeWalkInSavedBuilds(readSavedBuilds(window.localStorage, 'cosmoscraft_saved_bass_builds'), myCustomizations, currentUserId, 'bass').map(b => ({ ...b, isBass: true }))
     const allBuilds = [...savedGuitarBuilds, ...savedBassBuilds]
       .filter(build => !build.config?._walkIn?.customerId || String(build.config._walkIn.customerId) === String(user?.id || user?.user_id))
       .sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0))
     const isBuildLimitReached = allBuilds.length >= MAX_SAVED_GUITAR_BUILDS
+    const receivedBuildCount = allBuilds.filter(build => build.config?._walkIn && !getBuildLockState(build).isLocked).length
 
     const deleteBuild = (buildId) => {
       setBuildToDelete(buildId);
@@ -3360,6 +3349,18 @@ const filteredOrders = myOrders.filter(order => {
 
     return (
       <div className="space-y-8">
+        {customizationsError && (
+          <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
+            <p>{customizationsError}</p>
+            <button type="button" onClick={fetchMyCustomizations} className="mt-2 font-semibold underline">Retry loading builds</button>
+          </div>
+        )}
+        {receivedBuildCount > 0 && activeBuildTab === 'build-projects' && (
+          <div className="rounded-xl border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/10 p-4 text-sm text-[var(--text-light)]">
+            <p>{receivedBuildCount} {receivedBuildCount === 1 ? 'build sent by the shop is' : 'builds sent by the shop are'} ready in Saved Builds.</p>
+            <button type="button" onClick={() => setActiveBuildTab('saved-builds')} className="mt-2 font-semibold text-[var(--gold-primary)] underline">View received builds</button>
+          </div>
+        )}
         {activeBuildTab === 'build-projects' && renderProjectsContent()}
 
         {activeBuildTab === 'saved-builds' && (
@@ -3437,64 +3438,19 @@ const filteredOrders = myOrders.filter(order => {
                   const grandTotal = build.price + additionalPartsTotal;
                   const buildLockState = getBuildLockState(build)
 
-                  const PreviewComponent = build.isBass ? BassPreview : GuitarPreview
-                  const stickerMaskSrc = build.isBass
-                    ? BASS_BODY_OPTIONS[build.config?.bassType]?.bodySrc || null
-                    : BODY_OPTIONS[build.config?.body]?.bodySrc || null
-                  const buildStickers = Array.isArray(build.stickers) ? build.stickers : []
-                  const miniStickerOverlay = buildStickers
-                    .filter((s) => (s.side || 'front') === 'front' && typeof s.src === 'string' && s.src)
-                    .map((s, i) => (
-                      <img
-                        key={s.id || `mini-sticker-${i}`}
-                        src={s.src}
-                        alt=""
-                        style={{
-                          position: 'absolute',
-                          zIndex: 25 + i,
-                          left: `${Number(s.x) || 0}%`,
-                          top: `${Number(s.y) || 0}%`,
-                          width: `${Number(s.size) || 18}%`,
-                          transform: `translate(-50%, -50%) rotate(${Number(s.rotation) || 0}deg)`,
-                          transformOrigin: 'center center',
-                          pointerEvents: 'none',
-                        }}
-                      />
-                    ))
-
                   return (
                     <div key={build.id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors flex flex-col h-full">
                       <div className="flex items-start gap-3 mb-4">
-                        {/* Mini guitar preview */}
-                        <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-gradient-to-b from-[#141414] to-[#0a0a0a]">
-                          <div
-                            className="absolute top-1/2 left-1/2"
-                            style={{
-                              width: '320px',
-                              height: '320px',
-                              transform: 'translate(-50%, -47%) scale(0.35)',
-                              transformOrigin: 'center center',
-                              pointerEvents: 'none',
-                            }}
-                          >
-                            <PreviewComponent
-                              config={build.config}
-                              view="front"
-                              modelImageSrc={null}
-                              bodyWoodImageSrc={null}
-                              topWoodImageSrc={null}
-                              stickerOverlay={miniStickerOverlay}
-                              stickerMaskSrc={stickerMaskSrc}
-                              stageRef={{ current: null }}
-                            />
-                          </div>
-                        </div>
-
+                        <button type="button" onClick={() => setPreviewingBuild(build)} aria-label={`View ${build.name || 'custom build'} preview`}
+                          className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] focus-visible:ring-2 focus-visible:ring-[var(--gold-primary)]">
+                          <CustomBuildThumbnail item={build} />
+                          <span className="absolute inset-x-0 bottom-0 bg-black/60 py-1 text-[10px] font-medium text-white">View image</span>
+                        </button>
 
                         {/* Name + meta + price stacked */}
                         <div className="min-w-0 flex-1 flex flex-col gap-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-base font-bold text-white truncate">
+                            <h3 className="break-words text-base font-bold leading-snug text-white">
                               {build.name || 'Custom Build'}
                             </h3>
                             {buildLockState.isLocked && (
@@ -3504,11 +3460,12 @@ const filteredOrders = myOrders.filter(order => {
                             )}
                           </div>
 
-                          <p className="text-xs text-[var(--text-muted)] truncate">
-                            Saved on {new Date(build.savedAt || new Date()).toLocaleDateString()}
+                          <p className="text-xs leading-relaxed text-[var(--text-muted)]">
+                            Created <time dateTime={getBuildCreatedAt(build, buildLockState.customization) || undefined}>{formatBuildCreatedAt(build, buildLockState.customization)}</time>
                           </p>
+                          {build.config?._walkIn && <span className="text-[11px] font-medium text-[var(--gold-primary)]">Sent by the shop</span>}
 
-                          <div className="flex items-center gap-2 mt-1">
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
                             <span className="text-lg font-bold text-[var(--gold-primary)]">
                               ₱{grandTotal.toLocaleString('en-PH')}
                             </span>
@@ -3519,16 +3476,15 @@ const filteredOrders = myOrders.filter(order => {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 mt-4 text-sm flex-1">
-                        {Object.entries(build.config || {}).map(([key, val]) => (
-                          val && typeof val === 'string' ? (
-                            <div key={key} className="flex items-center gap-1">
-                              <span className="text-xs text-[var(--text-muted)] capitalize truncate max-w-[80px]">{key}:</span>
-                              <span className="text-xs text-white truncate max-w-[100px]">{val}</span>
-                            </div>
-                          ) : null
-                        )).slice(0, 6)}
-                      </div>
+                      <dl className="mt-3 grid min-w-0 grid-cols-1 gap-x-4 gap-y-3 text-xs sm:grid-cols-2">
+                        {getCustomBuildSummaryLines(build).slice(0, 4).map((line, index) => {
+                          const separator = line.indexOf(': ')
+                          return <div key={index} className="min-w-0">
+                            <dt className="font-medium text-[var(--text-muted)]">{separator >= 0 ? line.slice(0, separator) : 'Component'}</dt>
+                            <dd className="mt-1 break-words leading-relaxed text-white">{separator >= 0 ? line.slice(separator + 2) : line}</dd>
+                          </div>
+                        })}
+                      </dl>
 
                       {buildLockState.isLocked && (
                         <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200 flex items-start gap-2">
@@ -3539,20 +3495,6 @@ const filteredOrders = myOrders.filter(order => {
 
                       <div className="mt-6 space-y-2">
                         <div className="flex gap-2">
-                          <button
-                            type="button"
-                            disabled={buildLockState.isLocked}
-                            onClick={() => {
-                              window.localStorage.setItem('cosmoscraft_target_build_id', build.id);
-                              navigate('/shop');
-                            }}
-                            className={`flex-1 py-1.5 px-2 rounded-lg border text-[var(--text-light)] text-xs transition-all text-center font-medium ${buildLockState.isLocked
-                              ? 'border-[var(--border)] opacity-40 cursor-not-allowed'
-                              : 'border-[var(--border)] hover:bg-white/5'
-                              }`}
-                          >
-                            Add Parts
-                          </button>
                           <button
                             onClick={() => setViewingBuild(build)}
                             className="flex-1 py-1.5 px-2 rounded-lg border border-[var(--border)] text-[var(--text-light)] text-xs hover:bg-white/5 transition-all text-center font-medium"
@@ -6035,15 +5977,17 @@ const filteredOrders = myOrders.filter(order => {
         </div>
       )}
 
+      {previewingBuild && <CustomBuildPreviewModal item={previewingBuild} onClose={() => setPreviewingBuild(null)} />}
+
       {/* View Summary Modal */}
       {viewingBuild && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 py-8">
           <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 w-full max-w-4xl max-h-full overflow-y-auto relative shadow-2xl">
-            <button type="button" onClick={() => setViewingBuild(null)} className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-white transition-colors">
+            <button type="button" aria-label="Close build summary" onClick={() => setViewingBuild(null)} className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-white transition-colors">
               <XCircle className="w-6 h-6" />
             </button>
-            <h2 className="text-2xl font-bold text-white mb-1">{viewingBuild.name || 'Custom Build'} Summary</h2>
-            <p className="text-sm text-[var(--text-muted)] mb-6">Saved on {new Date(viewingBuild.savedAt || new Date()).toLocaleDateString()}</p>
+            <h2 className="pr-8 break-words text-2xl font-bold text-white mb-1">{viewingBuild.name || 'Custom Build'} Summary</h2>
+            <p className="text-sm text-[var(--text-muted)] mb-6">Created {formatBuildCreatedAt(viewingBuild, getBuildLockState(viewingBuild).customization)}</p>
 
             {getBuildLockState(viewingBuild).isLocked && (
               <div className="mb-6 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200 flex items-start gap-3">
@@ -6055,60 +5999,18 @@ const filteredOrders = myOrders.filter(order => {
             {/* Visual Build Preview */}
             <div className="bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border)] mb-6">
 
-              <div className="flex items-center justify-between mb-4 border-b border-[var(--border)] pb-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4 border-b border-[var(--border)] pb-2">
                 <h3 className="text-lg font-bold text-white">Visual Design & Stickers</h3>
                 <span className="text-xs text-[var(--text-muted)]">
                   {(viewingBuild.stickers || []).length} sticker{((viewingBuild.stickers || []).length !== 1) ? 's' : ''} applied
                 </span>
               </div>
               <div className="flex flex-col md:flex-row items-center gap-6">
-                <div className="relative h-44 w-full md:w-80 flex-shrink-0 overflow-hidden rounded-xl border border-[var(--border)] bg-gradient-to-b from-[#141414] to-[#0a0a0a]">
-                  <div
-                    className="absolute top-1/2 left-1/2"
-                    style={{
-                      width: '400px',
-                      height: '400px',
-                      transform: 'translate(-50%, -48%) scale(0.65)',
-                      transformOrigin: 'center center',
-                      pointerEvents: 'none',
-                    }}
-                  >
-                    {(() => {
-                      const SummaryPreview = viewingBuild.isBass ? BassPreview : GuitarPreview
-                      const summaryStickers = (viewingBuild.stickers || [])
-                        .filter((s) => (s.side || 'front') === 'front' && typeof s.src === 'string' && s.src)
-                        .map((s, i) => (
-                          <img
-                            key={s.id || `summary-sticker-${i}`}
-                            src={s.src}
-                            alt=""
-                            style={{
-                              position: 'absolute',
-                              zIndex: 25 + i,
-                              left: `${Number(s.x) || 0}%`,
-                              top: `${Number(s.y) || 0}%`,
-                              width: `${Number(s.size) || 18}%`,
-                              transform: `translate(-50%, -50%) rotate(${Number(s.rotation) || 0}deg)`,
-                              transformOrigin: 'center center',
-                              pointerEvents: 'none',
-                            }}
-                          />
-                        ))
-                      return (
-                        <SummaryPreview
-                          config={viewingBuild.config}
-                          view="front"
-                          modelImageSrc={null}
-                          bodyWoodImageSrc={null}
-                          topWoodImageSrc={null}
-                          stickerOverlay={summaryStickers}
-                          stickerMaskSrc={null}
-                          stageRef={{ current: null }}
-                        />
-                      )
-                    })()}
-                  </div>
-                </div>
+                <button type="button" onClick={() => setPreviewingBuild(viewingBuild)} aria-label={`View ${viewingBuild.name || 'custom build'} preview`}
+                  className="relative h-44 w-full shrink-0 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] md:w-80 focus-visible:ring-2 focus-visible:ring-[var(--gold-primary)]">
+                  <CustomBuildThumbnail item={viewingBuild} />
+                  <span className="absolute inset-x-0 bottom-0 bg-black/60 py-2 text-xs text-white">View full-size image</span>
+                </button>
 
                 <div className="flex-1 w-full">
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3">Custom Stickers</h4>
@@ -6130,85 +6032,11 @@ const filteredOrders = myOrders.filter(order => {
               </div>
             </div>
 
-            <div className="bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border)] mb-6">
-
-              <h3 className="text-lg font-bold text-white mb-4 border-b border-[var(--border)] pb-2 flex justify-between">
-                <span>Configuration Breakdown</span>
-                <span className="text-[var(--gold-primary)]">₱{(viewingBuild.price || 0).toLocaleString('en-PH')}</span>
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4">
-                {viewingBuild.pricingBreakdown ? Object.entries(viewingBuild.pricingBreakdown).map(([key, price]) => {
-                  const label = key === 'base' ? 'Base Model' : viewingBuild.summary?.[key] || viewingBuild.config?.[key];
-                  if (!label && price === 0) return null;
-                  return (
-                    <div key={key} className="flex justify-between items-center text-sm pb-2 border-b border-[var(--border)]">
-                      <div className="truncate pr-4">
-                        <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">{key.replace(/([A-Z])/g, ' ').trim()}</span>
-                        <span className="block font-medium text-white truncate">{label}</span>
-                      </div>
-                      {price > 0 && (
-                        <span className="text-gray-300 shrink-0 font-mono text-right">₱{price.toLocaleString('en-PH')}</span>
-                      )}
-                    </div>
-                  )
-                }) : (
-                  <>
-                    <div className="flex justify-between items-center text-sm pb-2 border-b border-[var(--border)]">
-                      <div className="truncate pr-4">
-                        <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">Base Model</span>
-                        <span className="block font-medium text-white truncate">Standard Build</span>
-                      </div>
-                      <span className="text-gray-300 shrink-0 font-mono text-right">₱{BASE_PRICE.toLocaleString('en-PH')}</span>
-                    </div>
-                    {Object.entries(viewingBuild.config || {}).map(([key, val]) => {
-                      if (!val || typeof val !== 'string') return null;
-                      const { price, label } = getOldConfigData(key, val, viewingBuild.config?.body);
-                      return (
-                        <div key={key} className="flex justify-between items-center text-sm pb-2 border-b border-[var(--border)]">
-                          <div className="truncate pr-4">
-                            <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">{key.replace(/([A-Z])/g, ' ').trim()}</span>
-                            <span className="block font-medium text-white truncate">{label}</span>
-                          </div>
-                          {price > 0 && (
-                            <span className="text-gray-300 shrink-0 font-mono text-right">₱{price.toLocaleString('en-PH')}</span>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </>
-                )}
-              </div>
+            <div className="mb-6">
+              <CustomBuildDetails item={viewingBuild} defaultOpen />
             </div>
 
-            {viewingBuild.additionalParts && viewingBuild.additionalParts.length > 0 && (
-              <div className="bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border)] mb-6">
-                <h3 className="text-lg font-bold text-white mb-4 border-b border-[var(--border)] pb-2 flex justify-between">
-                  <span>Additional Parts</span>
-                  <span className="text-[var(--gold-primary)]">₱{viewingBuild.additionalParts.reduce((sum, p) => sum + (p.price * p.quantity), 0).toLocaleString('en-PH')}</span>
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
-                  {viewingBuild.additionalParts.map((part, idx) => (
-                    <div key={idx} className="flex flex-col sm:flex-row justify-between sm:items-center text-sm pb-3 border-b border-[var(--border)] gap-2">
-                      <div className="flex-1 truncate">
-                        <span className="text-white block font-medium truncate mb-1.5">{part.name}</span>
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center gap-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-md px-1.5 py-0.5 w-fit">
-                            <button type="button" disabled={getBuildLockState(viewingBuild).isLocked} onClick={() => updateAdditionalPartQuantity(viewingBuild.id, idx, part.quantity - 1)} className={`p-0.5 rounded transition-colors ${getBuildLockState(viewingBuild).isLocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10 cursor-pointer'}`}><Minus className="w-3.5 h-3.5 text-white" /></button>
-                            <span className="text-[var(--text-muted)] text-xs w-4 text-center">{part.quantity}</span>
-                            <button type="button" disabled={getBuildLockState(viewingBuild).isLocked} onClick={() => updateAdditionalPartQuantity(viewingBuild.id, idx, part.quantity + 1)} className={`p-0.5 rounded transition-colors ${getBuildLockState(viewingBuild).isLocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10 cursor-pointer'}`}><Plus className="w-3.5 h-3.5 text-white" /></button>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center sm:block sm:text-right shrink-0">
-                        <span className="text-gray-300 font-mono text-sm">₱{(part.price * part.quantity).toLocaleString('en-PH')}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-between items-center border-t border-[var(--border)] pt-6 mt-4">
+            <div className="flex flex-wrap justify-between items-center gap-2 border-t border-[var(--border)] pt-6 mt-4">
               <span className="text-lg text-[var(--text-muted)]">Grand Total</span>
               <span className="text-3xl font-bold text-[var(--gold-primary)]">
                 ₱{(Number(viewingBuild.price) + (viewingBuild.additionalParts || []).reduce((sum, p) => sum + (p.price * p.quantity), 0)).toLocaleString('en-PH')}
@@ -6249,7 +6077,7 @@ const filteredOrders = myOrders.filter(order => {
                 className="w-full mt-8 py-4 px-4 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-lg shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_20px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-3"
               >
                 <ShoppingCart className="w-6 h-6" />
-                Order This Build
+                Buy Now
               </button>
             )}
           </div>

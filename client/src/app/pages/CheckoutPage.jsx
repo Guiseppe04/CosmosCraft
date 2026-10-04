@@ -12,16 +12,13 @@ import {
 import { PaymentModal } from '../components/PaymentModal.jsx'
 import TermsAndConditionsModal from '../components/TermsAndConditionsModal.jsx'
 import { AddressForm } from '../components/AddressForm.jsx'
-import GuitarPreview from '../components/guitar/GuitarPreview.jsx'
-import BassPreview from '../components/bass/BassPreview.jsx'
-import { BODY_OPTIONS, DEFAULT_CONFIG } from '../lib/guitarBuilderData.js'
-import { BASS_BODY_OPTIONS, BASS_DEFAULT_CONFIG } from '../lib/bassBuilderData.js'
 import { API, getAuthHeaders } from '../utils/apiConfig'
 import api from '../services/api.js'
 import { adminApi } from '../utils/adminApi'
-import { getCustomBuildSummaryTree } from '../utils/customBuildSummary.js'
+import CustomBuildThumbnail from '../components/customize/CustomBuildThumbnail.jsx'
+import CustomBuildPreviewModal from '../components/customize/CustomBuildPreviewModal.jsx'
+import CustomBuildDetails from '../components/customize/CustomBuildDetails.jsx'
 import { mapDbCartItem } from '../utils/cartItemMapping.js'
-import { BuilderConfigurationPanel } from '../components/customize/BuilderConfigurationPanel.jsx'
 import { Country, State } from 'country-state-city'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
 
@@ -64,16 +61,6 @@ const isCustomBuildItem = (item = {}) => {
   )
 }
 
-const parseObjectValue = (value) => {
-  if (typeof value !== 'string') return value && typeof value === 'object' ? value : {}
-  try {
-    const parsed = JSON.parse(value)
-    return parsed && typeof parsed === 'object' ? parsed : {}
-  } catch {
-    return {}
-  }
-}
-
 const parseArrayValue = (value) => {
   if (Array.isArray(value)) return value
   if (typeof value !== 'string') return []
@@ -98,46 +85,15 @@ function CartItemCard({
   onToggleSelect,
 }) {
   const [isBuildPreviewOpen, setIsBuildPreviewOpen] = useState(false)
-  const [buildPreviewView, setBuildPreviewView] = useState('front')
-  const customBuildSummaryTree = isCustomBuild ? getCustomBuildSummaryTree(item) : []
   const customBuildData = isCustomBuild ? (item.customization || item) : {}
-  const savedBuildConfig = parseObjectValue(customBuildData.config || customBuildData.config_json)
-  const isBassBuild = Boolean(
-    customBuildData.isBass ||
-    String(customBuildData.guitar_type || savedBuildConfig.guitarType || '').toLowerCase().includes('bass') ||
-    savedBuildConfig.bassType
-  )
-  const buildPreviewConfig = {
-    ...(isBassBuild ? BASS_DEFAULT_CONFIG : DEFAULT_CONFIG),
-    ...savedBuildConfig,
-  }
-  const PreviewComponent = isBassBuild ? BassPreview : GuitarPreview
-  const stickerMaskSrc = isBassBuild
-    ? BASS_BODY_OPTIONS[buildPreviewConfig.bassType]?.bodySrc || null
-    : BODY_OPTIONS[buildPreviewConfig.body]?.bodySrc || null
-  const buildStickers = parseArrayValue(customBuildData.stickers)
-  const renderStickerOverlay = (side) => buildStickers
-    .filter((sticker) => (sticker.side || 'front') === side && typeof sticker.src === 'string' && sticker.src)
-    .map((sticker, index) => (
-      <img
-        key={sticker.id || `${side}-${index}`}
-        src={sticker.src}
-        alt=""
-        className="absolute select-none"
-        draggable={false}
-        style={{
-          zIndex: 25 + index,
-          left: `${Number(sticker.x) || 0}%`,
-          top: `${Number(sticker.y) || 0}%`,
-          width: `${Number(sticker.size) || 18}%`,
-          transform: `translate(-50%, -50%) rotate(${Number(sticker.rotation) || 0}deg)`,
-          pointerEvents: 'none',
-        }}
-      />
-    ))
   const quantity = Math.max(1, Number(item.quantity) || 1)
   const unitPrice = Number(item.price) || 0
   const itemTotal = unitPrice * quantity
+  const additionalPartsCost = (customBuildData.additionalParts || []).reduce((sum, part) => sum + ((Number(part.price) || 0) * (Number(part.quantity) || 1)), 0)
+  const rawBasePrice = customBuildData.pricingBreakdown?.base ?? customBuildData.lineItems?.find(line => line.id === 'base')?.subtotal
+  const basePrice = Number(rawBasePrice)
+  const hasBasePrice = rawBasePrice != null && Number.isFinite(basePrice) && basePrice >= 0 && basePrice <= unitPrice - additionalPartsCost
+  const customizationCost = unitPrice - additionalPartsCost - (hasBasePrice ? basePrice : 0)
   const stock = Number(item.stock)
   const hasStockValue = Number.isFinite(stock) && stock >= 0
   const variantLabel = [item.model, item.variantName, item.sku]
@@ -162,26 +118,11 @@ function CartItemCard({
           {isCustomBuild ? (
             <button
               type="button"
-              onClick={() => {
-                setBuildPreviewView(customBuildData.preview_image ? 'design' : 'front')
-                setIsBuildPreviewOpen(true)
-              }}
+              onClick={() => setIsBuildPreviewOpen(true)}
               aria-label={`View ${item.name || 'custom build'} front and rear preview`}
               className="group relative flex h-full w-full items-center justify-center overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--gold-primary)]"
             >
-              {customBuildData.preview_image ? (
-                <img src={customBuildData.preview_image} alt={`${item.name || 'Custom build'} saved design`} className="h-full w-full object-contain" />
-              ) : <div className="pointer-events-none absolute left-1/2 top-1/2 h-[240px] w-[240px] -translate-x-1/2 -translate-y-1/2 scale-[0.22]">
-                <PreviewComponent
-                  config={buildPreviewConfig}
-                  view="front"
-                  modelImageSrc={null}
-                  bodyWoodImageSrc={null}
-                  topWoodImageSrc={null}
-                  stickerOverlay={renderStickerOverlay('front')}
-                  stickerMaskSrc={stickerMaskSrc}
-                />
-              </div>}
+              <CustomBuildThumbnail item={item} />
               <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
                 <Maximize2 className="h-4 w-4" />
               </span>
@@ -258,93 +199,21 @@ function CartItemCard({
         </div>
       </div>
 
-      {isCustomBuild && customBuildSummaryTree.length > 0 && (
-        <div className="mt-3 space-y-2 border-t border-[var(--border)] pt-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--gold-primary)]">
-            Build Tree
-          </p>
-          <div className="space-y-2">
-            {customBuildSummaryTree.map((branch) => (
-              <div key={branch.label} className="pl-4">
-                <p className="text-xs font-semibold text-white">{branch.label}</p>
-                <div className="mt-2 space-y-1.5 pl-4">
-                  {branch.children.map((child) => (
-                    <p key={`${branch.label}-${child}`} className="text-xs text-[var(--text-muted)]">
-                      {child}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+      {isCustomBuild && (
+        <div className="mt-3 space-y-3 border-t border-[var(--border)] pt-3">
+          <dl className="space-y-1 text-xs">
+            {hasBasePrice ? <>
+              <div className="flex justify-between gap-3"><dt className="text-[var(--text-muted)]">Base price</dt><dd className="tabular-nums">{formatPrice(basePrice)}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-[var(--text-muted)]">Customization</dt><dd className="tabular-nums">{formatPrice(customizationCost)}</dd></div>
+            </> : <div className="flex justify-between gap-3"><dt className="text-[var(--text-muted)]">Build price</dt><dd className="tabular-nums">{formatPrice(unitPrice - additionalPartsCost)}</dd></div>}
+            {additionalPartsCost > 0 && <div className="flex justify-between gap-3"><dt className="text-[var(--text-muted)]">Existing add-ons</dt><dd className="tabular-nums">{formatPrice(additionalPartsCost)}</dd></div>}
+            <div className="flex justify-between gap-3 font-semibold"><dt>Build total × {quantity}</dt><dd className="tabular-nums text-[var(--gold-primary)]">{formatPrice(itemTotal)}</dd></div>
+          </dl>
+          <CustomBuildDetails item={item} />
         </div>
       )}
+      {isBuildPreviewOpen && isCustomBuild && <CustomBuildPreviewModal item={item} onClose={() => setIsBuildPreviewOpen(false)} />}
 
-      {isCustomBuild && customBuildData.lineItems?.length > 0 && (
-        <div className="mt-3">
-          <BuilderConfigurationPanel lineItems={customBuildData.lineItems} configurationTotal={unitPrice} title="Price Breakdown" />
-        </div>
-      )}
-
-      {isBuildPreviewOpen && isCustomBuild && (
-        <div
-          className="fixed inset-0 z-[250] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) setIsBuildPreviewOpen(false)
-          }}
-        >
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-label={`${item.name || 'Custom build'} preview`}
-            className="w-full max-w-4xl overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-5 py-4">
-              <div className="min-w-0">
-                <h2 className="truncate text-lg font-bold text-[var(--text-light)]">{item.name || 'Custom Build'}</h2>
-                <p className="text-xs text-[var(--text-muted)]">Build preview</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsBuildPreviewOpen(false)}
-                aria-label="Close build preview"
-                className="rounded-lg p-2 text-[var(--text-muted)] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold-primary)]"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </header>
-            <div className="flex justify-center border-b border-[var(--border)] p-3">
-              <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-1" role="group" aria-label="Preview side">
-                {(customBuildData.preview_image ? ['design', 'front', 'rear'] : ['front', 'rear']).map((side) => (
-                  <button
-                    key={side}
-                    type="button"
-                    onClick={() => setBuildPreviewView(side)}
-                    aria-pressed={buildPreviewView === side}
-                    className={`rounded-md px-5 py-2 text-sm font-semibold capitalize transition-colors ${buildPreviewView === side ? 'bg-[var(--gold-primary)] text-black' : 'text-[var(--text-muted)] hover:text-white'}`}
-                  >
-                    {side === 'design' ? 'Saved design' : side}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="h-[min(65vh,620px)] min-h-[320px] bg-[var(--bg-primary)] p-4 sm:p-8">
-              {buildPreviewView === 'design' && customBuildData.preview_image ? (
-                <img src={customBuildData.preview_image} alt={`${item.name || 'Custom build'} saved design`} className="h-full w-full object-contain" />
-              ) : <PreviewComponent
-                config={buildPreviewConfig}
-                view={buildPreviewView}
-                modelImageSrc={null}
-                bodyWoodImageSrc={null}
-                topWoodImageSrc={null}
-                stickerOverlay={renderStickerOverlay(buildPreviewView)}
-                stickerMaskSrc={stickerMaskSrc}
-              />}
-            </div>
-          </section>
-        </div>
-      )}
     </div>
   )
 }
@@ -698,6 +567,7 @@ function CheckoutSummaryCard({
             </div>
           )}
         </div>
+        <div className="max-h-[45vh] space-y-3 overflow-y-auto overscroll-contain pr-1 sm:max-h-[50vh]">
         {items.map((item) => (
           <CartItemCard
             key={item.id}
@@ -711,6 +581,7 @@ function CheckoutSummaryCard({
             onToggleSelect={onToggleSelect}
           />
         ))}
+        </div>
       </div>
 
       <div className="space-y-3 border-t border-[var(--border)] pt-4">
@@ -742,7 +613,8 @@ function CheckoutSummaryCard({
       )}
 
       <div className="space-y-2 border-t border-[var(--border)] pt-4">
-        <div className="flex justify-between items-center">
+        {requiresDownPayment && <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-semibold"><span>Total Amount</span><span className="tabular-nums">PHP {(safeTotal + safeRemainingBalance).toLocaleString('en-PH', { maximumFractionDigits: 2 })}</span></div>}
+        <div className="flex flex-wrap justify-between items-center gap-2">
           <span className="text-base font-semibold text-[var(--text-light)]">
             {requiresDownPayment ? 'Down Payment Due Now' : 'Total'}
           </span>
@@ -1555,10 +1427,6 @@ export function CheckoutPage() {
     }
   }
 
-  if (!isCustomBuild && !isBuyNow && cart.length === 0) {
-    return <EmptyCart />
-  }
-
   const handleSuccessModalClose = () => {
     setShowSuccessModal(false)
     navigate('/shop')
@@ -1577,6 +1445,10 @@ export function CheckoutPage() {
     }, 3000)
     return () => clearTimeout(timer)
   }, [showSuccessModal, navigate])
+
+  if (!isCustomBuild && !isBuyNow && cart.length === 0 && !isProcessing && !showSuccessModal) {
+    return <EmptyCart />
+  }
 
   const handleRemove = (id) => removeFromCart(id)
 

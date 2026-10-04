@@ -57,13 +57,12 @@ test('assignment validates customer IDs, quantity, design and prices', () => {
   ]) assert.ok(assignmentSchema.validate(bad).error);
 });
 
-test('assignment is atomic, customer-owned, idempotent and rejects reassignment', async () => {
+test('sending saves only a customer-owned build, is atomic and idempotent, and rejects reassignment', async () => {
   const originals = { query: pool.query, connect: pool.connect };
   let row;
   let inserts = 0;
-  let carts = 0;
   let validCustomer = true;
-  let failCart = false;
+  let failBuild = false;
   let released = 0;
   const statements = [];
   pool.query = async sql => {
@@ -82,27 +81,22 @@ test('assignment is atomic, customer-owned, idempotent and rejects reassignment'
         if (sql.includes('COUNT(*)')) return { rows: [{ total: 0 }] };
         if (sql.includes('INSERT INTO customizations')) {
           inserts++;
+          if (failBuild) throw new Error('Build write failed');
           row = { user_id: values[0], customization_id: values[15], config_json: JSON.parse(values[12]), total_price: values[10] };
           return { rows: [row] };
         }
-        if (sql.includes('SELECT * FROM carts')) return { rows: [{ cart_id: 'cart', user_id: values[0] }] };
-        if (sql.includes('INSERT INTO cart_items')) {
-          if (failCart) throw new Error('Cart write failed');
-          carts++;
-          assert.deepEqual(values, ['cart', buildId, 2, 12000]);
-        }
-        if (sql.includes('SELECT quantity, unit_price')) return { rows: [{ quantity: 2, unit_price: 12000 }] };
+        assert.doesNotMatch(sql, /\bcarts\b|\bcart_items\b/);
         return { rows: [] };
       },
       release() { released++; },
     };
   };
   try {
-    failCart = true;
-    await assert.rejects(guitars.assignWalkInCustomization('admin', payload), /Cart write failed/);
+    failBuild = true;
+    await assert.rejects(guitars.assignWalkInCustomization('admin', payload), /Build write failed/);
     assert.equal(row, undefined);
     assert.equal(statements.at(-1), 'ROLLBACK');
-    failCart = false;
+    failBuild = false;
     const result = await guitars.assignWalkInCustomization('admin', payload);
     assert.equal(result.customization.user_id, customerId);
     assert.equal(result.customization.config_json._walkIn.createdBy, 'admin');
@@ -111,7 +105,7 @@ test('assignment is atomic, customer-owned, idempotent and rejects reassignment'
     const retry = await guitars.assignWalkInCustomization('admin', { ...payload, quantity: 5 });
     assert.equal(retry.alreadyAssigned, true);
     assert.equal(inserts, 2); // Includes the rolled-back attempt.
-    assert.equal(carts, 1);
+    assert.ok(statements.every(sql => !/\bcarts\b|\bcart_items\b/.test(sql)));
     await assert.rejects(guitars.assignWalkInCustomization('other-admin', payload), /different customer or administrator/);
     await assert.rejects(guitars.assignWalkInCustomization('admin', { ...payload, customer_id: 'another-customer' }), /different customer or administrator/);
     validCustomer = false;
@@ -122,6 +116,24 @@ test('assignment is atomic, customer-owned, idempotent and rejects reassignment'
   } finally {
     pool.query = originals.query;
     pool.connect = originals.connect;
+  }
+});
+
+test('sending notifies Saved Builds without emitting a cart update', async () => {
+  const controller = require('../controllers/guitarController');
+  const sockets = require('../services/socketService');
+  const originalAssign = guitars.assignWalkInCustomization;
+  const originalEmit = sockets.emitToUser;
+  const emitted = [];
+  guitars.assignWalkInCustomization = async () => ({ customization: { customization_id: buildId }, alreadyAssigned: false });
+  sockets.emitToUser = (...args) => emitted.push(args);
+  try {
+    const res = { status(code) { assert.equal(code, 201); return this; }, json(data) { assert.equal(data.status, 'success'); } };
+    await controller.assignWalkInCustomization({ user: { id: 'admin' }, validatedData: payload }, res, error => { throw error; });
+    assert.deepEqual(emitted, [[customerId, 'customization:created', { customization_id: buildId }]]);
+  } finally {
+    guitars.assignWalkInCustomization = originalAssign;
+    sockets.emitToUser = originalEmit;
   }
 });
 
@@ -171,5 +183,41 @@ test('existing checkout creates a customization order using the assigned build I
     assert.deepEqual(insert.values.slice(-2), [2, 12000]);
     assert.equal(statements.some(({ sql }) => sql.includes('INSERT INTO customizations')), false);
     assert.equal(statements.at(-1).sql, 'COMMIT');
+  } finally { pool.query = originals.query; pool.connect = originals.connect; }
+});
+
+test('Saved Builds Buy Now orders the existing customer design without creating a cart or duplicate build', async () => {
+  const orders = require('../services/orderService');
+  const originals = { query: pool.query, connect: pool.connect };
+  const statements = [];
+  pool.query = async () => ({ rows: [] });
+  pool.connect = async () => ({
+    async query(sql, values = []) {
+      statements.push({ sql, values });
+      assert.doesNotMatch(sql, /\bcarts\b|\bcart_items\b|INSERT INTO customizations/);
+      if (sql.includes('INSERT INTO order_number_counters')) return { rows: [{ last_number: 1 }] };
+      if (sql.includes('SELECT address_id FROM addresses')) return { rows: [{ address_id: 'address' }] };
+      if (sql.includes('INSERT INTO orders')) return { rows: [{ order_id: 'order', order_type: values[1], user_id: values[2] }] };
+      if (sql.includes('SELECT customization_id')) {
+        assert.deepEqual(values, [buildId, customerId]);
+        return { rows: [{ customization_id: buildId }] };
+      }
+      return { rows: [] };
+    },
+    release() {},
+  });
+  try {
+    const result = await orders.createOrder({ userId: customerId,
+      items: [{name:'Sent design',quantity:1,price:12000,customization:{customizationId:buildId,name:'Sent design',config:{body:'strat'},baseBuildPrice:12000}}],
+      shippingMethod: 'standard', paymentMethod: 'gcash', termsAccepted: true, shippingAddressId: 'address',
+      billingAddress: { street: 'Test street', city: 'Manila', province: 'Metro Manila', postalCode: '1000', country: 'PH' },
+    });
+    assert.deepEqual(result.customization_ids,[buildId]);
+    const update = statements.find(({sql})=>sql.includes('UPDATE customizations'));
+    assert.equal(update.values.at(-1),buildId);
+    const insert = statements.find(({sql})=>sql.includes('INSERT INTO order_items'));
+    assert.deepEqual(insert.values.slice(0,3),['order',null,buildId]);
+    assert.deepEqual(insert.values.slice(-2),[1,12000]);
+    assert.equal(statements.at(-1).sql,'COMMIT');
   } finally { pool.query = originals.query; pool.connect = originals.connect; }
 });
