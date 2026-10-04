@@ -376,6 +376,9 @@ export const adminApi = {
   getContactSettings: () => request('/api/contact/settings'),
   updateContactSettings: (body) => request('/api/contact/settings', { method: 'PUT', body }),
 
+  // Shared Branch Address
+  updateBranchSettings: (body) => request('/api/branch/settings', { method: 'PUT', body }),
+
   // User Addresses
   updateAddress: (addressId, body) => request(`/api/users/me/addresses/${addressId}`, { method: 'PUT', body }),
   addAddress: (body) => request('/api/users/me/addresses', { method: 'POST', body }),

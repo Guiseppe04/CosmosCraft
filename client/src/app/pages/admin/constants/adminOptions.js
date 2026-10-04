@@ -206,13 +206,7 @@ export const TECHNICAL_TO_INVENTORY_PART_CATEGORY = {
 
 export const APPOINTMENT_BRANCH_STORAGE_KEY = 'cosmoscraft.appointment.branch'
 
-export const DEFAULT_APPOINTMENT_BRANCH = {
-  id: 'balagtas-main',
-  name: 'CosmosCraft Balagtas Branch',
-  address: 'Sp 047-K St Peter Compound, Balagtas, 3016 Bulacan',
-  phone: '+63 000 000 0000',
-  hours: 'Mon-Sat 9:00 AM - 6:00 PM',
-}
+export { DEFAULT_APPOINTMENT_BRANCH } from '../../../utils/branchSettings'
 
 export const PAGE_SIZE_OPTIONS = [10, 25, 50]
 

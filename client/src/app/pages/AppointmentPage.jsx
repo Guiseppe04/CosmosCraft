@@ -6,6 +6,7 @@
   import { uploadToCloudinary } from '../utils/cloudinary.js'
   import { useAuth } from '../context/AuthContext.jsx'
   import { useSocketEvent } from '../context/SocketContext.jsx'
+  import { useBranchSettings } from '../hooks/useBranchSettings'
   import { useToast } from '../components/ui/Toast.jsx'
   import {
     Wrench,
@@ -33,35 +34,6 @@
     normalizePhoneForSubmit,
     sanitizePhoneInput,
   } from '../utils/phone.js'
-
-  const APPOINTMENT_BRANCH_STORAGE_KEY = 'cosmoscraft.appointment.branch'
-  const DEFAULT_BRANCH = {
-    id: 'balagtas-main',
-    name: 'CosmosCraft Balagtas Branch',
-    address: 'Sp 047-K St Peter Compound, Balagtas, 3016 Bulacan',
-    phone: '+63 000 000 0000',
-    hours: 'Mon-Sat 9:00 AM - 6:00 PM',
-  }
-
-  function getAppointmentBranch() {
-    if (typeof window === 'undefined') return DEFAULT_BRANCH
-
-    try {
-      const raw = window.localStorage.getItem(APPOINTMENT_BRANCH_STORAGE_KEY)
-      if (!raw) return DEFAULT_BRANCH
-      const parsed = JSON.parse(raw)
-
-      return {
-        ...DEFAULT_BRANCH,
-        ...parsed,
-        id: parsed?.id || DEFAULT_BRANCH.id,
-        name: parsed?.name || DEFAULT_BRANCH.name,
-        address: parsed?.address || DEFAULT_BRANCH.address,
-      }
-    } catch {
-      return DEFAULT_BRANCH
-    }
-  }
 
   const STEPS = [
     { id: 1, label: 'Service' },
@@ -300,7 +272,7 @@
     const location = useLocation()
     const { user, isAuthenticated, isLoadingUser, openLogin, updateUser } = useAuth()
     const today = new Date()
-    const branch = useMemo(() => getAppointmentBranch(), [])
+    const { branch } = useBranchSettings()
     const branches = useMemo(() => [branch], [branch])
     const userAddresses = Array.isArray(user?.addresses) ? user.addresses : []
     const savedBuilds = useMemo(() => {

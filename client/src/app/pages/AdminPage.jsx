@@ -64,8 +64,6 @@ import {
   PROJECT_RULES,
   APPOINTMENT_RULES,
   SERVICE_RULES,
-  APPOINTMENT_BRANCH_STORAGE_KEY,
-  DEFAULT_APPOINTMENT_BRANCH,
   PAGE_SIZE_OPTIONS,
   INVENTORY_PART_CATEGORY_OPTIONS,
   SLOT_TO_PART_CATEGORY,
@@ -323,7 +321,6 @@ export function AdminPage() {
   // Message panel
   const [messagePanelOpen, setMessagePanelOpen] = useState(false)
   const [selectedConversation, setSelectedConversation] = useState(null)
-  const [appointmentBranchAddress, setAppointmentBranchAddress] = useState(DEFAULT_APPOINTMENT_BRANCH.address)
   const [siteContactInfo, setSiteContactInfo] = useState(getSiteContactSnapshot)
 
   // ── Derived / filtered views ─────────────────────────────────────────────
@@ -607,46 +604,12 @@ export function AdminPage() {
   })()
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(APPOINTMENT_BRANCH_STORAGE_KEY)
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        if (parsed?.address) setAppointmentBranchAddress(parsed.address)
-      }
-    } catch {
-      // Ignore invalid persisted admin setting
-    }
-
     let isMounted = true
     refreshSiteContact().then((contact) => {
       if (isMounted) setSiteContactInfo(contact)
     })
     return () => { isMounted = false }
   }, [])
-
-  const saveAppointmentBranchAddress = useCallback(() => {
-    const cleanAddress = appointmentBranchAddress.trim()
-    if (!cleanAddress) {
-      showToast('Branch address is required', 'error')
-      return
-    }
-
-    try {
-      const raw = window.localStorage.getItem(APPOINTMENT_BRANCH_STORAGE_KEY)
-      const existing = raw ? JSON.parse(raw) : {}
-      window.localStorage.setItem(
-        APPOINTMENT_BRANCH_STORAGE_KEY,
-        JSON.stringify({
-          ...DEFAULT_APPOINTMENT_BRANCH,
-          ...existing,
-          address: cleanAddress,
-        })
-      )
-      showToast('Appointment branch address saved')
-    } catch {
-      showToast('Failed to save branch address', 'error')
-    }
-  }, [appointmentBranchAddress, showToast])
 
   const saveSiteContactInfo = useCallback(async () => {
     const cleanEmail = siteContactInfo.email.trim()
@@ -2766,9 +2729,6 @@ export function AdminPage() {
             <SettingsTab
               user={user}
               isSuperAdmin={isSuperAdmin}
-              appointmentBranchAddress={appointmentBranchAddress}
-              setAppointmentBranchAddress={setAppointmentBranchAddress}
-              saveAppointmentBranchAddress={saveAppointmentBranchAddress}
               siteContactInfo={siteContactInfo}
               setSiteContactInfo={setSiteContactInfo}
               saveSiteContactInfo={saveSiteContactInfo}

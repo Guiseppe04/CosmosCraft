@@ -10,22 +10,7 @@ import { adminApi } from '../../utils/adminApi';
 import { resolveImageUrl, API, getAuthHeaders } from '../../utils/apiConfig';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { useSocketEvent } from '../../context/SocketContext';
-import { APPOINTMENT_BRANCH_STORAGE_KEY, DEFAULT_APPOINTMENT_BRANCH } from '../../pages/admin/constants/adminOptions.js';
-
-const getAppointmentBranch = () => {
-  if (typeof window === 'undefined') return DEFAULT_APPOINTMENT_BRANCH;
-  try {
-    const storedBranch = JSON.parse(window.localStorage.getItem(APPOINTMENT_BRANCH_STORAGE_KEY) || '{}');
-    return {
-      ...DEFAULT_APPOINTMENT_BRANCH,
-      ...storedBranch,
-      name: storedBranch.name || DEFAULT_APPOINTMENT_BRANCH.name,
-      address: storedBranch.address || DEFAULT_APPOINTMENT_BRANCH.address,
-    };
-  } catch {
-    return DEFAULT_APPOINTMENT_BRANCH;
-  }
-};
+import { useBranchSettings } from '../../hooks/useBranchSettings';
 
 const formatLabel = (value) => {
   if (!value) return '';
@@ -644,7 +629,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   const [markReceivedLoading, setMarkReceivedLoading] = useState(false);
   // Fulfillment state
   const [fulfillmentData, setFulfillmentData] = useState(null);
-  const [pickupBranch] = useState(getAppointmentBranch);
+  const { branch: pickupBranch } = useBranchSettings();
   const [pickupStorageFee, setPickupStorageFee] = useState(0);
   const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
   const [isEditingMethod, setIsEditingMethod] = useState(false);

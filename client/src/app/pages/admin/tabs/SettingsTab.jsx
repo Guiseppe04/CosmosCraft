@@ -1,15 +1,13 @@
 import { useState } from 'react'
 import PhoneInput from '../../../components/PhoneInput'
 import { motion, AnimatePresence } from 'motion/react'
-import { Settings, User, MapPin, Save, Info, History, ArrowRight, ArrowLeft, Mail, Phone } from 'lucide-react'
+import { Settings, User, Info, History, ArrowRight, ArrowLeft, Mail, Phone } from 'lucide-react'
 import { AuditLogsSection } from '../components/settings/AuditLogsSection'
+import { BranchAddressSettings } from '../components/settings/BranchAddressSettings'
 
 export function SettingsTab({
   user,
   isSuperAdmin,
-  appointmentBranchAddress,
-  setAppointmentBranchAddress,
-  saveAppointmentBranchAddress,
   siteContactInfo,
   setSiteContactInfo,
   saveSiteContactInfo,
@@ -74,30 +72,7 @@ export function SettingsTab({
             </div>
 
             {isSuperAdmin && (
-              <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
-                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
-                  <MapPin className="w-5 h-5 text-[var(--gold-primary)]" />
-                  Appointment Branch
-                </h3>
-                <p className="text-sm text-[var(--text-muted)] mb-3">
-                  This address is shown in the customer appointment flow (Step 3 Location).
-                </p>
-                <textarea
-                  value={appointmentBranchAddress}
-                  onChange={(e) => setAppointmentBranchAddress(e.target.value)}
-                  className="w-full h-24 px-4 py-3 bg-[var(--bg-primary)] text-white border border-[var(--border)] rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50"
-                  placeholder="Branch address"
-                />
-                <div className="mt-4 flex justify-end">
-                  <button
-                    onClick={saveAppointmentBranchAddress}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--gold-primary)] text-black font-semibold text-sm hover:opacity-90 transition"
-                  >
-                    <Save className="w-4 h-4" />
-                    Save Branch Address
-                  </button>
-                </div>
-              </div>
+              <BranchAddressSettings showToast={showToast} />
             )}
 
             {isSuperAdmin && (

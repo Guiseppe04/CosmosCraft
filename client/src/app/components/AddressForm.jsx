@@ -67,6 +67,7 @@ export function AddressForm({
   submitLabel = 'Save Address',
   isSubmitting = false,
   showCategory = true,
+  showDefault = true,
 }) {
   const [formData, setFormData] = useState(() => normalizeInitialAddress(initialAddress))
   const [errors, setErrors] = useState({})
@@ -192,7 +193,7 @@ export function AddressForm({
 
   const validate = () => {
     const nextErrors = {}
-    if (!formData.label?.trim()) nextErrors.label = 'Address label is required'
+    if (showCategory && !formData.label?.trim()) nextErrors.label = 'Address label is required'
     if (!formData.streetLine1?.trim()) nextErrors.streetLine1 = 'Street address is required'
     if (!formData.country?.trim()) nextErrors.country = 'Country is required'
     if (isPhilippines) {
@@ -227,7 +228,7 @@ export function AddressForm({
   const handleSubmit = () => {
     if (!validate()) return
     const payload = {
-      label: formData.label,
+      ...(showCategory ? { label: formData.label } : {}),
       country: formData.country,
       streetLine1: formData.streetLine1.trim(),
       streetLine2: formData.streetLine2?.trim() || '',
@@ -235,7 +236,7 @@ export function AddressForm({
       stateProvince: resolveProvinceName(),
       barangay: formData.barangay?.trim() || '',
       postalZipCode: formData.postalZipCode.trim(),
-      isDefault: Boolean(formData.isDefault),
+      ...(showDefault ? { isDefault: Boolean(formData.isDefault) } : {}),
     }
     onSubmit(payload)
   }
@@ -431,7 +432,7 @@ export function AddressForm({
         )}
       </div>
 
-      <div className="flex items-center gap-3">
+      {showDefault && <div className="flex items-center gap-3">
         <input
           type="checkbox"
           checked={formData.isDefault}
@@ -439,7 +440,7 @@ export function AddressForm({
           className="h-4 w-4 rounded border-[var(--border)] bg-[var(--bg-primary)] text-[var(--gold-primary)] focus:ring-[var(--gold-primary)]"
         />
         <span className="text-sm text-[var(--text-muted)]">Set as default address</span>
-      </div>
+      </div>}
 
       <div className="flex flex-col sm:flex-row gap-3 pt-2">
         {onCancel && (
