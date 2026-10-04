@@ -9,25 +9,30 @@ const sockets = require('../services/socketService');
 test('no-show sweep uses configured minutes, exact deadline, and publishes changes', async () => {
   const original = { query: pool.query, ensure: settings.ensurePaymentSettingsTable, log: audit.logAppointmentEvent, emit: sockets.emitToUserAndStaff };
   const events = [];
+  const auditEvents = [];
   let configuredMinutes = 30;
   settings.ensurePaymentSettingsTable = async () => {};
-  audit.logAppointmentEvent = async () => {};
+  audit.logAppointmentEvent = async event => auditEvents.push(event);
   sockets.emitToUserAndStaff = (...args) => events.push(args);
   pool.query = async (sql, params) => {
     if (sql.startsWith('SELECT no_show_grace_minutes')) return { rows: [{ no_show_grace_minutes: configuredMinutes }] };
-    assert.match(sql, /WHERE status = 'confirmed'/);
+    assert.match(sql, /status = 'pending' AND scheduled_at < now\(\)/);
+    assert.match(sql, /status = 'confirmed' AND scheduled_at <=/);
+    assert.match(sql, /FOR UPDATE/);
     assert.match(sql, /scheduled_at <= now\(\) - \(\$1 \* interval '1 minute'\)/);
     assert.deepEqual(params, [configuredMinutes]);
-    return { rows: [{ appointment_id: 'appointment-1', user_id: 'customer-1', status: 'no_show', scheduled_at: '2026-10-03T07:00:00Z' }] };
+    return { rows: ['pending', 'confirmed'].map(previous_status => ({ appointment_id: `appointment-${previous_status}`, user_id: 'customer-1', status: 'no_show', previous_status, scheduled_at: '2026-10-03T07:00:00Z' })) };
   };
   try {
     await service.autoMarkNoShows();
     configuredMinutes = 45;
     await service.autoMarkNoShows();
-    assert.equal(events.length, 2);
+    assert.equal(events.length, 4);
     assert.equal(events[0][0], 'customer-1');
     assert.equal(events[0][1], 'appointment:updated');
     assert.equal(events[0][2].appointment.status, 'no_show');
+    assert.deepEqual(auditEvents.map(event => event.previousStatus), ['pending', 'confirmed', 'pending', 'confirmed']);
+    assert.deepEqual(auditEvents.map(event => event.details.grace_minutes), [0, 30, 0, 45]);
   } finally {
     pool.query = original.query;
     settings.ensurePaymentSettingsTable = original.ensure;

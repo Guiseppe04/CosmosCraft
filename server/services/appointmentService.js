@@ -480,11 +480,18 @@ exports.autoMarkNoShows = async () => {
   const settings = await pool.query('SELECT no_show_grace_minutes FROM payment_settings WHERE id = 1');
   const graceMinutes = settings.rows[0]?.no_show_grace_minutes ?? 30;
   const result = await pool.query(
-    `UPDATE appointments
+    `WITH overdue AS (
+       SELECT appointment_id, status AS previous_status
+       FROM appointments
+       WHERE (status = 'pending' AND scheduled_at < now())
+          OR (status = 'confirmed' AND scheduled_at <= now() - ($1 * interval '1 minute'))
+       FOR UPDATE
+     )
+     UPDATE appointments a
      SET status = 'no_show', updated_at = now()
-     WHERE status = 'confirmed'
-       AND scheduled_at <= now() - ($1 * interval '1 minute')
-     RETURNING *`,
+     FROM overdue
+     WHERE a.appointment_id = overdue.appointment_id
+     RETURNING a.*, overdue.previous_status`,
     [graceMinutes]
   );
   for (const row of result.rows || []) {
@@ -497,24 +504,26 @@ exports.autoMarkNoShows = async () => {
   // The sweep runs without an actor, so these rows are recorded as automatic
   // transitions rather than disappearing from the audit trail entirely.
   for (const row of result.rows || []) {
+    const previousStatus = row.previous_status;
+    const appliedGrace = previousStatus === 'pending' ? 0 : graceMinutes;
     await require('./auditService').logAppointmentEvent({
       userId: null,
       action: 'APPOINTMENT_NO_SHOW',
       entityId: row.appointment_id,
       entityType: 'appointment',
       status: 'no_show',
-      previousStatus: 'confirmed',
+      previousStatus,
       details: {
-        from: 'confirmed',
+        from: previousStatus,
         to: 'no_show',
         automatic: true,
-        note: `Marked automatically ${graceMinutes} minutes after the scheduled time`,
-        grace_minutes: graceMinutes,
+        note: `Marked automatically ${appliedGrace} minutes after the scheduled time`,
+        grace_minutes: appliedGrace,
       },
       context: {
         appointmentId: row.appointment_id,
         referenceCode: row.reference_code,
-        previousStatus: 'confirmed',
+        previousStatus,
         automatic: true,
       },
     });
