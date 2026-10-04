@@ -49,7 +49,8 @@ test('calendar navigation, saved-only sending and customer checkout work across 
       builder.onLoad({ filter: /AuthContext\.jsx$/ }, () => ({ contents: `export const useAuth = () => ({ isAuthenticated:true, user: window.testUser || {id:'admin',user_id:'admin',role:'admin'} });`, loader: 'js' }))
       builder.onLoad({ filter: /CartContext\.jsx$/ }, () => ({ contents: `const cartContext = {cart:[], getTotalPrice:()=>0, getCartCount:()=>0, getSelectedItemIds:()=>[], waitForCartUpdates:async()=>true,refreshCart:async()=>{}}; export const useCart = () => cartContext;`, loader: 'js' }))
       builder.onLoad({ filter: /SocketContext\.jsx$/ }, () => ({ contents: `export const useSocketEvent = () => {};`, loader: 'js' }))
-      builder.onLoad({ filter: /exportMaskedPreview\.js$/ }, () => ({ contents: `export const exportMaskedPreview = async () => 'data:image/png;base64,test';`, loader: 'js' }))
+      builder.onLoad({ filter: /exportMaskedPreview\.js$/ }, () => ({ contents: `export const exportMaskedPreview = async () => 'data:image/png;base64,test'; export const downloadPreviewImages = () => {};`, loader: 'js' }))
+      builder.onLoad({ filter: /captureBuildViews\.jsx$/ }, () => ({ contents: `export const captureBuildViews = async () => ({front:'data:image/png;base64,front-test',rear:'data:image/png;base64,rear-test'});`, loader: 'js' }))
     } }],
   })
   const customer = { user_id: '11111111-1111-4111-8111-111111111111', first_name: 'Selected', last_name: 'Customer', name:{firstName:'Selected',lastName:'Customer'}, email: 'selected@example.test', role: 'customer', is_active: true, is_verified: true,

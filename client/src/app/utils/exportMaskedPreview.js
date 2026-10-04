@@ -1,16 +1,9 @@
-function parseUrl(value) {
-  if (!value || value === 'none') return null
-  const match = value.match(/url\((['"]?)(.*?)\1\)/)
-  return match?.[2] ?? null
+function parseUrls(value) {
+  return [...String(value || '').matchAll(/url\((['"]?)(.*?)\1\)/g)].map(match => match[2])
 }
 
-function isValidImageSrc(src) {
-  if (!src || typeof src !== 'string') return false
-  const trimmed = src.trim()
-  if (!trimmed || trimmed === 'none') return false
-  if (trimmed.endsWith('/undefined') || trimmed.endsWith('/null')) return false
-  if (trimmed.includes('undefined') || trimmed.includes('null')) return false
-  return true
+function validImage(src) {
+  return typeof src === 'string' && src.trim() && src !== 'none' && !src.endsWith('/undefined') && !src.endsWith('/null')
 }
 
 function loadImage(src) {
@@ -23,198 +16,127 @@ function loadImage(src) {
   })
 }
 
-function drawImageContain(ctx, image, dx, dy, dw, dh) {
-  const imageRatio = image.width / image.height
-  const boxRatio = dw / dh
-
-  let renderWidth = dw
-  let renderHeight = dh
-  let x = dx
-  let y = dy
-
-  if (imageRatio > boxRatio) {
-    renderHeight = dw / imageRatio
-    y += (dh - renderHeight) / 2
-  } else {
-    renderWidth = dh * imageRatio
-    x += (dw - renderWidth) / 2
-  }
-
-  ctx.drawImage(image, x, y, renderWidth, renderHeight)
+function drawContain(ctx, image, width, height) {
+  const ratio = Math.min(width / image.width, height / image.height)
+  const w = image.width * ratio
+  const h = image.height * ratio
+  ctx.drawImage(image, (width - w) / 2, (height - h) / 2, w, h)
 }
 
-function normalizeBlendMode(mode) {
-  if (!mode || mode === 'normal') return 'source-over'
-  if (mode === 'screen' || mode === 'multiply') return mode
-  return 'source-over'
-}
-
-function readNumericZIndex(style, fallback = 0) {
-  const value = Number.parseFloat(style?.zIndex ?? '')
-  return Number.isFinite(value) ? value : fallback
-}
-
-export async function exportMaskedPreview(previewRoot, { fileName, background = '#111111', scale = 2, download = true } = {}) {
-  const DEBUG = Boolean(import.meta.env?.DEV)
-  const stage = previewRoot?.querySelector('[data-export-stage="true"]')
-  if (!stage) {
-    throw new Error('Preview stage not found')
-  }
-
-  const rootRect = previewRoot.getBoundingClientRect()
-  const stageRect = stage.getBoundingClientRect()
+function makeCanvas(width, height, scale) {
   const canvas = document.createElement('canvas')
-  canvas.width = Math.max(1, Math.round(rootRect.width * scale))
-  canvas.height = Math.max(1, Math.round(rootRect.height * scale))
-
+  canvas.width = Math.max(1, Math.round(width * scale))
+  canvas.height = Math.max(1, Math.round(height * scale))
   const ctx = canvas.getContext('2d')
   ctx.scale(scale, scale)
-  ctx.fillStyle = background
-  ctx.fillRect(0, 0, rootRect.width, rootRect.height)
+  return { canvas, ctx }
+}
 
-  const stageX = stageRect.left - rootRect.left
-  const stageY = stageRect.top - rootRect.top
-  // Stage rect already reflects CSS transforms on screen; draw directly in this final box
-  // to avoid double-transform drift between preview and exported image.
-  ctx.translate(stageX, stageY)
-
-  const exportOps = []
-  let order = 0
-
-  const layerNodes = Array.from(stage.querySelectorAll('[data-export-layer="true"]'))
-  for (const layerNode of layerNodes) {
-    const style = window.getComputedStyle(layerNode)
-    const rawImageSrc = parseUrl(style.backgroundImage)
-    const rawMaskSrc = parseUrl(style.maskImage || style.webkitMaskImage)
-    const imageSrc = isValidImageSrc(rawImageSrc) ? rawImageSrc : null
-    const maskSrc = isValidImageSrc(rawMaskSrc) ? rawMaskSrc : null
-    if (!imageSrc && !maskSrc) continue
-
-    exportOps.push({
-      type: 'layer',
-      zIndex: readNumericZIndex(style, 0),
-      order: order += 1,
-      node: layerNode,
-      style,
-      imageSrc,
-      maskSrc,
-    })
-  }
-
-  const stickerNodes = Array.from(previewRoot.querySelectorAll('img[data-export-sticker="true"]'))
-  for (const stickerNode of stickerNodes) {
-    const style = window.getComputedStyle(stickerNode)
-    const src = stickerNode.getAttribute('src')
-    if (!isValidImageSrc(src)) continue
-
-    exportOps.push({
-      type: 'sticker',
-      zIndex: readNumericZIndex(style, 0),
-      order: order += 1,
-      node: stickerNode,
-      style,
-      imageSrc: src,
-    })
-  }
-
-  exportOps.sort((a, b) => (a.zIndex - b.zIndex) || (a.order - b.order))
-
-  const exportLayerRows = []
-  for (const op of exportOps) {
-    if (op.type === 'layer') {
-      try {
-        ctx.save()
-        ctx.globalAlpha = Number.parseFloat(op.style.opacity || '1') || 1
-        ctx.globalCompositeOperation = normalizeBlendMode(op.style.mixBlendMode)
-        ctx.filter = op.style.filter && op.style.filter !== 'none' ? op.style.filter : 'none'
-
-        if (op.maskSrc) {
-          const [maskImage, fillImage] = await Promise.all([
-            loadImage(op.maskSrc),
-            op.imageSrc ? loadImage(op.imageSrc) : Promise.resolve(null),
-          ])
-
-          const maskCanvas = document.createElement('canvas')
-          maskCanvas.width = Math.max(1, Math.round(stageRect.width * scale))
-          maskCanvas.height = Math.max(1, Math.round(stageRect.height * scale))
-          const maskCtx = maskCanvas.getContext('2d')
-          maskCtx.scale(scale, scale)
-
-          if (fillImage) {
-            drawImageContain(maskCtx, fillImage, 0, 0, stageRect.width, stageRect.height)
-          } else {
-            maskCtx.fillStyle = op.style.backgroundColor || 'transparent'
-            maskCtx.fillRect(0, 0, stageRect.width, stageRect.height)
-          }
-
-          maskCtx.globalCompositeOperation = 'destination-in'
-          drawImageContain(maskCtx, maskImage, 0, 0, stageRect.width, stageRect.height)
-          ctx.drawImage(maskCanvas, 0, 0, stageRect.width, stageRect.height)
-        } else if (op.imageSrc) {
-          const image = await loadImage(op.imageSrc)
-          drawImageContain(ctx, image, 0, 0, stageRect.width, stageRect.height)
-        }
-      } catch (error) {
-        console.warn('Skipping layer during export:', op.node.getAttribute('data-layer') || 'unknown-layer', error)
-      } finally {
-        ctx.restore()
-      }
-      if (DEBUG) {
-        const rect = op.node.getBoundingClientRect()
-        exportLayerRows.push({
-          name: op.node.getAttribute('data-layer') || '',
-          src: op.imageSrc || '',
-          mask: op.maskSrc || '',
-          zIndex: op.zIndex,
-          width: Math.round(rect.width),
-          height: Math.round(rect.height),
-          opacity: op.style.opacity,
-          display: op.style.display,
-          visibility: op.style.visibility,
-          transform: op.style.transform,
-        })
-      }
-      continue
-    }
-
-    const rotation = Number.parseFloat(op.node.getAttribute('data-sticker-rotation') || '0')
-
-    try {
-      const image = await loadImage(op.imageSrc)
-      ctx.save()
-      ctx.filter = 'none'
-      const rect = op.node.getBoundingClientRect()
-      const drawWidth = rect.width
-      const drawHeight = rect.height
-      const centerX = (rect.left - stageRect.left) + drawWidth / 2
-      const centerY = (rect.top - stageRect.top) + drawHeight / 2
-
-      ctx.translate(centerX, centerY)
-      ctx.rotate((rotation * Math.PI) / 180)
-      ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
-    } catch (error) {
-      console.warn('Skipping sticker during export:', error)
-    } finally {
-      ctx.restore()
-    }
-  }
-  if (DEBUG) {
-    console.log('[BASS EXPORT DEBUG] Rendered layer diagnostics', {
-      stage: {
-        width: Math.round(stageRect.width),
-        height: Math.round(stageRect.height),
-      },
-      layers: exportLayerRows,
-    })
-  }
-
-  const dataUrl = canvas.toDataURL('image/png')
-  if (!download) return dataUrl
+function downloadImage(dataUrl, fileName) {
   const link = document.createElement('a')
-  link.download = fileName ?? `preview-${Date.now()}.png`
+  link.download = fileName
   link.href = dataUrl
   document.body.appendChild(link)
   link.click()
-  document.body.removeChild(link)
+  link.remove()
+}
+
+export function downloadPreviewImages(images, prefix = 'guitar-design') {
+  for (const side of ['front', 'rear']) {
+    if (images[side]) downloadImage(images[side], `${prefix}-${side}.png`)
+  }
+}
+
+// Draw in the stage's untransformed coordinates, then apply its display transform
+// once. A rotated sticker's bounding box is not its original image size.
+export async function exportMaskedPreview(previewRoot, { fileName, background = '#111111', scale = 2, download = true } = {}) {
+  const stage = previewRoot?.querySelector('[data-export-stage="true"]')
+  if (!stage) throw new Error('Preview stage not found')
+  const rootRect = previewRoot.getBoundingClientRect()
+  const stageRect = stage.getBoundingClientRect()
+  const width = stage.offsetWidth || stageRect.width
+  const height = stage.offsetHeight || stageRect.height
+  const {canvas, ctx} = makeCanvas(rootRect.width, rootRect.height, scale)
+  ctx.fillStyle = background
+  ctx.fillRect(0, 0, rootRect.width, rootRect.height)
+  const matrix = new DOMMatrix(getComputedStyle(stage).transform)
+  const flip = matrix.a < 0 ? -1 : 1
+  ctx.translate(stageRect.left - rootRect.left + stageRect.width / 2, stageRect.top - rootRect.top + stageRect.height / 2)
+  ctx.scale(flip * stageRect.width / width, stageRect.height / height)
+  ctx.translate(-width / 2, -height / 2)
+
+  const imageCache = new Map()
+  const image = src => {
+    if (!imageCache.has(src)) imageCache.set(src, loadImage(src))
+    return imageCache.get(src)
+  }
+  const operations = [...stage.querySelectorAll('[data-export-layer="true"], img[data-export-sticker="true"]')].map((node, order) => {
+    const style = getComputedStyle(node)
+    const sticker = node.matches('img[data-export-sticker="true"]')
+    const clip = sticker ? node.closest('[data-sticker-clip-mask-src]') : null
+    const zIndex = Number.parseFloat(clip ? getComputedStyle(clip).zIndex : style.zIndex) || 0
+    return {node, style, sticker, clip, zIndex, order}
+  }).filter(({style}) => style.display !== 'none' && style.visibility !== 'hidden')
+    .sort((a,b) => a.zIndex - b.zIndex || a.order - b.order)
+
+  for (const {node, style, sticker, clip} of operations) {
+    ctx.save()
+    try {
+      const opacity = Number.parseFloat(style.opacity)
+      ctx.globalAlpha = Number.isFinite(opacity) ? opacity : 1
+      ctx.globalCompositeOperation = ['multiply','screen'].includes(style.mixBlendMode) ? style.mixBlendMode : 'source-over'
+      if (sticker) {
+        const src = node.getAttribute('src')
+        if (!validImage(src)) continue
+        const stickerImage = await image(src)
+        // Only this sticker buffer is masked, leaving guitar components untouched.
+        const buffer = makeCanvas(width, height, scale)
+        const stickerWidth = node.offsetWidth
+        const stickerHeight = node.offsetHeight || stickerWidth * stickerImage.height / stickerImage.width
+        const x = Number.parseFloat(node.getAttribute('data-sticker-x'))
+        const y = Number.parseFloat(node.getAttribute('data-sticker-y'))
+        const centerX = Number.isFinite(x) ? width * x / 100 : node.offsetLeft
+        const centerY = Number.isFinite(y) ? height * y / 100 : node.offsetTop
+        buffer.ctx.save()
+        buffer.ctx.translate(centerX, centerY)
+        buffer.ctx.rotate((Number(node.getAttribute('data-sticker-rotation')) || 0) * Math.PI / 180)
+        buffer.ctx.drawImage(stickerImage, -stickerWidth / 2, -stickerHeight / 2, stickerWidth, stickerHeight)
+        buffer.ctx.restore()
+        const maskSrc = clip?.getAttribute('data-sticker-clip-mask-src') || parseUrls(clip && getComputedStyle(clip).maskImage)[0]
+        if (validImage(maskSrc)) {
+          buffer.ctx.globalCompositeOperation = 'destination-in'
+          drawContain(buffer.ctx, await image(maskSrc), width, height)
+        }
+        ctx.drawImage(buffer.canvas, 0, 0, width, height)
+      } else {
+        const src = parseUrls(style.backgroundImage)[0]
+        const masks = parseUrls(style.maskImage || style.webkitMaskImage).filter(validImage)
+        if (!validImage(src) && !masks.length) continue
+        const buffer = makeCanvas(width, height, scale)
+        if (validImage(src)) drawContain(buffer.ctx, await image(src), width, height)
+        else {
+          buffer.ctx.fillStyle = style.backgroundColor
+          buffer.ctx.fillRect(0, 0, width, height)
+        }
+        for (const mask of masks) {
+          buffer.ctx.globalCompositeOperation = 'destination-in'
+          drawContain(buffer.ctx, await image(mask), width, height)
+        }
+        ctx.filter = style.filter && style.filter !== 'none' ? style.filter : 'none'
+        if (style.transform && style.transform !== 'none') {
+          const transform = new DOMMatrix(style.transform)
+          ctx.translate(width / 2, height / 2)
+          ctx.transform(transform.a, transform.b, transform.c, transform.d, transform.e, transform.f)
+          ctx.translate(-width / 2, -height / 2)
+        }
+        ctx.drawImage(buffer.canvas, 0, 0, width, height)
+      }
+    } catch (error) {
+      if (sticker) throw error
+      console.warn('Skipping layer during export:', node.getAttribute('data-layer'), error)
+    } finally { ctx.restore() }
+  }
+  const dataUrl = canvas.toDataURL('image/png')
+  if (download) downloadImage(dataUrl, fileName || `preview-${Date.now()}.png`)
   return dataUrl
 }

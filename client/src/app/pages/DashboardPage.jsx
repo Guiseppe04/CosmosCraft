@@ -3442,9 +3442,8 @@ const filteredOrders = myOrders.filter(order => {
                     <div key={build.id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors flex flex-col h-full">
                       <div className="flex items-start gap-3 mb-4">
                         <button type="button" onClick={() => setPreviewingBuild(build)} aria-label={`View ${build.name || 'custom build'} preview`}
-                          className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] focus-visible:ring-2 focus-visible:ring-[var(--gold-primary)]">
-                          <CustomBuildThumbnail item={build} />
-                          <span className="absolute inset-x-0 bottom-0 bg-black/60 py-1 text-[10px] font-medium text-white">View image</span>
+                          className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] focus-visible:ring-2 focus-visible:ring-[var(--gold-primary)]">
+                          <CustomBuildThumbnail item={build} scale={0.50} />
                         </button>
 
                         {/* Name + meta + price stacked */}
@@ -6008,7 +6007,7 @@ const filteredOrders = myOrders.filter(order => {
               <div className="flex flex-col md:flex-row items-center gap-6">
                 <button type="button" onClick={() => setPreviewingBuild(viewingBuild)} aria-label={`View ${viewingBuild.name || 'custom build'} preview`}
                   className="relative h-44 w-full shrink-0 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] md:w-80 focus-visible:ring-2 focus-visible:ring-[var(--gold-primary)]">
-                  <CustomBuildThumbnail item={viewingBuild} />
+                  <CustomBuildThumbnail item={viewingBuild} scale={2} />
                   <span className="absolute inset-x-0 bottom-0 bg-black/60 py-2 text-xs text-white">View full-size image</span>
                 </button>
 

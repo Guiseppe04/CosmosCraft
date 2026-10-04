@@ -21,6 +21,7 @@ export default function CustomBuildPreviewModal({ item, onClose }) {
   const mask = isBass ? BASS_BODY_OPTIONS[config.bassType]?.bodySrc : BODY_OPTIONS[config.body]?.bodySrc
   const stickers = parse(build.stickers, [])
   const previewImage = build.preview_image || item.preview_image
+  const previewImages = build.preview_images || savedConfig._previewImages || {}
   const [view, setView] = useState(previewImage ? 'design' : 'front')
   const dialogRef = useRef(null)
   const closeRef = useRef(onClose)
@@ -79,8 +80,8 @@ export default function CustomBuildPreviewModal({ item, onClose }) {
           </div>
         </div>
         <div className="h-[min(65vh,620px)] min-h-[240px] bg-[var(--bg-primary)] p-4 sm:p-8">
-          {view === 'design' && previewImage ? (
-            <img src={previewImage} alt={`${item.name || 'Custom build'} saved design`} className="h-full w-full object-contain" />
+          {(view === 'design' ? previewImage : previewImages[view]) ? (
+            <img src={view === 'design' ? previewImage : previewImages[view]} alt={`${item.name || 'Custom build'} ${view === 'design' ? 'saved design' : view + ' view'}`} className="h-full w-full object-contain" />
           ) : (
             <Preview config={config} view={view} modelImageSrc={null} bodyWoodImageSrc={null} topWoodImageSrc={null} stickerMaskSrc={mask || null}
               stickerOverlay={(Array.isArray(stickers) ? stickers : []).filter(sticker => (sticker.side || 'front') === view && sticker.src).map((sticker, index) => (

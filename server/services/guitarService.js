@@ -297,7 +297,7 @@ exports.assignWalkInCustomization = async (adminId, payload) => {
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [customization_id]);
     const customer = await client.query(
-      `SELECT user_id FROM users WHERE user_id = $1 AND role = 'customer'
+      `SELECT user_id, first_name, last_name, email FROM users WHERE user_id = $1 AND role = 'customer'
        AND is_active = TRUE AND is_verified = TRUE AND deleted_at IS NULL FOR UPDATE`,
       [customer_id]
     );
@@ -321,6 +321,17 @@ exports.assignWalkInCustomization = async (adminId, payload) => {
       } };
       customization = await exports.createMyCustomization(customer_id,
         { ...design, config_json: config, is_saved: true }, client, customization_id);
+      const recipient = customer.rows[0];
+      const customerName = [recipient.first_name, recipient.last_name].filter(Boolean).join(' ') || recipient.email || customer_id;
+      await require('./auditService').createAuditLog({
+        user_id: adminId,
+        action: 'BUILD_SENT_TO_CUSTOMER',
+        entity_type: 'customizations',
+        entity_id: customization_id,
+        context: { customerId: customer_id, customerName, buildId: customization_id, buildName: customization.name || design.name },
+        details: { description: `Admin sent ${customization.name || design.name || 'Custom Build'} (${customization_id}) to ${customerName}.` },
+        executor: client,
+      });
     }
     await client.query('COMMIT');
     return { customization, alreadyAssigned };

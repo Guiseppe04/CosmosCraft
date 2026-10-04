@@ -39,6 +39,7 @@ export function mergeWalkInSavedBuilds(localBuilds, customizations, userId, guit
       config,
       stickers: Array.isArray(build.stickers) ? build.stickers : [],
       preview_image: build.preview_image,
+      preview_images: config._previewImages,
       summary: config._walkIn.summary || {},
       pricingBreakdown: config._walkIn.pricingBreakdown || {},
       lineItems: config._walkIn.lineItems || [],

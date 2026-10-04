@@ -63,8 +63,10 @@ test('sending saves only a customer-owned build, is atomic and idempotent, and r
   let inserts = 0;
   let validCustomer = true;
   let failBuild = false;
+  let failAudit = false;
   let released = 0;
   const statements = [];
+  const auditEntries = [];
   pool.query = async sql => {
     assert.match(sql, /ALTER TABLE customizations/);
     return { rows: [] };
@@ -76,7 +78,7 @@ test('sending saves only a customer-owned build, is atomic and idempotent, and r
         statements.push(sql);
         if (sql === 'BEGIN') before = row;
         if (sql === 'ROLLBACK') row = before;
-        if (sql.includes('FROM users')) return { rows: validCustomer ? [{ user_id: values[0] }] : [] };
+        if (sql.includes('FROM users')) return { rows: validCustomer ? [{ user_id: values[0], first_name:'Juan',last_name:'Dela Cruz' }] : [] };
         if (sql === 'SELECT * FROM customizations WHERE customization_id = $1') return { rows: row ? [row] : [] };
         if (sql.includes('COUNT(*)')) return { rows: [{ total: 0 }] };
         if (sql.includes('INSERT INTO customizations')) {
@@ -86,6 +88,10 @@ test('sending saves only a customer-owned build, is atomic and idempotent, and r
           return { rows: [row] };
         }
         assert.doesNotMatch(sql, /\bcarts\b|\bcart_items\b/);
+        if (sql.includes('INSERT INTO audit_logs')) {
+          if (failAudit) throw new Error('Audit write failed');
+          auditEntries.push(values);
+        }
         return { rows: [] };
       },
       release() { released++; },
@@ -96,7 +102,13 @@ test('sending saves only a customer-owned build, is atomic and idempotent, and r
     await assert.rejects(guitars.assignWalkInCustomization('admin', payload), /Build write failed/);
     assert.equal(row, undefined);
     assert.equal(statements.at(-1), 'ROLLBACK');
+    assert.equal(auditEntries.length,0);
     failBuild = false;
+    failAudit = true;
+    await assert.rejects(guitars.assignWalkInCustomization('admin',payload),/Audit write failed/);
+    assert.equal(row,undefined);
+    assert.equal(auditEntries.length,0);
+    failAudit = false;
     const result = await guitars.assignWalkInCustomization('admin', payload);
     assert.equal(result.customization.user_id, customerId);
     assert.equal(result.customization.config_json._walkIn.createdBy, 'admin');
@@ -104,13 +116,18 @@ test('sending saves only a customer-owned build, is atomic and idempotent, and r
     assert.equal(result.alreadyAssigned, false);
     const retry = await guitars.assignWalkInCustomization('admin', { ...payload, quantity: 5 });
     assert.equal(retry.alreadyAssigned, true);
-    assert.equal(inserts, 2); // Includes the rolled-back attempt.
+    assert.equal(inserts, 3); // Includes both rolled-back attempts.
+    assert.equal(auditEntries.length,1);
+    assert.deepEqual(auditEntries[0].slice(0,4),['admin','BUILD_SENT_TO_CUSTOMER','customizations',buildId]);
+    assert.equal(JSON.parse(auditEntries[0][7]).customerName,'Juan Dela Cruz');
+    assert.equal(JSON.parse(auditEntries[0][7]).customerId,customerId);
+    assert.equal(JSON.parse(auditEntries[0][7]).buildName,payload.design.name);
     assert.ok(statements.every(sql => !/\bcarts\b|\bcart_items\b/.test(sql)));
     await assert.rejects(guitars.assignWalkInCustomization('other-admin', payload), /different customer or administrator/);
     await assert.rejects(guitars.assignWalkInCustomization('admin', { ...payload, customer_id: 'another-customer' }), /different customer or administrator/);
     validCustomer = false;
     await assert.rejects(guitars.assignWalkInCustomization('admin', payload), /registered customer/);
-    assert.equal(released, 6);
+    assert.equal(released, 7);
     assert.ok(statements.some(sql => sql.includes('pg_advisory_xact_lock')));
     assert.ok(statements.some(sql => sql.includes('FOR UPDATE')));
   } finally {
