@@ -3,9 +3,33 @@ import { test } from 'node:test'
 import { createRequire } from 'node:module'
 import { getCalendarHolidays, getHolidaysForYear } from '../src/app/utils/philippineHolidays.js'
 import { mapDbCartItem } from '../src/app/utils/cartItemMapping.js'
+import { mergeWalkInSavedBuilds } from '../src/app/utils/walkInSavedBuilds.js'
 
 const require = createRequire(import.meta.url)
 const serverHolidays = require('../../server/utils/philippineHolidays.js')
+
+test('received walk-in builds sync on a clean browser with customer ownership and stable identities', () => {
+  const config = { body: 'strat', _walkIn: { customerId: 'customer', summary: { body: 'Strat' }, pricingBreakdown: { base: 12000 }, lineItems: [] } }
+  const build = { customization_id: 'received', user_id: 'customer', guitar_type: 'electric', total_price: '12000.00', config_json: config, stickers: [{ id: 'sticker', src: '/sticker.png' }], preview_image: '/preview.png', updated_at: '2026-10-04', name: 'Strat build', is_saved: true }
+  const received = mergeWalkInSavedBuilds([], [build], 'customer', 'electric')
+  assert.equal(received.length, 1)
+  assert.equal(received[0].price, 12000)
+  assert.equal(received[0].dbCustomizationId, build.customization_id)
+  assert.deepEqual(received[0].config, config)
+  assert.deepEqual(received[0].stickers, build.stickers)
+  assert.deepEqual(received[0].summary, config._walkIn.summary)
+  const existing = { ...received[0], id: 'local-id', additionalParts: [{ id: 'part' }] }
+  const refreshed = mergeWalkInSavedBuilds([existing], [{ ...build, config_json: JSON.stringify(config) }], 'customer', 'electric')
+  assert.equal(refreshed.length, 1)
+  assert.equal(refreshed[0].id, 'local-id')
+  assert.deepEqual(refreshed[0].additionalParts, existing.additionalParts)
+  assert.deepEqual(mergeWalkInSavedBuilds([], [build], 'other-customer', 'electric'), [])
+  assert.deepEqual(mergeWalkInSavedBuilds(received, [], 'other-customer', 'electric'), [])
+  assert.deepEqual(mergeWalkInSavedBuilds(received, [], 'customer', 'electric'), [])
+  assert.deepEqual(mergeWalkInSavedBuilds([], [build], 'customer', 'bass'), [])
+  const personal = { id: 'personal', config: {} }
+  assert.deepEqual(mergeWalkInSavedBuilds([personal], [], 'customer', 'electric'), [personal])
+})
 
 test('month and week closure data agrees with server in past, future and leap years', () => {
   for (const year of [2025, 2026, 2027, 2028, 2029, 2030]) {

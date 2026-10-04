@@ -89,14 +89,14 @@ export function WalkInAssignmentPanel({ config, summary, pricingBreakdown, lineI
       await adminApi.assignWalkInCustomization(pending.current)
       sessionStorage.setItem(storageKey, JSON.stringify({ payload: pending.current, customer, assigned: true }))
       setAssigned(true)
-      setMessage(`Assigned to ${customer.first_name} ${customer.last_name} (${customer.email}). The design is ready in their Cart.`)
-      onAssigned?.(customer)
+      setMessage(`Sent to ${customer.first_name} ${customer.last_name} (${customer.email}). The design is ready in their Saved Builds and Cart.`)
+      onAssigned?.(customer, pending.current.design)
     } catch (error) {
       if (error.status === 400) {
         pending.current = null
         sessionStorage.removeItem(storageKey)
       }
-      setMessage(error.message || 'Unable to assign this design. Retry the assignment.')
+      setMessage(error.message || 'Unable to send this design. Please try again.')
     } finally {
       inFlight.current = false
       setBusy(false)
@@ -145,7 +145,7 @@ export function WalkInAssignmentPanel({ config, summary, pricingBreakdown, lineI
       )}
       <p className="text-xs text-[var(--text-muted)]">Total: ₱{((pending.current?.design.total_price ?? price) * (pending.current?.quantity || 1)).toLocaleString('en-PH')}</p>
       <button type="button" disabled={!customer || busy || assigned || loadingPrices} onClick={assign} className="w-full rounded-lg bg-[#d4af37] px-3 py-2.5 text-sm font-semibold text-black disabled:opacity-50">
-        {busy ? 'Assigning…' : assigned ? 'Assigned to Customer' : pending.current ? 'Retry Assignment' : 'Assign to Customer'}
+        {busy ? 'Sending…' : assigned ? 'Sent to Customer' : pending.current ? 'Retry Send' : 'Send to Customer'}
       </button>
       {pending.current && !assigned && <p className="text-xs text-[var(--text-muted)]">Retry sends the original design to the selected customer.</p>}
       {message && <p role="status" className="text-xs text-[var(--text-muted)]">{message}</p>}

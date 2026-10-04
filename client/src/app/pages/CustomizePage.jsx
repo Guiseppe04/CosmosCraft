@@ -903,6 +903,13 @@ export function CustomizePage() {
     }
 
     const buildId = activeBuildId || `build-${Date.now()}`
+    if (isWalkInMode) {
+      setActiveBuildId(buildId)
+      setWalkInBuild({ buildId, config, summary, pricingBreakdown, lineItems: configurationLineItems, stickers, price: totalPrice, continueBlockedNavigation })
+      setShowUnsavedModal(false)
+      return
+    }
+
     const baseBuild = {
       id: buildId,
       name: `${summary.body} build`,
@@ -970,11 +977,6 @@ export function CustomizePage() {
       setSavedSnapshot(snap)
       window.sessionStorage.setItem('cosmoscraft.electricBuild.savedSnapshot', snap)
     } catch { }
-
-    if (isWalkInMode && !continueBlockedNavigation) {
-      setWalkInBuild({ buildId, config, summary, pricingBreakdown, lineItems: configurationLineItems, stickers, price: totalPrice })
-      return
-    }
 
     try {
       const payload = {
@@ -2489,8 +2491,17 @@ export function CustomizePage() {
           {...walkInBuild}
           storageScope={walkInBuild.buildId}
           guitarType="electric" previewRef={previewRef} loadingPrices={loadingPrices}
-          onClose={() => setWalkInBuild(null)} onNewBuild={handleCreateNewBuild}
-          onAssigned={(customer) => {
+          onClose={() => {
+            if (walkInBuild.continueBlockedNavigation && blocker.state === 'blocked') setShowUnsavedModal(true)
+            setWalkInBuild(null)
+          }} onNewBuild={handleCreateNewBuild}
+          onAssigned={(customer, sentDesign) => {
+            setSavedSnapshot(JSON.stringify({ config: sentDesign.config_json, stickers: sentDesign.stickers }))
+            if (walkInBuild.continueBlockedNavigation && blocker.state === 'blocked') {
+              bypassNavigationBlockRef.current = true
+              blocker.proceed()
+              setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
+            }
             setWalkInBuild(null)
             setToastMessage(`Build successfully sent to ${[customer.first_name, customer.last_name].filter(Boolean).join(' ') || customer.email}!`)
           }}

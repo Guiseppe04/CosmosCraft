@@ -1290,6 +1290,13 @@ export function BassCustomizePage() {
 
   const saveBuild = ({ shouldNavigate = true, continueBlockedNavigation = false } = {}) => {
     const buildId = activeBuildId || `build-${Date.now()}`
+    if (isWalkInMode) {
+      setActiveBuildId(buildId)
+      setWalkInBuild({ buildId, config, summary, pricingBreakdown, lineItems: configurationLineItems, stickers, price: totalPrice, continueBlockedNavigation })
+      setShowUnsavedModal(false)
+      return
+    }
+
     const build = {
       id: buildId,
       name: `${summary.body} build`,
@@ -1338,11 +1345,6 @@ export function BassCustomizePage() {
       setSavedSnapshot(snap)
       window.sessionStorage.setItem('cosmoscraft.bassBuild.savedSnapshot', snap)
     } catch { }
-
-    if (isWalkInMode && !continueBlockedNavigation) {
-      setWalkInBuild({ buildId, config, summary, pricingBreakdown, lineItems: configurationLineItems, stickers, price: totalPrice })
-      return
-    }
 
     if (continueBlockedNavigation && blocker.state === 'blocked') {
       setShowUnsavedModal(false)
@@ -2631,8 +2633,17 @@ export function BassCustomizePage() {
           {...walkInBuild}
           storageScope={walkInBuild.buildId}
           guitarType="bass" previewRef={previewRef} loadingPrices={loadingPrices}
-          onClose={() => setWalkInBuild(null)} onNewBuild={handleCreateNewBuild}
-          onAssigned={(customer) => {
+          onClose={() => {
+            if (walkInBuild.continueBlockedNavigation && blocker.state === 'blocked') setShowUnsavedModal(true)
+            setWalkInBuild(null)
+          }} onNewBuild={handleCreateNewBuild}
+          onAssigned={(customer, sentDesign) => {
+            setSavedSnapshot(JSON.stringify({ config: sentDesign.config_json, stickers: sentDesign.stickers }))
+            if (walkInBuild.continueBlockedNavigation && blocker.state === 'blocked') {
+              bypassNavigationBlockRef.current = true
+              blocker.proceed()
+              setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
+            }
             setWalkInBuild(null)
             setToastMessage(`Build successfully sent to ${[customer.first_name, customer.last_name].filter(Boolean).join(' ') || customer.email}!`)
           }}

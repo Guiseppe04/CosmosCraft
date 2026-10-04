@@ -30,8 +30,8 @@ export function WalkInAssignmentModal({ onClose, onNewBuild, ...props }) {
         onKeyDown={handleKeyDown} className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-light)] shadow-2xl">
         <div className="flex items-start justify-between gap-4 p-5">
           <div>
-            <h2 id="walk-in-assignment-title" className="text-lg font-semibold">Send saved build to a walk-in customer</h2>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">Choose their registered account to add this build to their Cart.</p>
+            <h2 id="walk-in-assignment-title" className="text-lg font-semibold">Send build to a walk-in customer</h2>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">Choose their registered account to add this design to their Saved Builds and Cart.</p>
           </div>
           <button type="button" aria-label="Close customer assignment" disabled={busy} onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 disabled:opacity-50"><X className="w-5 h-5" /></button>
         </div>

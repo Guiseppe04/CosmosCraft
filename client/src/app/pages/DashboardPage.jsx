@@ -7,6 +7,7 @@ import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
 import { BASS_BODY_OPTIONS } from '../lib/bassBuilderData.js'
 import { adminApi } from '../utils/adminApi.js'
+import { mergeWalkInSavedBuilds } from '../utils/walkInSavedBuilds.js'
 import { buildInvoiceHtml } from '../utils/invoiceBuilder.js'
 import { formatPaymentMethod } from '../utils/paymentMethodUtils'
 import { getPaymentStatusConfig } from '../utils/orderPaymentStatus'
@@ -716,7 +717,7 @@ export function DashboardPage() {
       fetchMyProjects()
       fetchMyCustomizations()
     }
-  }, [activeSection])
+  }, [activeSection, user?.id])
 
   useEffect(() => {
     setMyProjectPage(1)
@@ -992,8 +993,27 @@ export function DashboardPage() {
   }
 
   const fetchMyCustomizations = () => {
-    adminApi.getMyCustomizations().then(res => setMyCustomizations(res.data || [])).catch(console.error)
+    const requestedUserId = user?.id || user?.user_id
+    if (!requestedUserId) return
+    adminApi.getMyCustomizations().then(res => {
+      if (dashboardCache.userId !== requestedUserId) return
+      const customizations = res.data || []
+      for (const [key, type] of [['cosmoscraft_saved_builds', 'electric'], ['cosmoscraft_saved_bass_builds', 'bass']]) {
+        const localBuilds = JSON.parse(window.localStorage.getItem(key) || '[]')
+        const builds = mergeWalkInSavedBuilds(Array.isArray(localBuilds) ? localBuilds : [], customizations, requestedUserId, type)
+        window.localStorage.setItem(key, JSON.stringify(builds))
+      }
+      setMyCustomizations(customizations)
+    }).catch(console.error)
   }
+
+  useSocketEvent('cart:updated', (data) => {
+    if (data?.customization_id) fetchMyCustomizations()
+  })
+
+  useSocketEvent('connect', () => {
+    if (activeSection === 'my-guitar') fetchMyCustomizations()
+  })
 
   // ── Real-time WebSocket Subscriptions for Customer ─────────────────────────
   useSocketEvent('appointment:updated', (data) => {
@@ -3329,7 +3349,9 @@ const filteredOrders = myOrders.filter(order => {
 
     const savedGuitarBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_builds') || '[]').map(b => ({ ...b, isBass: false }))
     const savedBassBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_bass_builds') || '[]').map(b => ({ ...b, isBass: true }))
-    const allBuilds = [...savedGuitarBuilds, ...savedBassBuilds].sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0))
+    const allBuilds = [...savedGuitarBuilds, ...savedBassBuilds]
+      .filter(build => !build.config?._walkIn?.customerId || String(build.config._walkIn.customerId) === String(user?.id || user?.user_id))
+      .sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0))
     const isBuildLimitReached = allBuilds.length >= MAX_SAVED_GUITAR_BUILDS
 
     const deleteBuild = (buildId) => {

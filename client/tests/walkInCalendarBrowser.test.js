@@ -3,6 +3,9 @@ import { test } from 'node:test'
 import { createServer } from 'node:http'
 import { build } from 'esbuild'
 import { chromium } from '@playwright/test'
+import { createRequire } from 'node:module'
+
+const { assignmentSchema } = createRequire(import.meta.url)('../../server/utils/walkInValidation.js')
 
 // Exercise the actual UI with isolated accounts and API responses, without a database.
 test('calendar navigation and customer assignment remain correct across view switches and retries', async () => {
@@ -12,6 +15,10 @@ test('calendar navigation and customer assignment remain correct across view swi
       import { createRoot } from 'react-dom/client';
       import AppointmentCalendar from './src/app/components/appointments/AppointmentCalendar.jsx';
       import { WalkInAssignmentPanel } from './src/app/components/customize/WalkInAssignmentPanel.jsx';
+      import { createMemoryRouter, RouterProvider } from 'react-router';
+      import { CustomizePage } from './src/app/pages/CustomizePage.jsx';
+      import { BassCustomizePage } from './src/app/pages/BassCustomizePage.jsx';
+      import { DashboardPage } from './src/app/pages/DashboardPage.jsx';
       const root = createRoot(document.getElementById('root'));
       window.mountCalendar = () => root.render(<AppointmentCalendar isAdminMode />);
       window.mountAssignment = () => root.render(<WalkInAssignmentPanel
@@ -19,30 +26,53 @@ test('calendar navigation and customer assignment remain correct across view swi
         lineItems={[]} stickers={[]} price={12000} guitarType="electric"
         previewRef={{current:null}} loadingPrices={false} onNewBuild={()=>{}}
       />);
+      window.mountBuilder = (bass) => root.render(<RouterProvider router={createMemoryRouter([
+        {path:'*', element: bass ? <BassCustomizePage /> : <CustomizePage />}
+      ], {initialEntries:[bass ? '/customize-bass?mode=walk-in' : '/customize?mode=walk-in']})} />);
+      window.mountDashboard = () => root.render(<RouterProvider router={createMemoryRouter([
+        {path:'*', element: <DashboardPage />}
+      ], {initialEntries:['/dashboard?section=my-guitar']})} />);
     `, resolveDir: process.cwd(), loader: 'jsx' },
     bundle: true, write: false, format: 'iife', logLevel: 'silent',
+    loader: { '.css': 'empty' },
     define: { 'import.meta.env': '{}' },
     plugins: [{ name: 'test-auth-and-preview', setup(builder) {
-      builder.onLoad({ filter: /AuthContext\.jsx$/ }, () => ({ contents: `export const useAuth = () => ({ user: {user_id:'admin',role:'admin'} });`, loader: 'js' }))
+      builder.onLoad({ filter: /AuthContext\.jsx$/ }, () => ({ contents: `export const useAuth = () => ({ isAuthenticated:true, user: window.testUser || {id:'admin',user_id:'admin',role:'admin'} });`, loader: 'js' }))
+      builder.onLoad({ filter: /CartContext\.jsx$/ }, () => ({ contents: `export const useCart = () => ({cart:[], getTotalPrice:()=>0, getCartCount:()=>0, getSelectedItemIds:()=>[]});`, loader: 'js' }))
+      builder.onLoad({ filter: /SocketContext\.jsx$/ }, () => ({ contents: `export const useSocketEvent = () => {};`, loader: 'js' }))
       builder.onLoad({ filter: /exportMaskedPreview\.js$/ }, () => ({ contents: `export const exportMaskedPreview = async () => 'data:image/png;base64,test';`, loader: 'js' }))
     } }],
   })
   const customer = { user_id: '11111111-1111-4111-8111-111111111111', first_name: 'Selected', last_name: 'Customer', email: 'selected@example.test', role: 'customer', is_active: true, is_verified: true }
   const calls = []
+  const delivered = []
+  const personalSaves = []
   const server = createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json')
     if (req.url === '/bundle.js') {
       res.setHeader('Content-Type', 'application/javascript')
       return res.end(fixture.outputFiles[0].text)
     }
-    if (req.url.startsWith('/api/users')) return res.end(JSON.stringify({ data: { users: [customer] } }))
+    if (req.url.startsWith('/api/guitars/walk-in-customers')) return res.end(JSON.stringify({ data: { users: [customer], hasMore:false } }))
+    if (req.url === '/api/guitars/my-customizations') {
+      if (req.method !== 'GET') personalSaves.push(req.method)
+      return res.end(JSON.stringify({ data: delivered }))
+    }
     if (req.url === '/api/guitars/walk-in-customizations') {
       let body = ''
       for await (const chunk of req) body += chunk
       calls.push(JSON.parse(body))
+      assert.ifError(assignmentSchema.validate(calls.at(-1), { stripUnknown:true }).error)
       res.statusCode = calls.length === 1 ? 503 : 201
+      if (calls.length > 1) {
+        const payload = calls.at(-1)
+        delivered.push({...payload.design, customization_id:payload.customization_id, user_id:customer.user_id,
+          config_json:{...payload.design.config_json, _walkIn:{...payload.design, customerId:customer.user_id, createdBy:'admin'}},
+          created_at:new Date().toISOString(), is_saved:true})
+      }
       return res.end(JSON.stringify(calls.length === 1 ? { message: 'Temporary failure' } : { status: 'success' }))
     }
+    if (req.url.startsWith('/api/')) return res.end(JSON.stringify({data:[], pagination:{total:0,total_pages:1}}))
     res.setHeader('Content-Type', 'text/html')
     res.end('<div id="root"></div><script src="/bundle.js"></script>')
   })
@@ -77,26 +107,58 @@ test('calendar navigation and customer assignment remain correct across view swi
       if (await page.getByText(`December ${year - 1}`, { exact: true }).count()) await page.getByRole('button', { name: 'Next month' }).click()
     }
     await page.evaluate(() => window.mountAssignment())
-    assert.equal(await page.getByRole('button', { name: 'Assign to Customer', exact: true }).isDisabled(), true)
-    await page.getByLabel('Select customer account').selectOption(customer.user_id)
-    await page.getByLabel('Assigned guitar quantity').fill('2')
-    await page.getByRole('button', { name: 'Assign to Customer', exact: true }).click()
+    assert.equal(await page.getByRole('button', { name: 'Send to Customer', exact: true }).isDisabled(), true)
+    await page.getByLabel('Select Selected Customer').click()
+    await page.getByRole('button', { name: 'Send to Customer', exact: true }).click()
     await page.getByText('Temporary failure', { exact: true }).waitFor()
     assert.equal(calls.length, 1)
     assert.equal(calls[0].customer_id, customer.user_id)
-    assert.equal(calls[0].quantity, 2)
-    assert.equal(await page.getByLabel('Assigned guitar quantity').isDisabled(), true)
+    assert.equal(calls[0].quantity, 1)
     // Refresh before retrying: the request and selected customer must be restored.
     await page.reload()
     await page.evaluate(() => window.mountAssignment())
-    await page.getByRole('button', { name: 'Retry Assignment', exact: true }).click()
-    await page.getByRole('button', { name: 'Assigned to Customer', exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Retry Send', exact: true }).click()
+    await page.getByRole('button', { name: 'Sent to Customer', exact: true }).waitFor()
     assert.deepEqual(calls[1], calls[0])
-    assert.equal(await page.getByRole('button', { name: 'Assigned to Customer', exact: true }).isDisabled(), true)
+    assert.equal(await page.getByRole('button', { name: 'Sent to Customer', exact: true }).isDisabled(), true)
     await page.reload()
     await page.evaluate(() => window.mountAssignment())
-    await page.getByRole('button', { name: 'Assigned to Customer', exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Sent to Customer', exact: true }).waitFor()
     assert.equal(calls.length, 2)
+
+    // Saving an admin project must bypass the personal build limit and storage.
+    for (const bass of [false, true]) {
+      await page.reload()
+      const originalBuilds = Array.from({length:10}, (_,i) => ({id:'existing-'+i, config:{body:'strat'}, price:100}))
+      await page.evaluate(({bass, originalBuilds}) => {
+        localStorage.setItem('cosmoscraft_saved_builds', JSON.stringify(originalBuilds))
+        localStorage.setItem('cosmoscraft_saved_bass_builds', '[]')
+        window.mountBuilder(bass)
+      }, {bass, originalBuilds})
+      await page.getByRole('button', {name:'Save Build', exact:true}).click()
+      await page.getByRole('dialog').waitFor()
+      assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('cosmoscraft_saved_builds'))), originalBuilds)
+      assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('cosmoscraft_saved_bass_builds'))), [])
+      await page.getByLabel('Select Selected Customer').click()
+      await page.getByRole('button', {name:'Send to Customer', exact:true}).click()
+      await page.getByRole('dialog').waitFor({state:'detached'})
+      assert.equal(calls.at(-1).design.guitar_type, bass ? 'bass' : 'electric')
+    }
+    assert.deepEqual(personalSaves, [])
+
+    // A customer's clean browser imports delivered electric and bass designs.
+    await page.reload()
+    await page.evaluate(customer => {
+      localStorage.removeItem('cosmoscraft_saved_builds')
+      localStorage.removeItem('cosmoscraft_saved_bass_builds')
+      window.testUser = {...customer, id:customer.user_id}
+      window.mountDashboard()
+    }, customer)
+    await page.getByRole('button', {name:'Saved Builds', exact:true}).click()
+    await page.getByText('My Saved Builds', {exact:true}).waitFor()
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('cosmoscraft_saved_bass_builds') || '[]').length === 1)
+    const imported = await page.evaluate(() => [...JSON.parse(localStorage.getItem('cosmoscraft_saved_builds')), ...JSON.parse(localStorage.getItem('cosmoscraft_saved_bass_builds'))])
+    assert.deepEqual(new Set(imported.map(build => build.dbCustomizationId)), new Set(delivered.map(build => build.customization_id)))
   } finally {
     await browser?.close()
     await new Promise(resolve => server.close(resolve))
