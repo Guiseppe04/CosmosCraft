@@ -63,9 +63,13 @@ export default function UnavailableDatesManager({
   const handleAddAction = onAddUnavailable || onAdd
   const handleRemoveAction = onRemoveUnavailable || onRemove
 
-  // Fetch open overrides when panel opens
+  // Fetch open overrides when panel opens.
+  // Deferred via requestAnimationFrame so the fetch-triggered parent re-render
+  // (setOpenOverrides) doesn't race with the opening animation and cause a flicker.
   useEffect(() => {
-    if (isOpen && onOpen) onOpen()
+    if (!isOpen || !onOpen) return
+    const raf = requestAnimationFrame(() => { onOpen() })
+    return () => cancelAnimationFrame(raf)
   }, [isOpen])
 
   // ── Holidays for the visible month's year (and next, if near year end) ──
@@ -217,8 +221,6 @@ export default function UnavailableDatesManager({
     setReason('')
   }
 
-  if (!isOpen) return null
-
   // ── Cell styles by status ──
   const cellStyle = (date, status, isSelected) => {
     const base = 'relative h-10 w-full rounded-lg border text-sm font-medium transition-all duration-150 flex items-center justify-center'
@@ -248,7 +250,10 @@ export default function UnavailableDatesManager({
 
   return (
     <>
+    <AnimatePresence>
+      {isOpen && (
       <motion.div
+        key="udm-backdrop"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -441,6 +446,8 @@ export default function UnavailableDatesManager({
           </div>
         </motion.div>
       </motion.div>
+      )}
+    </AnimatePresence>
 
       {/* ── Add Modal ── */}
       <AnimatePresence>
