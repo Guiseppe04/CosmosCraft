@@ -16,7 +16,9 @@ import { getRoleLabel } from '../../utils/roles.js'
  */
 export function Topbar({ 
   title = 'Dashboard', 
-  userRole = 'admin'
+  userRole = 'admin',
+  workspace = false,
+  search = null,
 }) {
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
@@ -51,29 +53,31 @@ export function Topbar({
   }
 
   return (
-    <header className="bg-[var(--bg-primary)] backdrop-blur-md border-b border-[var(--border)]">
-      <div className="flex items-center justify-between px-4 py-3">
+    <header className="admin-topbar bg-[var(--bg-primary)] backdrop-blur-md border-b border-[var(--border)]">
+      <div className="admin-topbar-inner flex items-center justify-between px-4 py-3">
         {/* Left Section */}
         <div className="flex items-center gap-4">
-          <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-8 w-auto object-contain" />
+          {!workspace && <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-8 w-auto object-contain" />}
           {/* Page Title */}
           <div>
-            <h1 className="text-lg font-bold text-white">{title}</h1>
-            <p className="text-xs text-[var(--text-muted)]">
+            {workspace && <p className="admin-breadcrumb">Workspace / <span>{title}</span></p>}
+            <h1 className="admin-page-title text-lg font-bold text-white">{title}</h1>
+            {!workspace && <p className="text-xs text-[var(--text-muted)]">
               {displayName}
-            </p>
+            </p>}
           </div>
         </div>
 
         {/* Right Section */}
-        <div className="flex items-center gap-3">
+        <div className="admin-topbar-actions flex items-center gap-3">
+          {search}
           {/* Theme Toggle */}
           {!mounted ? (
             <div className="w-9 h-9" />
           ) : (
             <button
               onClick={toggleTheme}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[var(--text-muted)] transition-all duration-200 hover:border-[var(--gold-primary)]/40 hover:text-white"
+              className="admin-theme-toggle flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[var(--text-muted)] transition-all duration-200 hover:border-[var(--gold-primary)]/40 hover:text-white"
               aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
             >
               {theme === 'dark' ? (
@@ -90,12 +94,14 @@ export function Topbar({
           <div className="relative" ref={userMenuRef}>
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
-              className="flex min-w-[240px] max-w-[320px] items-center justify-between gap-4 rounded-[24px] border border-white/15 bg-white/5 px-4 py-3 transition-all duration-200 hover:border-[var(--gold-primary)]/40 hover:bg-white/10"
+              aria-label="Open account menu"
+              aria-expanded={showUserMenu}
+              className="admin-user-button flex min-w-[240px] max-w-[320px] items-center justify-between gap-4 rounded-[24px] border border-white/15 bg-white/5 px-4 py-3 transition-all duration-200 hover:border-[var(--gold-primary)]/40 hover:bg-white/10"
             >
-              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-white/70 bg-[var(--gold-primary)] text-sm font-bold text-[var(--text-dark)] shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
+              <div className="admin-user-avatar flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-white/70 bg-[var(--gold-primary)] text-sm font-bold text-[var(--text-dark)] shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
                 {initials}
               </div>
-              <div className="min-w-0 flex-1 text-left">
+              <div className="admin-user-copy min-w-0 flex-1 text-left">
                 <p className="truncate text-sm font-semibold leading-tight text-white">
                   {displayName}
                 </p>
@@ -103,12 +109,12 @@ export function Topbar({
                   {user?.email || 'user@cosmoscraft.com'}
                 </p>
               </div>
-              <ChevronDown className={`w-5 h-5 flex-shrink-0 text-[var(--text-muted)] transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`admin-user-chevron w-5 h-5 flex-shrink-0 text-[var(--text-muted)] transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
             </button>
 
             {/* User Dropdown */}
             {showUserMenu && (
-              <div className="absolute right-0 mt-3 w-72 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] shadow-xl">
+              <div className="admin-user-dropdown absolute right-0 mt-3 w-72 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] shadow-xl">
                 <div className="p-4 border-b border-[var(--border)]">
                   <p className="text-white font-medium">
                     {displayName}

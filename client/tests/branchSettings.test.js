@@ -13,6 +13,7 @@ const bundle = await build({
     export * from './src/app/utils/branchSettings.js';
     export { AddressForm } from './src/app/components/AddressForm.jsx';
     export { BranchAddressSettings } from './src/app/pages/admin/components/settings/BranchAddressSettings.jsx';
+    export { SettingsTab } from './src/app/pages/admin/tabs/SettingsTab.jsx';
   `, resolveDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), loader: 'jsx' },
   bundle: true, platform: 'node', format: 'cjs', write: false, jsx: 'automatic',
   external: ['react', 'react-dom', 'react/jsx-runtime'],
@@ -26,7 +27,7 @@ compiled._compile(bundle.outputFiles[0].text, compiled.filename)
 const {
   DEFAULT_APPOINTMENT_BRANCH, BRANCH_SETTINGS_STORAGE_KEY,
   getBranchSettingsSnapshot, publishBranchSettings, refreshBranchSettings, subscribeBranchSettings,
-  AddressForm, BranchAddressSettings,
+  AddressForm, BranchAddressSettings, SettingsTab,
 } = compiled.exports
 
 const originalGlobals = { window: globalThis.window, fetch: globalThis.fetch }
@@ -122,4 +123,20 @@ test('failed loading retains saved settings, displays an error and allows retry'
   globalThis.fetch = async () => ({ ok: true, json: async () => ({ data: saved }) })
   await refreshBranchSettings()
   assert.equal(getBranchSettingsSnapshot().error, null)
+})
+
+test('settings search filters cards and preserves permission restrictions', () => {
+  const props = { user: { email: 'admin@example.test' }, isSuperAdmin: true, siteContactInfo: { email: 'shop@example.test', phone: '+639661341242' } }
+  const contact = render(SettingsTab, { ...props, searchQuery: ' PHONE ' })
+  assert.match(contact, /Site contact information/)
+  assert.match(contact, /shop@example.test/)
+  assert.doesNotMatch(contact, /Appointment branch|Your account|General settings/)
+  const branch = render(SettingsTab, { ...props, searchQuery: 'branch' })
+  assert.match(branch, /Appointment branch/)
+  assert.doesNotMatch(branch, /Site contact information/)
+  const restricted = render(SettingsTab, { ...props, isSuperAdmin: false, searchQuery: 'phone' })
+  assert.match(restricted, /No settings found/)
+  assert.doesNotMatch(restricted, /shop@example.test/)
+  const all = render(SettingsTab, { ...props, searchQuery: '' })
+  for (const section of ['Your account', 'Site contact information', 'Appointment branch', 'General settings', 'Audit logs', 'System information']) assert.ok(all.includes(section), section)
 })

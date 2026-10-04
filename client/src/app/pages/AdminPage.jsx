@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import '../../styles/AdminWorkspace.css'
 import { isValidPhoneNumber, normalizePhoneForSubmit, PHONE_ERROR_MESSAGE } from '../utils/phone'
 import { getSiteContactSnapshot, publishSiteContact, refreshSiteContact } from '../utils/siteContact'
 import { motion, AnimatePresence } from 'motion/react'
@@ -2019,7 +2020,7 @@ export function AdminPage() {
 
    // ── JSX ──────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)]">
+    <div className={`admin-workspace ${sidebarCollapsed ? 'admin-workspace--collapsed' : ''}`}>
 
       {/* Toast */}
       <AnimatePresence>
@@ -2454,58 +2455,76 @@ export function AdminPage() {
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed left-0 top-0 h-screen bg-[var(--surface-dark)] border-r border-[var(--border)] transition-all duration-300 z-40 flex flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
+      <aside className="admin-sidebar fixed left-0 top-0 h-screen border-r transition-all duration-300 z-40 flex flex-col">
         {/* Header with CosmosCraft branding */}
-        <div className="h-24 px-4 py-4 border-b border-[var(--border)] flex items-center justify-between relative">
+        <div className="admin-brand flex items-center justify-between relative">
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="absolute -right-3 top-6 w-6 h-6 bg-[var(--surface-dark)] border border-[var(--border)] rounded-full flex items-center justify-center hover:bg-[var(--gold-primary)] hover:border-[var(--gold-primary)] transition-all"
+            aria-label={sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'}
+            aria-expanded={!sidebarCollapsed}
+            className="admin-sidebar-toggle absolute -right-3 top-6 w-6 h-6 border rounded-full flex items-center justify-center hover:bg-[var(--gold-primary)] hover:border-[var(--gold-primary)] transition-all"
           >
             {sidebarCollapsed ? <ChevronRight className="w-4 h-4 text-[var(--text-light)]" /> : <ChevronLeft className="w-4 h-4 text-[var(--text-light)]" />}
           </button>
 
           {!sidebarCollapsed && (
             <div className="flex items-center gap-3">
-              <img src="/logo-cosmos.png" alt="CosmosCraft" className="w-10 h-10 object-contain flex-shrink-0" />
-              <div className="min-w-0">
-                <p className="text-[var(--text-light)] font-black text-lg tracking-tight">CosmosCraft</p>
+              <span className="admin-brand-mark" aria-hidden="true">C</span>
+              <div className="admin-brand-copy min-w-0">
+                <p className="admin-brand-name">CosmosCraft</p>
               </div>
             </div>
           )}
           {sidebarCollapsed && (
-            <img src="/logo-cosmos.png" alt="CosmosCraft" className="w-10 h-10 object-contain flex-shrink-0 mx-auto" />
+            <span className="admin-brand-mark mx-auto" aria-label="CosmosCraft">C</span>
           )}
         </div>
 
-        <nav className="p-4 space-y-1 overflow-y-auto flex-1">
+        <nav className="admin-nav space-y-0.5 overflow-y-auto flex-1" aria-label="Admin navigation">
+          {!sidebarCollapsed && <p className="admin-workspace-label">WORKSPACE</p>}
           {tabs.map((tab) => {
             const Icon = tab.icon
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-medium transition-all duration-200 ${activeTab === tab.id
-                  ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] border-2 border-[var(--gold-primary)] shadow-[0_0_15px_rgba(212,175,55,0.3)]'
-                  : 'text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] border-2 border-transparent'
-                  }`}
+                aria-label={tab.label}
+                aria-current={activeTab === tab.id ? 'page' : undefined}
+                title={sidebarCollapsed ? tab.label : undefined}
+                className={`admin-nav-item ${activeTab === tab.id ? 'admin-nav-item--active' : ''}`}
               >
-                <Icon className={`w-5 h-5 flex-shrink-0 ${activeTab === tab.id ? 'text-[var(--text-dark)]' : 'text-[var(--text-muted)]'}`} />
+                <Icon />
                 {!sidebarCollapsed && (
-                  <span className={`truncate ${activeTab === tab.id ? 'text-[var(--text-dark)]' : 'text-[var(--text-muted)]'}`}>{tab.label}</span>
+                  <span className="admin-nav-label truncate">{tab.label}</span>
                 )}
               </button>
             )
           })}
         </nav>
 
-       
+        <div className="admin-sidebar-footer">
+          <div className={`admin-sidebar-profile ${sidebarCollapsed ? 'justify-center' : ''}`}>
+            <span className="admin-profile-avatar" aria-hidden="true">CC</span>
+            {!sidebarCollapsed && <div className="admin-profile-copy min-w-0">
+              <p className="admin-profile-name">{user?.firstName || user?.name?.firstName || user?.email?.split('@')[0] || 'CosmosCraft'}</p>
+              <p className="admin-profile-role">{isSuperAdmin ? 'Administrator' : 'Admin'}</p>
+            </div>}
+          </div>
+        </div>
       </aside>
 
       {/* Main content */}
-      <div className={`transition-all duration-300 bg-[var(--bg-primary)] ${sidebarCollapsed ? 'ml-20' : 'ml-64'}`}>
-        <Topbar title={tabs.find(t => t.id === activeTab)?.label || 'Dashboard'} userRole={user?.role} />
+      <div className="admin-content transition-all duration-300">
+        <Topbar title={tabs.find(t => t.id === activeTab)?.label || 'Dashboard'} userRole={user?.role} workspace
+          search={activeTab === 'settings' ? (
+            <label className="admin-settings-search">
+              <Search aria-hidden="true" />
+              <input type="search" aria-label="Search settings" placeholder="Search settings" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
+            </label>
+          ) : null}
+        />
 
-        <main className={`p-6 ${activeTab === 'pos' ? 'pt-19' : ['orders', 'sales-report', 'projects', 'users', 'payment-settings', 'settings'].includes(activeTab) ? 'pt-3.5' : 'pt-5'}`}>
+        <main className={activeTab === 'settings' ? 'admin-settings-main' : `p-6 ${activeTab === 'pos' ? 'pt-19' : ['orders', 'sales-report', 'projects', 'users', 'payment-settings'].includes(activeTab) ? 'pt-3.5' : 'pt-5'}`}>
 
           {/* Actions bar */}
           {['product-categories', 'services'].includes(activeTab) && (
@@ -2729,6 +2748,7 @@ export function AdminPage() {
             <SettingsTab
               user={user}
               isSuperAdmin={isSuperAdmin}
+              searchQuery={searchQuery}
               siteContactInfo={siteContactInfo}
               setSiteContactInfo={setSiteContactInfo}
               saveSiteContactInfo={saveSiteContactInfo}

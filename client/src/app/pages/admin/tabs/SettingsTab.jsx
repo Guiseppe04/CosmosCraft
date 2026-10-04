@@ -1,9 +1,34 @@
 import { useState } from 'react'
 import PhoneInput from '../../../components/PhoneInput'
 import { motion, AnimatePresence } from 'motion/react'
-import { Settings, User, Info, History, ArrowRight, ArrowLeft, Mail, Phone } from 'lucide-react'
+import { Settings, User, Info, History, ArrowRight, ArrowLeft, Mail } from 'lucide-react'
 import { AuditLogsSection } from '../components/settings/AuditLogsSection'
 import { BranchAddressSettings } from '../components/settings/BranchAddressSettings'
+import { getRoleLabel } from '../../../utils/roles'
+
+const SETTINGS_SEARCH_TERMS = {
+  account: 'your account profile email name role administrator',
+  contact: 'site contact information email phone storefront landing page terms conditions',
+  branch: 'appointment branch address location pickup country street province city barangay postal',
+  general: 'general settings dashboard theme light dark appearance',
+  audit: 'audit logs history orders projects refunds payments inventory',
+  system: 'system information version updated admin role',
+}
+
+function SettingsCard({ icon: Icon, title, description, children }) {
+  return (
+    <section className="admin-settings-card">
+      <div className="admin-settings-heading">
+        <span className="admin-settings-icon"><Icon /></span>
+        <div>
+          <h3 className="admin-settings-title">{title}</h3>
+          <p className="admin-settings-description">{description}</p>
+        </div>
+      </div>
+      {children}
+    </section>
+  )
+}
 
 export function SettingsTab({
   user,
@@ -12,154 +37,94 @@ export function SettingsTab({
   setSiteContactInfo,
   saveSiteContactInfo,
   showToast,
+  searchQuery = '',
 }) {
   const [activeSubTab, setActiveSubTab] = useState('settings')
+  const visibleSections = Object.entries(SETTINGS_SEARCH_TERMS)
+    .filter(([key, text]) => (isSuperAdmin || !['contact', 'branch'].includes(key)) && text.includes(searchQuery.trim().toLowerCase()))
+    .map(([key]) => key)
 
   return (
     <AnimatePresence mode="wait">
       {activeSubTab === 'settings' ? (
-        <motion.div key="settings" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* General Settings Section */}
-        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
-          <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
-            <Settings className="w-5 h-5 text-[var(--gold-primary)]" />
-            General Settings
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Dashboard Theme</label>
-              <p className="text-white text-sm">Light mode is the default. You can switch to dark mode using the theme toggle in the top bar.</p>
-            </div>
-          </div>
-        </div>
-
-            {/* User Account */}
-            <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
-              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
-                <User className="w-5 h-5 text-[var(--gold-primary)]" />
-                Your Account
-              </h3>
-              <div className="space-y-3">
-                <div>
-                  <span className="text-[var(--text-muted)] text-sm">Email</span>
-                  <p className="text-white font-mono">{user?.email || 'Not available'}</p>
+        <motion.div className="admin-settings-stack" key="settings" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+          {visibleSections.includes('account') && (
+            <SettingsCard icon={User} title="Your account" description="Your workspace account and access details.">
+              <div className="admin-settings-details">
+                <div className="admin-settings-detail-row">
+                  <span>Email</span><span className="admin-settings-detail-value">{user?.email || 'Not available'}</span>
                 </div>
-                <div>
-                  <span className="text-[var(--text-muted)] text-sm">Name</span>
-                  <p className="text-white font-mono">{user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.firstName || 'Admin'}</p>
+                <div className="admin-settings-detail-row">
+                  <span>Name</span><span className="admin-settings-detail-value">{user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.firstName || 'Admin'}</span>
+                </div>
+                <div className="admin-settings-detail-row">
+                  <span>Role</span><span className="admin-settings-role">{getRoleLabel(user?.role) || 'Administrator'}</span>
                 </div>
               </div>
-            </div>
+            </SettingsCard>
+          )}
 
-            {/* Audit Trail Quick Access */}
-            <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
-              <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-3">
-                <History className="w-5 h-5 text-[var(--gold-primary)]" />
-                Audit Logs
-              </h3>
-              <p className="text-sm text-[var(--text-muted)] mb-4">
-                Review order updates, project milestones, refunds, payments, and inventory changes.
-              </p>
-              <button
-                type="button"
-                onClick={() => setActiveSubTab('audit')}
-                className="inline-flex items-center gap-2 rounded-lg bg-[var(--gold-primary)] text-black font-semibold text-sm px-4 py-2 hover:opacity-90 transition"
-              >
-                <span>Open Audit Logs</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-
-            {isSuperAdmin && (
-              <BranchAddressSettings showToast={showToast} />
-            )}
-
-            {isSuperAdmin && (
-              <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
-                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
-                  <Mail className="w-5 h-5 text-[var(--gold-primary)]" />
-                  Site Contact Information
-                </h3>
-                <p className="mb-4 text-sm text-[var(--text-muted)]">
-                  Used for site contact details, including the landing page and Terms and Conditions.
-                </p>
-                <div className="space-y-4">
-                  <label className="block">
-                    <span className="mb-2 block text-sm font-semibold text-[var(--text-muted)]">Contact Email</span>
-                    <input
-                      type="email"
-                      value={siteContactInfo?.email || ''}
-                      onChange={(event) => setSiteContactInfo((current) => ({ ...current, email: event.target.value }))}
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50"
-                      placeholder="Contact email"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-2 block text-sm font-semibold text-[var(--text-muted)]">Contact Phone</span>
-                    <PhoneInput
-                      value={siteContactInfo?.phone || ''}
+          {isSuperAdmin && visibleSections.includes('contact') && (
+            <SettingsCard icon={Mail} title="Site contact information" description="Used across your storefront and policy pages.">
+              <div className="admin-settings-fields">
+                <label>
+                  <span className="admin-settings-label">Contact email</span>
+                  <input type="email" value={siteContactInfo?.email || ''}
+                    onChange={(event) => setSiteContactInfo((current) => ({ ...current, email: event.target.value }))}
+                    className="admin-settings-input" placeholder="Contact email" />
+                </label>
+                <label>
+                  <span className="admin-settings-label">Contact phone</span>
+                  <div className="admin-settings-phone">
+                    <PhoneInput value={siteContactInfo?.phone || ''}
                       onChange={(event) => setSiteContactInfo((current) => ({ ...current, phone: event.target.value }))}
-                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50"
-                    />
-                  </label>
-                </div>
-                <div className="mt-4 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={saveSiteContactInfo}
-                    className="inline-flex items-center gap-2 rounded-lg bg-[var(--gold-primary)] px-4 py-2 text-sm font-semibold text-black transition hover:opacity-90"
-                  >
-                    <Phone className="w-4 h-4" />
-                    Save Contact Information
-                  </button>
-                </div>
+                      className="admin-settings-input" />
+                  </div>
+                </label>
               </div>
-            )}
+              <p className="admin-settings-note"><Info />Changes update the public contact details shown to customers.</p>
+              <button type="button" onClick={saveSiteContactInfo} className="admin-settings-save">
+                <Settings />Save contact information
+              </button>
+            </SettingsCard>
+          )}
 
-            {/* System Information */}
-            <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
-              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
-                <Info className="w-5 h-5 text-[var(--gold-primary)]" />
-                System Information
-              </h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-[var(--text-muted)]">System Version</span>
-                  <span className="text-white font-mono">v1.0.0</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-[var(--text-muted)]">Last Updated</span>
-                  <span className="text-white font-mono">{new Date().toLocaleDateString()}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-[var(--text-muted)]">Admin Role</span>
-                  <span className="text-white font-mono capitalize">{user?.role?.replace('_', ' ')}</span>
-                </div>
+          {isSuperAdmin && visibleSections.includes('branch') && <BranchAddressSettings showToast={showToast} />}
+
+          {visibleSections.includes('general') && (
+            <SettingsCard icon={Settings} title="General settings" description="Personalize the appearance of your workspace.">
+              <p className="admin-settings-description">Switch between light and dark mode using the theme toggle in the top bar.</p>
+            </SettingsCard>
+          )}
+
+          {visibleSections.includes('audit') && (
+            <SettingsCard icon={History} title="Audit logs" description="Review order updates, project milestones, refunds, payments, and inventory changes.">
+              <button type="button" onClick={() => setActiveSubTab('audit')} className="admin-settings-link">
+                Open Audit Logs<ArrowRight />
+              </button>
+            </SettingsCard>
+          )}
+
+          {visibleSections.includes('system') && (
+            <SettingsCard icon={Info} title="System information" description="Application details and workspace access.">
+              <div className="admin-settings-details">
+                <div className="admin-settings-detail-row"><span>System version</span><span className="admin-settings-detail-value">v1.0.0</span></div>
+                <div className="admin-settings-detail-row"><span>Last updated</span><span className="admin-settings-detail-value">{new Date().toLocaleDateString()}</span></div>
+                <div className="admin-settings-detail-row"><span>Admin role</span><span className="admin-settings-detail-value capitalize">{user?.role?.replace('_', ' ')}</span></div>
               </div>
-            </div>
-          </div>
+            </SettingsCard>
+          )}
+          {visibleSections.length === 0 && <p className="admin-settings-empty" role="status">No settings found for “{searchQuery}”.</p>}
         </motion.div>
       ) : (
-          <motion.div
-            key="subtab-audit"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-          >
-            <button
-              type="button"
-              onClick={() => setActiveSubTab('settings')}
-              className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-[var(--gold-primary)] hover:text-[var(--gold-secondary)]"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Settings
-            </button>
-            <AuditLogsSection isSuperAdmin={isSuperAdmin} showToast={showToast} />
-          </motion.div>
-        )}
-      </AnimatePresence>
+        <motion.div key="subtab-audit" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
+          <button type="button" onClick={() => setActiveSubTab('settings')} className="admin-settings-link mb-5">
+            <ArrowLeft />Back to Settings
+          </button>
+          <AuditLogsSection isSuperAdmin={isSuperAdmin} showToast={showToast} />
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
 

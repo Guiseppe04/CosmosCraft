@@ -45,21 +45,21 @@ export function BranchAddressSettings({ showToast }) {
   }
 
   return (
-    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
-      <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-3">
-        <MapPin className="w-5 h-5 text-[var(--gold-primary)]" />
-        Appointment Branch
-      </h3>
-      <p className="text-sm text-[var(--text-muted)] mb-4">
-        This address is shown to all customers for appointments and project pickups.
-      </p>
+    <section className="admin-settings-card">
+      <div className="admin-settings-heading">
+        <span className="admin-settings-icon"><MapPin /></span>
+        <div>
+          <h3 className="admin-settings-title">Appointment branch</h3>
+          <p className="admin-settings-description">Shown to customers for appointments and pickups.</p>
+        </div>
+      </div>
       {isLoading && <p className="flex items-center gap-2 text-sm text-[var(--text-muted)]"><Loader2 className="h-4 w-4 animate-spin" />Loading branch address...</p>}
       {error && <div className="mb-4 text-sm text-red-400" role="alert">
         {error}
         <button type="button" onClick={refreshBranchSettings} className="ml-2 underline">Retry</button>
       </div>}
       {isEditing ? (
-        <div className="space-y-4 max-w-xl">
+        <div className="admin-branch-form space-y-4">
           <div className="flex items-center gap-2 mb-4">
             <button type="button" onClick={cancelEditing} disabled={isSaving} className="text-[var(--gold-primary)] hover:underline text-sm font-semibold flex items-center gap-1 disabled:opacity-50">
               <ArrowLeft className="h-4 w-4" />Back
@@ -78,17 +78,20 @@ export function BranchAddressSettings({ showToast }) {
           {saveError && <p role="alert" className="text-sm text-red-400">{saveError}</p>}
         </div>
       ) : !isLoading && (
-        <div className="rounded-xl border border-[var(--border)] p-4">
-          <p className="text-sm font-semibold text-[var(--text-light)]">{branch.name}</p>
-          <p className="mt-2 text-sm text-[var(--text-muted)]">{branch.address}</p>
-          <button type="button" disabled={Boolean(error)} onClick={() => {
+        <div className="admin-branch-preview">
+          <span className="admin-settings-icon"><MapPin /></span>
+          <div className="min-w-0">
+          <p className="admin-branch-name">{branch.name}</p>
+          <p className="admin-branch-address">{branch.address}</p>
+          <button type="button" aria-label="Edit Branch Address" disabled={Boolean(error)} onClick={() => {
             setInitialAddress(getInitialAddress(branch))
             setIsEditing(true)
-          }} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[var(--gold-primary)] hover:underline disabled:opacity-50">
-            <Pencil className="h-4 w-4" />Edit Branch Address
+          }} className="admin-settings-link admin-branch-edit disabled:opacity-50">
+            <Pencil />Edit address
           </button>
+          </div>
         </div>
       )}
-    </div>
+    </section>
   )
 }
