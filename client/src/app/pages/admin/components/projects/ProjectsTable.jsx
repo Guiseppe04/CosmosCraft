@@ -8,12 +8,12 @@ const statusClasses = {
   cancelled: 'bg-red-500/10 text-red-300 border-red-500/30',
 }
 
-export function ProjectsTable({ projects, archived = false, isAdmin, openModal, deleteProject, restoreProject }) {
+export function ProjectsTable({ projects, archived = false, isAdmin, openModal, deleteProject, restoreProject, footer }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] shadow-sm">
       <div className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-4">
         <h3 className="text-sm font-semibold text-white">{archived ? 'Archived Projects' : 'Active Projects'}</h3>
-        <span className="rounded-full border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-0.5 text-xs font-semibold text-[var(--gold-primary)]">{projects.length} on this page</span>
+        
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1000px] text-left text-xs">
@@ -69,6 +69,7 @@ export function ProjectsTable({ projects, archived = false, isAdmin, openModal, 
           </tbody>
         </table>
       </div>
+      {footer}
     </div>
   )
 }

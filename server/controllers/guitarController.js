@@ -1,6 +1,26 @@
 const guitarService = require('../services/guitarService');
 const { AppError } = require('../middleware/errorHandler');
 
+exports.getWalkInCustomers = async (req, res, next) => {
+  try {
+    const data = await guitarService.getWalkInCustomers(req.validatedQuery);
+    res.json({ status: 'success', data });
+  } catch (err) { next(err); }
+};
+
+exports.assignWalkInCustomization = async (req, res, next) => {
+  try {
+    const payload = req.validatedData;
+    const data = await guitarService.assignWalkInCustomization(req.user.id || req.user.user_id, payload);
+    if (!data.alreadyAssigned) {
+      require('../services/socketService').emitToUser(payload.customer_id, 'cart:updated', {
+        customization_id: data.customization.customization_id,
+      });
+    }
+    res.status(data.alreadyAssigned ? 200 : 201).json({ status: 'success', data });
+  } catch (err) { next(err); }
+};
+
 // ─── CUSTOMIZATIONS ──────────────────────────────────────────────────────────
 
 exports.getCustomizations = async (req, res, next) => {

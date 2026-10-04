@@ -26,7 +26,7 @@ export function GuitarPartsTab({
   handlePartSort,
 }) {
   return (
-    <motion.div key="guitar-parts" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mt-10">
+    <motion.div key="guitar-parts" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mt-0">
       <GuitarPartsStickyHeader
         viewMode={guitarPartViewMode}
         setViewMode={setGuitarPartViewMode}

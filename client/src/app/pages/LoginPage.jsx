@@ -296,7 +296,7 @@ export function LoginPage() {
           </div>
 
           {/* Social Logins */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <button
               type="button"
               disabled={redirectingProvider !== null}
@@ -309,21 +309,6 @@ export function LoginPage() {
                 <>
                   <img src="/social/google-color-svgrepo-com.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
                   Google
-                </>
-              )}
-            </button>
-            <button
-              type="button"
-              disabled={redirectingProvider !== null}
-              onClick={() => handleSocialLogin('Facebook')}
-              className="w-full border border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] rounded-lg py-3 font-medium text-white transition-all duration-200 hover:bg-[var(--gold-primary)]/10 flex items-center justify-center gap-2"
-            >
-              {redirectingProvider === 'Facebook' ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <>
-                  <img src="/social/facebook.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
-                  Facebook
                 </>
               )}
             </button>

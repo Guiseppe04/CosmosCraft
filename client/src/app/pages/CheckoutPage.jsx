@@ -20,6 +20,8 @@ import { API, getAuthHeaders } from '../utils/apiConfig'
 import api from '../services/api.js'
 import { adminApi } from '../utils/adminApi'
 import { getCustomBuildSummaryTree } from '../utils/customBuildSummary.js'
+import { mapDbCartItem } from '../utils/cartItemMapping.js'
+import { BuilderConfigurationPanel } from '../components/customize/BuilderConfigurationPanel.jsx'
 import { Country, State } from 'country-state-city'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
 
@@ -161,13 +163,15 @@ function CartItemCard({
             <button
               type="button"
               onClick={() => {
-                setBuildPreviewView('front')
+                setBuildPreviewView(customBuildData.preview_image ? 'design' : 'front')
                 setIsBuildPreviewOpen(true)
               }}
               aria-label={`View ${item.name || 'custom build'} front and rear preview`}
               className="group relative flex h-full w-full items-center justify-center overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--gold-primary)]"
             >
-              <div className="pointer-events-none absolute left-1/2 top-1/2 h-[240px] w-[240px] -translate-x-1/2 -translate-y-1/2 scale-[0.22]">
+              {customBuildData.preview_image ? (
+                <img src={customBuildData.preview_image} alt={`${item.name || 'Custom build'} saved design`} className="h-full w-full object-contain" />
+              ) : <div className="pointer-events-none absolute left-1/2 top-1/2 h-[240px] w-[240px] -translate-x-1/2 -translate-y-1/2 scale-[0.22]">
                 <PreviewComponent
                   config={buildPreviewConfig}
                   view="front"
@@ -177,7 +181,7 @@ function CartItemCard({
                   stickerOverlay={renderStickerOverlay('front')}
                   stickerMaskSrc={stickerMaskSrc}
                 />
-              </div>
+              </div>}
               <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
                 <Maximize2 className="h-4 w-4" />
               </span>
@@ -276,6 +280,12 @@ function CartItemCard({
         </div>
       )}
 
+      {isCustomBuild && customBuildData.lineItems?.length > 0 && (
+        <div className="mt-3">
+          <BuilderConfigurationPanel lineItems={customBuildData.lineItems} configurationTotal={unitPrice} title="Price Breakdown" />
+        </div>
+      )}
+
       {isBuildPreviewOpen && isCustomBuild && (
         <div
           className="fixed inset-0 z-[250] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
@@ -306,7 +316,7 @@ function CartItemCard({
             </header>
             <div className="flex justify-center border-b border-[var(--border)] p-3">
               <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-1" role="group" aria-label="Preview side">
-                {['front', 'rear'].map((side) => (
+                {(customBuildData.preview_image ? ['design', 'front', 'rear'] : ['front', 'rear']).map((side) => (
                   <button
                     key={side}
                     type="button"
@@ -314,13 +324,15 @@ function CartItemCard({
                     aria-pressed={buildPreviewView === side}
                     className={`rounded-md px-5 py-2 text-sm font-semibold capitalize transition-colors ${buildPreviewView === side ? 'bg-[var(--gold-primary)] text-black' : 'text-[var(--text-muted)] hover:text-white'}`}
                   >
-                    {side}
+                    {side === 'design' ? 'Saved design' : side}
                   </button>
                 ))}
               </div>
             </div>
             <div className="h-[min(65vh,620px)] min-h-[320px] bg-[var(--bg-primary)] p-4 sm:p-8">
-              <PreviewComponent
+              {buildPreviewView === 'design' && customBuildData.preview_image ? (
+                <img src={customBuildData.preview_image} alt={`${item.name || 'Custom build'} saved design`} className="h-full w-full object-contain" />
+              ) : <PreviewComponent
                 config={buildPreviewConfig}
                 view={buildPreviewView}
                 modelImageSrc={null}
@@ -328,7 +340,7 @@ function CartItemCard({
                 topWoodImageSrc={null}
                 stickerOverlay={renderStickerOverlay(buildPreviewView)}
                 stickerMaskSrc={stickerMaskSrc}
-              />
+              />}
             </div>
           </section>
         </div>
@@ -1055,21 +1067,7 @@ export function CheckoutPage() {
       if (requestedCartItemIds.some(id => !preparedIds.has(id))) {
         throw new Error('One or more selected cart items are no longer available.')
       }
-      setPreparedCartItems(cartItems.map(item => ({
-        id: item.product?.product_id || item.customization?.customization_id || item.cart_item_id,
-        cart_item_id: item.cart_item_id,
-        name: item.product?.name || item.customization?.name || 'Custom Build',
-        price: Number(item.unit_price) || 0,
-        image: item.product?.image || item.customization?.preview_image || '/assets/placeholder.jpg',
-        stock: item.product?.stock,
-        quantity: Number(item.quantity) || 1,
-        type: item.customization ? 'customization' : 'product',
-        customization: item.customization ? {
-          ...item.customization,
-          config: item.customization.config_json || item.customization.config || {},
-          stickers: parseArrayValue(item.customization.stickers),
-        } : null,
-      })))
+      setPreparedCartItems(cartItems.map(mapDbCartItem))
       setIsPreparingCart(false)
     }).catch((error) => {
       if (!isCurrentRequest) return

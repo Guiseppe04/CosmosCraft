@@ -12,7 +12,7 @@ import {
   ChevronDown, ChevronUp, ArrowUp, ArrowDown,
   Printer, Mail, FileText, CreditCard, RotateCcw, Copy, Truck, MapPin, Smartphone, Upload,
   UserCheck, Clock10, PackageCheck, CircleCheck,
-  Layers, User, Tag, AlertCircle, DollarSign, Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal, Shield, Settings, Guitar, Wrench, PaintBucket, Hammer, Zap, Sparkles, Wallet, CalendarX,
+  Layers, User, Tag, AlertCircle, DollarSign, Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal, Shield, Settings, Guitar, Wrench, PaintBucket, Hammer, Zap, Sparkles, Wallet, CalendarX, LogOut,
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
@@ -131,7 +131,7 @@ import { getStockTier } from '../utils/stockUtils'
 
 
 export function AdminPage() {
-  const { user, isAuthenticated } = useAuth()
+  const { user, isAuthenticated, logout } = useAuth()
   const navigate = useNavigate()
   const isSuperAdmin = hasRole(user?.role, 'admin')
 
@@ -150,7 +150,7 @@ export function AdminPage() {
   const [lastRefreshed, setLastRefreshed] = useState(null)
   const [toasts, setToasts] = useState([])
   const toastTimersRef = useRef(new Map())
-  const [productViewMode, setProductViewMode] = useState('grid') // grid | table
+  const [productViewMode, setProductViewMode] = useState('table') // table | grid
   const [productActiveTab, setProductActiveTab] = useState('active') // all | active | inactive
 
   // Modal state
@@ -279,7 +279,7 @@ export function AdminPage() {
   const [projectSort, setProjectSort] = useState('updated')
   const [projectSortDirection, setProjectSortDirection] = useState('desc')
   const [projectPage, setProjectPage] = useState(1)
-  const PROJECTS_PAGE_SIZE = 10
+  const [projectPageSize, setProjectPageSize] = useState(10)
   const [projectArchiveTab, setProjectArchiveTab] = useState('active')
   const [archivedProjects, setArchivedProjects] = useState([])
   const [archivedProjectsPagination, setArchivedProjectsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
@@ -289,7 +289,7 @@ export function AdminPage() {
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState('all')
   const [inventorySort, setInventorySort] = useState('name_asc')
   const [inventoryPage, setInventoryPage] = useState(1)
-  const INVENTORY_PAGE_SIZE = 10
+  const [inventoryPageSize, setInventoryPageSize] = useState(10)
   const [optimisticStock, setOptimisticStock] = useState({})
   const [adjustPopover, setAdjustPopover] = useState({ open: false, itemId: null, amount: 0, name: '' })
   const [form, setForm] = useState({})
@@ -317,7 +317,7 @@ export function AdminPage() {
   const [partSearchQuery, setPartSearchQuery] = useState('')
 
   // Services section state
-  const [serviceViewMode, setServiceViewMode] = useState('grid')
+  const [serviceViewMode, setServiceViewMode] = useState('table')
 
   // Message panel
   const [messagePanelOpen, setMessagePanelOpen] = useState(false)
@@ -520,8 +520,8 @@ export function AdminPage() {
   }, [visibleInventory, productsInventoryFilter])
 
   const paginatedProductsInventory = useMemo(() => {
-    const start = (inventoryPage - 1) * INVENTORY_PAGE_SIZE
-    return filteredProductsInventory.slice(start, start + INVENTORY_PAGE_SIZE)
+    const start = (inventoryPage - 1) * inventoryPageSize
+    return filteredProductsInventory.slice(start, start + inventoryPageSize)
   }, [filteredProductsInventory, inventoryPage])
 
   // Separate filtered inventory for Guitar Parts sub-tab
@@ -577,13 +577,13 @@ export function AdminPage() {
   }, [visibleParts, partsInventoryFilter])
 
   const paginatedPartsInventory = useMemo(() => {
-    const start = (inventoryPage - 1) * INVENTORY_PAGE_SIZE
-    return filteredPartsInventory.slice(start, start + INVENTORY_PAGE_SIZE)
+    const start = (inventoryPage - 1) * inventoryPageSize
+    return filteredPartsInventory.slice(start, start + inventoryPageSize)
   }, [filteredPartsInventory, inventoryPage])
 
   const paginatedInventory = useMemo(() => {
-    const start = (inventoryPage - 1) * INVENTORY_PAGE_SIZE
-    return filteredInventory.slice(start, start + INVENTORY_PAGE_SIZE)
+    const start = (inventoryPage - 1) * inventoryPageSize
+    return filteredInventory.slice(start, start + inventoryPageSize)
   }, [filteredInventory, inventoryPage])
 
   const inventoryHealthData = (() => {
@@ -682,6 +682,20 @@ export function AdminPage() {
     }
   }
 
+  const handleLogout = () => {
+    openConfirm({
+      title: 'Log out',
+      description: 'Are you sure you want to log out of the admin workspace?',
+      confirmLabel: 'Log out',
+      cancelLabel: 'Cancel',
+      variant: 'warning',
+      onConfirm: async () => {
+        await logout()
+        navigate('/')
+      },
+    })
+  }
+
   // ── Data fetching ────────────────────────────────────────────────────────
   const buildProjectQuery = useCallback((pageNum = 1) => {
     const params = {
@@ -696,13 +710,13 @@ export function AdminPage() {
       completion_percentage: projectCompletionFilter === 'all' ? undefined : projectCompletionFilter,
       include_tasks: true,
       page: pageNum,
-      page_size: PROJECTS_PAGE_SIZE,
+      page_size: projectPageSize,
       sort_by: ({ updated: 'updated_at', created: 'created_at', name: 'project_name', customer: 'customer_name', progress: 'progress', due: 'estimated_completion_date', status: 'status' })[projectSort] || 'updated_at',
       sort_dir: projectSortDirection,
     }
     Object.keys(params).forEach((key) => params[key] === undefined && delete params[key])
     return params
-  }, [debouncedSearch, projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, projectSortDirection])
+  }, [debouncedSearch, projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, projectSortDirection, projectPageSize])
 
   // Appointment action handlers
   const handleAppointmentStatusChange = useCallback(async (id, status, reason) => {
@@ -1755,13 +1769,13 @@ export function AdminPage() {
       completion_percentage: projectCompletionFilter === 'all' ? undefined : projectCompletionFilter,
       include_tasks: true,
       page: pageNum,
-      page_size: PROJECTS_PAGE_SIZE,
+      page_size: projectPageSize,
       sort_by: ({ updated: 'updated_at', created: 'created_at', name: 'project_name', customer: 'customer_name', progress: 'progress', due: 'estimated_completion_date', status: 'status' })[projectSort] || 'updated_at',
       sort_dir: projectSortDirection,
     }
     Object.keys(params).forEach((key) => params[key] === undefined && delete params[key])
     return params
-  }, [projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, projectSortDirection])
+  }, [projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, projectSortDirection, projectPageSize])
 
   useEffect(() => {
     if (activeTab === 'projects' && projectArchiveTab === 'archived') {
@@ -1966,7 +1980,7 @@ export function AdminPage() {
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'products', label: 'Products', icon: Package },
     { id: 'guitar-parts', label: 'Guitar Parts', icon: Layers },
-    { id: 'product-categories', label: 'Product Categories', icon: Tag },
+    { id: 'product-categories', label: 'Categories', icon: Tag },
     { id: 'orders', label: 'Orders', icon: ShoppingBag },
     { id: 'inventory', label: 'Inventory', icon: Activity },
     { id: 'pos', label: 'POS', icon: Wallet },
@@ -1985,7 +1999,7 @@ export function AdminPage() {
   const inventoryCurrentFilter = inventoryIsProducts ? productsInventoryFilter : partsInventoryFilter
   const inventoryCurrentRows = inventoryIsProducts ? filteredProductsInventory : filteredPartsInventory
   const inventoryCurrentPageRows = inventoryIsProducts ? paginatedProductsInventory : paginatedPartsInventory
-  const inventoryTotalPages = Math.max(1, Math.ceil(inventoryCurrentRows.length / INVENTORY_PAGE_SIZE))
+  const inventoryTotalPages = Math.max(1, Math.ceil(inventoryCurrentRows.length / inventoryPageSize))
   const inventoryGroupedPartPageRows = useMemo(() => {
     if (inventoryIsProducts) return []
 
@@ -2468,16 +2482,30 @@ export function AdminPage() {
           </button>
 
           {!sidebarCollapsed && (
-            <div className="flex items-center gap-3">
-              <span className="admin-brand-mark" aria-hidden="true">C</span>
-              <div className="admin-brand-copy min-w-0">
-                <p className="admin-brand-name">CosmosCraft</p>
-              </div>
+          <div className="flex items-center gap-3">
+            <span className="admin-brand-mark">
+              <img
+                src="/logo-cosmos.png"
+                alt="CosmosCraft"
+                className="admin-brand-logo"
+              />
+            </span>
+
+            <div className="admin-brand-copy min-w-0">
+              <p className="admin-brand-name">CosmosCraft</p>
             </div>
-          )}
-          {sidebarCollapsed && (
-            <span className="admin-brand-mark mx-auto" aria-label="CosmosCraft">C</span>
-          )}
+          </div>
+        )}
+
+        {sidebarCollapsed && (
+          <span className="admin-brand-mark mx-auto">
+            <img
+              src="/logo-cosmos.png"
+              alt="CosmosCraft"
+              className="admin-brand-logo"
+            />
+          </span>
+        )}
         </div>
 
         <nav className="admin-nav space-y-0.5 overflow-y-auto flex-1" aria-label="Admin navigation">
@@ -2502,15 +2530,50 @@ export function AdminPage() {
           })}
         </nav>
 
-        <div className="admin-sidebar-footer">
-          <div className={`admin-sidebar-profile ${sidebarCollapsed ? 'justify-center' : ''}`}>
-            <span className="admin-profile-avatar" aria-hidden="true">CC</span>
-            {!sidebarCollapsed && <div className="admin-profile-copy min-w-0">
-              <p className="admin-profile-name">{user?.firstName || user?.name?.firstName || user?.email?.split('@')[0] || 'CosmosCraft'}</p>
-              <p className="admin-profile-role">{isSuperAdmin ? 'Administrator' : 'Admin'}</p>
-            </div>}
-          </div>
+<div className="admin-sidebar-footer">
+  <div className={`admin-sidebar-profile ${sidebarCollapsed ? 'justify-center' : ''}`}>
+    <span className="admin-profile-avatar" aria-hidden="true">CC</span>
+
+    {!sidebarCollapsed && (
+      <>
+        <div className="admin-profile-copy min-w-0 flex-1">
+          <p className="admin-profile-name">
+            {user?.firstName ||
+              user?.name?.firstName ||
+              user?.email?.split('@')[0] ||
+              'CosmosCraft'}
+          </p>
+
+          <p className="admin-profile-role">
+            {isSuperAdmin ? 'Administrator' : 'Admin'}
+          </p>
         </div>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="admin-logout-button"
+          title="Log out"
+          aria-label="Log out"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
+      </>
+    )}
+
+    {sidebarCollapsed && (
+      <button
+        type="button"
+        onClick={handleLogout}
+        className="admin-logout-button"
+        title="Log out"
+        aria-label="Log out"
+      >
+        <LogOut className="w-4 h-4" />
+      </button>
+    )}
+  </div>
+</div>
       </aside>
 
       {/* Main content */}
@@ -2700,7 +2763,8 @@ export function AdminPage() {
               archivedProjectsPagination={archivedProjectsPagination}
               setArchivedProjectsPagination={setArchivedProjectsPagination}
               projectsPagination={projectsPagination}
-              PROJECTS_PAGE_SIZE={PROJECTS_PAGE_SIZE}
+              projectPageSize={projectPageSize}
+              setProjectPageSize={setProjectPageSize}
               isAdmin={isSuperAdmin}
               debouncedSearch={debouncedSearch}
             />
@@ -2783,6 +2847,7 @@ export function AdminPage() {
                selectedCalendarDate={selectedCalendarDate}
                 unavailableDates={normalizedUnavailableDates}
                availableDates={availableDates}
+               openOverrides={openOverrides}
                fetchAppointments={fetchAppointments}
                setSelectedAppointment={setSelectedAppointment}
                setAppointmentModalOpen={setAppointmentModalOpen}
@@ -2811,7 +2876,8 @@ export function AdminPage() {
               inventoryTotalPages={inventoryTotalPages}
               inventoryPage={inventoryPage}
               setInventoryPage={setInventoryPage}
-              inventoryPageSize={INVENTORY_PAGE_SIZE}
+              inventoryPageSize={inventoryPageSize}
+              setInventoryPageSize={setInventoryPageSize}
               setProductsInventoryFilter={setProductsInventoryFilter}
               setPartsInventoryFilter={setPartsInventoryFilter}
               resolveInventoryImage={resolveInventoryImage}
@@ -3130,7 +3196,7 @@ export function AdminPage() {
                 <button
                   onClick={() => {
                     setShowGuitarTypeSelector(false)
-                    navigate('/customize?type=electric')
+                    navigate('/customize?type=electric&mode=walk-in')
                   }}
                   className="p-6 rounded-2xl border-2 border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] hover:bg-[var(--gold-primary)]/5 transition-all group"
                 >
@@ -3143,40 +3209,13 @@ export function AdminPage() {
                 <button
                   onClick={() => {
                     setShowGuitarTypeSelector(false)
-                    navigate('/customize-bass')
+                    navigate('/customize-bass?mode=walk-in')
                   }}
                   className="p-6 rounded-2xl border-2 border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] hover:bg-[var(--gold-primary)]/5 transition-all group"
                 >
                   <Guitar className="w-8 h-8 text-[var(--gold-primary)] mb-3 group-hover:scale-110 transition-transform" />
                   <h3 className="text-white font-semibold text-lg mb-1">Bass</h3>
                   <p className="text-[var(--text-muted)] text-sm">Design your custom bass guitar</p>
-                </button>
-
-                {/* Ukulele */}
-                <button
-                  onClick={() => {
-                    setShowGuitarTypeSelector(false)
-                    navigate('/customize?type=ukulele')
-                  }}
-                  className="p-6 rounded-2xl border-2 border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] hover:bg-[var(--gold-primary)]/5 transition-all group"
-                >
-                  <Guitar className="w-8 h-8 text-[var(--gold-primary)] mb-3 group-hover:scale-110 transition-transform" />
-                  <h3 className="text-white font-semibold text-lg mb-1">Ukulele</h3>
-                  <p className="text-[var(--text-muted)] text-sm">Create your unique ukulele</p>
-                </button>
-
-                {/* Acoustic */}
-                <button
-                  onClick={() => {
-                    setShowGuitarTypeSelector(false)
-                    navigate('/customize?type=acoustic')
-                  }}
-                  className="p-6 rounded-2xl border-2 border-[var(--border)] opacity-50 cursor-not-allowed bg-[var(--bg-primary)]"
-                  disabled
-                >
-                  <Guitar className="w-8 h-8 text-[var(--text-muted)] mb-3" />
-                  <h3 className="text-[var(--text-muted)] font-semibold text-lg mb-1">Acoustic</h3>
-                  <p className="text-[var(--text-muted)] text-sm text-xs">Coming soon</p>
                 </button>
               </div>
 

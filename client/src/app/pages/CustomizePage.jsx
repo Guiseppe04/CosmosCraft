@@ -24,6 +24,7 @@ import useGuitarConfig from '../hooks/useGuitarConfig.js'
 import GuitarPreview from '../components/guitar/GuitarPreview.jsx'
 import { RGBColorPicker } from '../components/options/RGBColorPicker.jsx'
 import { BuilderActionBar } from '../components/customize/BuilderActionBar.jsx'
+import { WalkInAssignmentModal } from '../components/customize/WalkInAssignmentModal.jsx'
 import { BuilderCheckoutSection } from '../components/customize/BuilderCheckoutSection.jsx'
 import { BuilderSavedBadge } from '../components/customize/BuilderSavedBadge.jsx'
 import { StickerPanel } from '../components/customize/StickerPanel.jsx'
@@ -322,7 +323,9 @@ export function CustomizePage() {
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false)
   const [guitarTypeDropdownOpen, setGuitarTypeDropdownOpen] = useState(false)
   const categoryDropdownRef = useRef(null)
-  const { isAuthenticated, openLogin } = useAuth()
+  const { isAuthenticated, openLogin, user } = useAuth()
+  const isWalkInMode = searchParams.get('mode') === 'walk-in' && ['staff', 'admin', 'super_admin'].includes(user?.role)
+  const [walkInBuild, setWalkInBuild] = useState(null)
   const [savedSnapshot, setSavedSnapshot] = useState(() => {
     if (editBuildId) return JSON.stringify({ config: null, stickers: null })
     try {
@@ -967,6 +970,11 @@ export function CustomizePage() {
       setSavedSnapshot(snap)
       window.sessionStorage.setItem('cosmoscraft.electricBuild.savedSnapshot', snap)
     } catch { }
+
+    if (isWalkInMode && !continueBlockedNavigation) {
+      setWalkInBuild({ buildId, config, summary, pricingBreakdown, lineItems: configurationLineItems, stickers, price: totalPrice })
+      return
+    }
 
     try {
       const payload = {
@@ -2474,6 +2482,20 @@ export function CustomizePage() {
       <p className="mt-2 text-center text-[10px] uppercase tracking-[0.15em] text-[var(--text-muted)]">
         Graphic representation only. Actual product may differ slightly due to natural wood variations.
       </p>
+
+      {isWalkInMode && walkInBuild && (
+        <WalkInAssignmentModal
+          key={walkInBuild.buildId}
+          {...walkInBuild}
+          storageScope={walkInBuild.buildId}
+          guitarType="electric" previewRef={previewRef} loadingPrices={loadingPrices}
+          onClose={() => setWalkInBuild(null)} onNewBuild={handleCreateNewBuild}
+          onAssigned={(customer) => {
+            setWalkInBuild(null)
+            setToastMessage(`Build successfully sent to ${[customer.first_name, customer.last_name].filter(Boolean).join(' ') || customer.email}!`)
+          }}
+        />
+      )}
 
       {showLoadModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">

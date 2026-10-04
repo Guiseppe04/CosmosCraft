@@ -11,15 +11,16 @@ const syncStockToBuilderParts = async (productId, delta) => {
   );
 };
 
-async function getOrCreateCart(userId) {
-  let result = await pool.query(
+async function getOrCreateCart(userId, db = pool) {
+  let result = await db.query(
     'SELECT * FROM carts WHERE user_id = $1',
     [userId]
   );
 
   if (result.rows.length === 0) {
-    result = await pool.query(
-      'INSERT INTO carts (user_id, subtotal, tax_amount) VALUES ($1, 0, 0) RETURNING *',
+    result = await db.query(
+      `INSERT INTO carts (user_id, subtotal, tax_amount) VALUES ($1, 0, 0)
+       ON CONFLICT (user_id) DO UPDATE SET user_id = EXCLUDED.user_id RETURNING *`,
       [userId]
     );
   }
@@ -203,8 +204,8 @@ async function addItemToCart(userId, { product_id, customization_id, quantity = 
   } else if (customization_id) {
     // --- Customized guitar handling (unchanged) ---
     const customResult = await pool.query(
-      'SELECT total_price FROM customizations WHERE customization_id = $1',
-      [customization_id]
+      'SELECT total_price FROM customizations WHERE customization_id = $1 AND user_id = $2 AND deleted_at IS NULL',
+      [customization_id, userId]
     );
 
     if (customResult.rows.length === 0) {
@@ -305,15 +306,15 @@ async function clearCart(userId) {
   return getCartWithItems(userId);
 }
 
-async function recalculateCartTotals(cartId) {
-  const itemsResult = await pool.query(
+async function recalculateCartTotals(cartId, db = pool) {
+  const itemsResult = await db.query(
     'SELECT quantity, unit_price FROM cart_items WHERE cart_id = $1',
     [cartId]
   );
 
   const totals = calculateOrderTotals(itemsResult.rows);
 
-  await pool.query(
+  await db.query(
     `UPDATE carts SET subtotal = $1, tax_amount = $2, updated_at = now() 
      WHERE cart_id = $3`,
     [totals.subtotal, totals.taxAmount, cartId]
@@ -491,4 +492,5 @@ module.exports = {
   prepareCheckout,
   convertCartToOrder,
   getCartItemCount,
+  recalculateCartTotals,
 };

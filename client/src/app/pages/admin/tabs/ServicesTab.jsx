@@ -16,6 +16,12 @@ export function ServicesTab({
   openModal,
   deleteService,
 }) {
+  const changePageSize = (pageSize) => setServiceQuery((prev) => ({ ...prev, page: 1, pageSize }))
+  const paginationFooter = (
+    <PaginationBar pagination={servicesPagination} loading={servicesLoading} onPageChange={(page) => setServiceQuery((prev) => ({ ...prev, page }))} onPageSizeChange={changePageSize} />
+  )
+  const footerInsideTable = !servicesLoading && services.length > 0 && serviceViewMode === 'table'
+
   return (
     <motion.div key="services" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
       {servicesLoading ? (
@@ -28,14 +34,12 @@ export function ServicesTab({
           actionLabel="Add Service"
         />
       ) : serviceViewMode === 'table' ? (
-        <ServiceTableView services={services} onEdit={(svc) => openModal('service', svc)} onDelete={deleteService} />
+        <ServiceTableView services={services} onEdit={(svc) => openModal('service', svc)} onDelete={deleteService} footer={<PaginationBar attached pagination={servicesPagination} loading={servicesLoading} onPageChange={(page) => setServiceQuery((prev) => ({ ...prev, page }))} onPageSizeChange={changePageSize} />} />
       ) : (
         <ServiceGridView services={services} onEdit={(svc) => openModal('service', svc)} onDelete={deleteService} />
       )}
 
-      {servicesPagination.totalPages > 1 && (
-        <PaginationBar pagination={servicesPagination} loading={servicesLoading} onPageChange={(page) => setServiceQuery((prev) => ({ ...prev, page }))} />
-      )}
+      {!footerInsideTable && paginationFooter}
     </motion.div>
   )
 }

@@ -141,24 +141,7 @@ async function getActiveStaffCount(db = pool) {
   return Number(result.rows?.[0]?.staff_count || 0);
 }
 
-const HOLIDAYS = [
-  '01-01',
-  '04-02',
-  '04-03',
-  '04-09',
-  '05-01',
-  '06-12',
-  '08-31',
-  '11-30',
-  '12-25',
-  '12-30',
-];
-
-function isHoliday(date) {
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return HOLIDAYS.includes(`${month}-${day}`);
-}
+const { isHoliday, appointmentDateKey } = require('../utils/philippineHolidays');
 
 /**
  * Generate a sequential reference code for an appointment.
@@ -224,7 +207,7 @@ function normalizeGuitarDetails(guitarDetails = {}) {
 async function assertNoScheduleConflict(client, scheduledAt, excludeAppointmentId = null) {
    const scheduledDate = new Date(scheduledAt);
 
-   const dayOfWeek = scheduledDate.getDay();
+   const dayOfWeek = new Date(`${appointmentDateKey(scheduledDate)}T00:00:00Z`).getUTCDay();
    if (dayOfWeek === 0) {
      throw new AppError('Selected appointment date is unavailable (Sunday closure)', 409);
    }
@@ -233,7 +216,7 @@ async function assertNoScheduleConflict(client, scheduledAt, excludeAppointmentI
    if (isHoliday(scheduledDate)) {
      const overrideRes = await client.query(
        `SELECT id FROM unavailable_dates
-        WHERE date = ($1::timestamptz)::date AND is_open_override = TRUE LIMIT 1`,
+        WHERE date = ($1::timestamptz AT TIME ZONE 'Asia/Manila')::date AND is_open_override = TRUE LIMIT 1`,
        [scheduledAt]
      );
      if (overrideRes.rows.length === 0) {
@@ -244,7 +227,7 @@ async function assertNoScheduleConflict(client, scheduledAt, excludeAppointmentI
    // Block if admin has explicitly marked this date unavailable (non-override)
    const unavailableRes = await client.query(
      `SELECT id FROM unavailable_dates
-      WHERE date = ($1::timestamptz)::date AND is_open_override = FALSE LIMIT 1`,
+      WHERE date = ($1::timestamptz AT TIME ZONE 'Asia/Manila')::date AND is_open_override = FALSE LIMIT 1`,
      [scheduledAt]
    );
 
@@ -459,8 +442,8 @@ exports.createAppointment = async ({ appointment_type = 'service_in_shop', servi
     const referenceCode = await generateReferenceCode(client, scheduled_at);
 
     const appointmentResult = await client.query(
-      `INSERT INTO appointments (user_id, appointment_type, order_id, services, location_id, guitar_details, scheduled_at, estimated_end_at, status, payment_method, payment_proof_url, notes, confirmation_notes, customer_name, customer_email, customer_phone, reference_code, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, $11, $12, $13, $14, $15, $16, now(), now())
+      `INSERT INTO appointments (user_id, appointment_type, order_id, services, location_id, guitar_details, scheduled_at, estimated_end_at, status, payment_method, payment_status, payment_proof_url, notes, confirmation_notes, customer_name, customer_email, customer_phone, reference_code, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, 'pending', $10, $11, $12, $13, $14, $15, $16, now(), now())
        RETURNING *`,
       [
         user_id || null,
@@ -1165,7 +1148,8 @@ exports.getAvailableDates = async (dateFrom, dateTo) => {
   const capacity = await getActiveStaffCount(pool);
   if (capacity === 0) return [];
   const result = await pool.query(
-    `SELECT d::date AS date
+    `SELECT d::date AS date,
+       EXISTS (SELECT 1 FROM unavailable_dates WHERE date = d::date AND is_open_override = TRUE) AS is_open_override
      FROM generate_series($1::date, $2::date, '1 day'::interval) d
      WHERE EXTRACT(DOW FROM d) != 0
        AND NOT EXISTS (
@@ -1181,7 +1165,7 @@ exports.getAvailableDates = async (dateFrom, dateTo) => {
      ORDER BY d::date ASC`,
     [dateFrom, dateTo, capacity]
   );
-  return result.rows.map(row => row.date);
+  return result.rows.filter(row => row.is_open_override || !isHoliday(new Date(row.date))).map(row => row.date);
 };
 
 exports.getAppointmentCapacity = async () => {
@@ -1190,6 +1174,22 @@ exports.getAppointmentCapacity = async () => {
     active_staff_count: activeStaffCount,
     appointment_capacity: activeStaffCount,
   };
+};
+
+exports.getOccupiedDates = async (dateFrom, dateTo) => {
+  const capacity = await getActiveStaffCount(pool);
+  const result = await pool.query(
+    `SELECT d::date::text AS date
+     FROM generate_series($1::date, $2::date, '1 day'::interval) d
+     WHERE (
+       SELECT COUNT(*) FROM appointments
+       WHERE (scheduled_at AT TIME ZONE 'Asia/Manila')::date = d::date
+         AND lower(status::text) NOT IN ('cancelled', 'rejected', 'rescheduled_by_customer')
+     ) >= $3
+     ORDER BY d`,
+    [dateFrom, dateTo, capacity]
+  );
+  return result.rows.map(row => row.date);
 };
 
 exports.addUnavailableDate = async (date, reason, userId) => {
@@ -1301,11 +1301,15 @@ exports.getScheduleEntry = async (dateOrId) => {
 };
 
 exports.isDateUnavailable = async (date) => {
+  const day = new Date(date);
+  const dateKey = appointmentDateKey(day);
+  if (new Date(`${dateKey}T00:00:00Z`).getUTCDay() === 0) return true;
   const result = await pool.query(
-    `SELECT id FROM unavailable_dates WHERE date = ($1::timestamptz)::date`,
-    [date]
+    `SELECT id, is_open_override FROM unavailable_dates WHERE date = $1::date`,
+    [dateKey]
   );
-  return result.rows.length > 0;
+  if (result.rows.some(row => !row.is_open_override)) return true;
+  return isHoliday(day) && !result.rows.some(row => row.is_open_override);
 };
 
 // ─── PAYMENT STATUS ──────────────────────────────────────────────────────────
@@ -1471,7 +1475,7 @@ exports.checkAvailability = async (serviceId, scheduledAt, durationMinutes) => {
   const dayOfWeek = date.getDay();
   if (dayOfWeek === 0) return false;
 
-  const dateStr = date.toISOString().slice(0, 10);
+  const dateStr = appointmentDateKey(date);
   const isUnavailable = await this.isDateUnavailable(dateStr);
   if (isUnavailable) return false;
 

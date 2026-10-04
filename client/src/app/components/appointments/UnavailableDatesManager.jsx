@@ -9,26 +9,7 @@ import {
   startOfMonth, endOfMonth, eachDayOfInterval,
   isSameMonth, isSameDay, isToday, isSunday, isPast, isBefore, startOfDay
 } from 'date-fns'
-import Holidays from 'date-holidays'
-
-// ---------------------------------------------------------------------------
-// Holiday helper (Philippines)
-// ---------------------------------------------------------------------------
-const hd = new Holidays('PH')
-
-function getHolidaysForYear(year) {
-  const raw = hd.getHolidays(year)
-  const map = {}
-  for (const h of raw) {
-    // date-holidays gives date as a Date or ISO string depending on version
-    const d = h.date instanceof Date ? h.date : new Date(h.date)
-    const key = format(d, 'yyyy-MM-dd')
-    if (!map[key]) {
-      map[key] = h.name
-    }
-  }
-  return map
-}
+import { getHolidaysForYear } from '../../utils/philippineHolidays.js'
 
 function normalizeDateKey(d) {
   if (!d) return null
@@ -75,7 +56,7 @@ export default function UnavailableDatesManager({
   // ── Holidays for the visible month's year (and next, if near year end) ──
   const holidayMap = useMemo(() => {
     const year = currentMonth.getFullYear()
-    const map = getHolidaysForYear(year)
+    const map = { ...getHolidaysForYear(year) }
     // Also load next year if viewing Dec, so Jan of next year is available
     if (currentMonth.getMonth() === 11) {
       Object.assign(map, getHolidaysForYear(year + 1))

@@ -4,7 +4,6 @@ import { SectionLoader } from '../components/shared/SectionLoader'
 import { EmptyState } from '../components/shared/EmptyState'
 import { AdminTable } from '../components/shared/AdminTable'
 import { PaginationBar } from '../components/shared/PaginationBar'
-import { PAGE_SIZE_OPTIONS } from '../constants/adminOptions'
 import { formatCurrency } from '../../../utils/formatCurrency'
 import { getStockStatusInfo } from '../../../utils/stockUtils'
 
@@ -28,6 +27,12 @@ export function ProductsTab({
   inputCls,
   deleteProduct,
 }) {
+  const footerInsideTable = !productsLoading && visibleProducts.length > 0 && productViewMode === 'table'
+  const changePageSize = (pageSize) => setProductQuery((prev) => ({ ...prev, page: 1, pageSize }))
+  const paginationFooter = (
+    <PaginationBar pagination={productsPagination} loading={productsLoading} onPageChange={(nextPage) => setProductQuery((prev) => ({ ...prev, page: nextPage }))} onPageSizeChange={changePageSize} />
+  )
+
   return (
     <motion.div key="products" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
       <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -84,7 +89,7 @@ export function ProductsTab({
       </div>
 
       <div className="mb-6 p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/70 backdrop-blur-sm">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(0,2.6fr)_minmax(0,1.1fr)_minmax(0,0.95fr)_minmax(0,0.9fr)_minmax(0,0.85fr)_auto] gap-3 items-center">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(0,2.8fr)_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 items-center">
           <div className="relative min-w-0">
             <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
             <input
@@ -131,16 +136,6 @@ export function ProductsTab({
             <option value="price:asc">Price: Low to High</option>
             <option value="price:desc">Price: High to Low</option>
           </select>
-          <select
-            aria-label="Products page size"
-            value={productQuery.pageSize}
-            onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, pageSize: Number(e.target.value) }))}
-            className={inputCls}
-          >
-            {PAGE_SIZE_OPTIONS.map((n) => (
-              <option key={n} value={n}>{`${n} per page`}</option>
-            ))}
-          </select>
           <button
             type="button"
             onClick={() => {
@@ -164,7 +159,7 @@ export function ProductsTab({
           rows={visibleProducts}
           renderRow={(p) => (
             <>
-              <td className="py-4 px-6">
+              <td className="py-3 px-4">
                 {p.primary_image ? (
                   <img src={p.primary_image} alt={p.name} className="w-12 h-12 object-cover rounded-lg border border-[var(--border)]" loading="lazy" />
                 ) : (
@@ -173,21 +168,19 @@ export function ProductsTab({
                   </div>
                 )}
               </td>
-              <td className="py-4 px-6">
-                <p className="text-white font-semibold">{p.name}</p>
-              </td>
-              <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">{p.sku || '—'}</td>
-              <td className="py-4 px-6 text-[var(--text-muted)] font-semibold">{p.brand || '—'}</td>
-              <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(p.price)}</td>
-              <td className="py-4 px-6 text-[var(--text-muted)] text-sm">{p.cost_price ? formatCurrency(p.cost_price) : '—'}</td>
-              <td className="py-4 px-6">
+              <td className="py-3 px-4 font-semibold text-[var(--text-primary)]">{p.name}</td>
+              <td className="py-3 px-4 text-[var(--text-muted)] font-mono font-medium">{p.sku || '—'}</td>
+              <td className="py-3 px-4 text-[var(--text-muted)] font-medium">{p.brand || '—'}</td>
+              <td className="py-3 px-4 text-right font-mono font-bold text-[var(--gold-primary)]">{formatCurrency(p.price)}</td>
+              <td className="py-3 px-4 text-right font-mono font-medium text-[var(--text-muted)]">{p.cost_price ? formatCurrency(p.cost_price) : '—'}</td>
+              <td className="py-3 px-4">
                 <div className="flex items-center gap-2" title={`Stock: ${p.stock}`}>
                   {(() => {
                     const { dotClass, color, label } = getStockStatusInfo(p.stock, p.low_stock_threshold, p.max_stock)
                     return (
                       <>
                         <span className={`w-2 h-2 rounded-full ${dotClass}`} />
-                        <span className={`text-sm font-semibold ${color}`}>
+                        <span className={`text-xs font-semibold ${color}`}>
                           {label}
                         </span>
                       </>
@@ -195,8 +188,8 @@ export function ProductsTab({
                   })()}
                 </div>
               </td>
-              <td className="py-4 px-6">
-                <div className="flex items-center gap-2">
+              <td className="py-3 px-4 text-right">
+                <div className="flex items-center gap-2 justify-end">
                   {isSuperAdmin && (
                     <>
                       <button onClick={() => openModal('product', p)} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors" title="Edit">
@@ -212,6 +205,7 @@ export function ProductsTab({
             </>
           )}
           empty={<EmptyState icon={Package} label="No products found" action={() => openModal('product')} actionLabel="Add Product" />}
+          footer={<PaginationBar attached pagination={productsPagination} loading={productsLoading} onPageChange={(nextPage) => setProductQuery((prev) => ({ ...prev, page: nextPage }))} onPageSizeChange={changePageSize} />}
         />
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -288,7 +282,7 @@ export function ProductsTab({
         </div>
       )}
 
-      <PaginationBar pagination={productsPagination} loading={productsLoading} onPageChange={(nextPage) => setProductQuery((prev) => ({ ...prev, page: nextPage }))} />
+      {!footerInsideTable && paginationFooter}
     </motion.div>
   )
 }

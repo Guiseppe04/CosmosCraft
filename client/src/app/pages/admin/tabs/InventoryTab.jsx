@@ -1,5 +1,6 @@
 import { motion } from 'motion/react'
-import { Search, Filter, ChevronLeft, ChevronRight, Package, MoreHorizontal, Guitar, Plus } from 'lucide-react'
+import { Search, Filter, Package, MoreHorizontal, Guitar, Plus } from 'lucide-react'
+import { PaginationBar } from '../components/shared/PaginationBar'
 import { formatCurrency } from '../../../utils/formatCurrency'
 import { getStockStatusInfo } from '../../../utils/stockUtils'
 
@@ -16,6 +17,7 @@ export function InventoryTab({
   inventoryPage,
   setInventoryPage,
   inventoryPageSize,
+  setInventoryPageSize,
   setProductsInventoryFilter,
   setPartsInventoryFilter,
   resolveInventoryImage,
@@ -181,140 +183,122 @@ export function InventoryTab({
           </select>
         </div>
 
-        <div className="mt-5 overflow-x-auto rounded-2xl border border-[var(--border)]">
-          <table className="min-w-full text-sm">
-            <thead className="bg-[var(--bg-primary)]/70">
-              <tr className="border-b border-[var(--border)]">
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Product</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Category</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">SKU</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Price</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Stock</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Status</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {inventoryCurrentPageRows.length === 0 ? (
+        <div className="mt-5 overflow-hidden rounded-2xl border border-[var(--border)]">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[var(--bg-primary)] text-[var(--text-muted)] uppercase tracking-wider font-bold border-b border-[var(--border)]">
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-[var(--text-muted)]">
-                    No inventory items found.
-                  </td>
+                  <th className="py-3 px-4">Product</th>
+                  <th className="py-3 px-4">Category</th>
+                  <th className="py-3 px-4">SKU</th>
+                  <th className="py-3 px-4 text-right">Price</th>
+                  <th className="py-3 px-4 text-right">Stock</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-right">Action</th>
                 </tr>
-              ) : (
-                (inventoryIsProducts ? inventoryCurrentPageRows.map((item) => ({ type: 'item', item })) : inventoryGroupedPartPageRows).map((row, index) => {
-                  if (row.type === 'group') {
+              </thead>
+              <tbody className="divide-y divide-[var(--border)]/50">
+                {inventoryCurrentPageRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-10 text-center text-[var(--text-muted)]">
+                      No inventory items found.
+                    </td>
+                  </tr>
+                ) : (
+                  (inventoryIsProducts ? inventoryCurrentPageRows.map((item) => ({ type: 'item', item })) : inventoryGroupedPartPageRows).map((row, index) => {
+                    if (row.type === 'group') {
+                      return (
+                        <tr key={`group-${row.category}-${index}`} className="bg-[var(--gold-primary)]/8">
+                          <td colSpan={7} className="px-4 py-2.5">
+                            <span className="inline-flex rounded-full border border-[var(--gold-primary)]/35 bg-[var(--gold-primary)]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--gold-primary)]">
+                              {row.category}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    }
+
+                    const item = row.item
+                    const stock = Number(item.stock ?? 0)
+                    const threshold = Number(item.low_stock_threshold ?? 10)
+                    const maxStock = Number(item.max_stock ?? 0)
+                    const isProduct = inventoryIsProducts
+                    const statusInfo = getStockStatusInfo(stock, threshold, isProduct ? maxStock : 0)
+                    const statusLabel = statusInfo.label
+                    const statusClass = statusInfo.status === 'out_of_stock'
+                      ? 'bg-red-500/15 text-red-400 border-red-500/25'
+                      : statusInfo.status === 'low_stock'
+                      ? 'bg-amber-500/15 text-amber-300 border-amber-500/25'
+                      : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'
+                    const rowId = item.product_id || item.part_id || item.id
+
                     return (
-                      <tr key={`group-${row.category}-${index}`} className="border-b border-[var(--border)]/70 bg-[var(--gold-primary)]/8">
-                        <td colSpan={7} className="px-4 py-2.5">
-                          <span className="inline-flex rounded-full border border-[var(--gold-primary)]/35 bg-[var(--gold-primary)]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--gold-primary)]">
-                            {row.category}
+                      <tr key={rowId} className="hover:bg-[var(--bg-primary)]/40 transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-9 w-9 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-primary)]">
+                              {resolveInventoryImage(item) ? (
+                                <img src={resolveInventoryImage(item)} alt={item.name} className="h-full w-full object-cover" />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center">
+                                  <Package className="h-4 w-4 text-[var(--text-muted)]" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold text-[var(--text-primary)]">{item.name}</p>
+                              <p className="truncate text-[var(--text-muted)]">{inventoryIsProducts ? 'Product' : 'Guitar Part'}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-[var(--text-muted)] font-medium">
+                          {inventoryIsProducts ? (item.category_name || 'Uncategorized') : item.inventory_category}
+                        </td>
+                        <td className="py-3 px-4 font-mono font-medium text-[var(--text-muted)]">{item.sku || '—'}</td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-[var(--gold-primary)]">{formatCurrency(Number(item.price || 0))}</td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-[var(--text-primary)]">{stock}</td>
+                        <td className="py-3 px-4">
+                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass}`}>
+                            {statusLabel}
                           </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            onClick={() => {
+                              if (inventoryIsProducts) {
+                                openModal('inventory', { product_id: item.product_id, name: item.name })
+                              } else {
+                                openModal('part_inventory', {
+                                  ...item,
+                                  current_stock: Number(item.stock ?? item.quantity ?? 0),
+                                })
+                              }
+                            }}
+                            className="rounded-lg border border-[var(--border)] p-2 text-[var(--text-muted)] hover:text-white"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
                         </td>
                       </tr>
                     )
-                  }
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
 
-                  const item = row.item
-                  const stock = Number(item.stock ?? 0)
-                  const threshold = Number(item.low_stock_threshold ?? 10)
-                  const maxStock = Number(item.max_stock ?? 0)
-                  const isProduct = inventoryIsProducts
-                  const statusInfo = getStockStatusInfo(stock, threshold, isProduct ? maxStock : 0)
-                  const statusLabel = statusInfo.label
-                  const statusClass = statusInfo.status === 'out_of_stock'
-                    ? 'bg-red-500/15 text-red-400 border-red-500/25'
-                    : statusInfo.status === 'low_stock'
-                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/25'
-                    : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'
-                  const rowId = item.product_id || item.part_id || item.id
-
-                  return (
-                    <tr key={rowId} className="border-b border-[var(--border)]/70 last:border-b-0 hover:bg-white/5">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-primary)]">
-                            {resolveInventoryImage(item) ? (
-                              <img src={resolveInventoryImage(item)} alt={item.name} className="h-full w-full object-cover" />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center">
-                                <Package className="h-4 w-4 text-[var(--text-muted)]" />
-                              </div>
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="truncate font-medium text-white">{item.name}</p>
-                            <p className="truncate text-xs text-[var(--text-muted)]">{inventoryIsProducts ? 'Product' : 'Guitar Part'}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-[var(--text-muted)]">
-                        {inventoryIsProducts ? (item.category_name || 'Uncategorized') : item.inventory_category}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{item.sku || '—'}</td>
-                      <td className="px-4 py-3 font-semibold text-white">{formatCurrency(Number(item.price || 0))}</td>
-                      <td className="px-4 py-3 text-white">{stock}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass}`}>
-                          {statusLabel}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <button
-                          onClick={() => {
-                            if (inventoryIsProducts) {
-                              openModal('inventory', { product_id: item.product_id, name: item.name })
-                            } else {
-                              openModal('part_inventory', {
-                                ...item,
-                                current_stock: Number(item.stock ?? item.quantity ?? 0),
-                              })
-                            }
-                          }}
-                          className="rounded-lg border border-[var(--border)] p-2 text-[var(--text-muted)] hover:text-white"
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="mt-4 flex flex-col gap-3 border-t border-[var(--border)] pt-4 text-sm sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-[var(--text-muted)]">{inventoryPageSize} rows per page</p>
-          {inventoryCurrentRows.length > 0 && (
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setInventoryPage((p) => Math.max(1, p - 1))}
-                disabled={inventoryPage === 1}
-                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-[var(--text-muted)] disabled:opacity-40"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              {Array.from({ length: inventoryTotalPages }, (_, i) => i + 1)
-                .slice(Math.max(0, inventoryPage - 2), Math.min(inventoryTotalPages, inventoryPage + 1))
-                .map((page) => (
-                  <button
-                    key={page}
-                    onClick={() => setInventoryPage(page)}
-                    className={`h-9 w-9 rounded-lg border text-sm ${page === inventoryPage ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-black' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
-                  >
-                    {page}
-                  </button>
-                ))}
-              <button
-                onClick={() => setInventoryPage((p) => Math.min(inventoryTotalPages, p + 1))}
-                disabled={inventoryPage >= inventoryTotalPages}
-                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-[var(--text-muted)] disabled:opacity-40"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          )}
+          <PaginationBar
+            attached
+            page={inventoryPage}
+            totalPages={inventoryTotalPages}
+            total={inventoryCurrentRows.length}
+            pageSize={inventoryPageSize}
+            onPageChange={setInventoryPage}
+            onPageSizeChange={(nextSize) => {
+              setInventoryPageSize(nextSize)
+              setInventoryPage(1)
+            }}
+          />
         </div>
       </div>
     </motion.div>

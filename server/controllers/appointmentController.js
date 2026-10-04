@@ -765,15 +765,16 @@ exports.getAvailableDates = async (req, res, next) => {
       appointmentValidation.availableDatesSchema
     );
 
-    const dates = await appointmentService.getAvailableDates(
-      validated.date_from,
-      validated.date_to
-    );
+    const [dates, occupiedDates] = await Promise.all([
+      appointmentService.getAvailableDates(validated.date_from, validated.date_to),
+      appointmentService.getOccupiedDates(validated.date_from, validated.date_to),
+    ]);
 
     res.json({
       status: 'success',
       data: {
         available_dates: dates,
+        occupied_dates: occupiedDates,
       },
     });
   } catch (err) {

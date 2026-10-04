@@ -2,8 +2,12 @@ const express = require('express');
 const router = express.Router();
 const { authenticateToken, authorize } = require('../middleware/auth');
 const ctrl = require('../controllers/guitarController');
+const { validate } = require('../utils/validation');
+const { assignmentSchema, customerLookupSchema } = require('../utils/walkInValidation');
 
 // ─── CUSTOMIZATIONS ──────────────────────────────────────────────────────────
+router.get('/walk-in-customers', authenticateToken, authorize('staff', 'admin', 'super_admin'), validate(customerLookupSchema, 'query'), ctrl.getWalkInCustomers);
+router.post('/walk-in-customizations', authenticateToken, authorize('staff', 'admin', 'super_admin'), validate(assignmentSchema), ctrl.assignWalkInCustomization);
 router.get('/customizations',          authenticateToken, authorize('admin', 'super_admin'), ctrl.getCustomizations);
 router.get('/customizations/:id',      authenticateToken, authorize('admin', 'super_admin'), ctrl.getCustomization);
 router.put('/customizations/:id',      authenticateToken, authorize('admin', 'super_admin'), ctrl.updateCustomization);

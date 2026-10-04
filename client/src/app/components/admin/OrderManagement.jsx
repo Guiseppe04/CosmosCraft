@@ -1602,6 +1602,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
   const [sortField, setSortField] = useState('date')
   const [sortDirection, setSortDirection] = useState('desc')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(PAGE_SIZE)
   const [isPageLoading, setIsPageLoading] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [selectedSection, setSelectedSection] = useState('details')
@@ -1691,13 +1692,13 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
       date_to: dateTo || undefined,
       include_items: true,
       page: pageNum,
-      page_size: PAGE_SIZE,
+      page_size: pageSize,
       ...(SORT_FIELD_MAP[sortField] || SORT_FIELD_MAP.date),
       sort_dir: sortDirection,
     }
     Object.keys(params).forEach(k => params[k] === undefined && delete params[k])
     return params
-  }, [debouncedSearch, orderTypeFilter, statusFilter, paymentStatusFilter, paymentMethodFilter, dateFrom, dateTo, sortField, sortDirection])
+  }, [debouncedSearch, orderTypeFilter, statusFilter, paymentStatusFilter, paymentMethodFilter, dateFrom, dateTo, sortField, sortDirection, pageSize])
 
   const requestOrdersPage = useCallback(async (targetPage = 1) => {
     const maxPages = Math.max(1, paginationTotalPagesRef.current || 1)
@@ -2041,7 +2042,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-2xl relative">
+          <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-sm relative">
             {/* Top subtle progress bar during background loading */}
             {showBackgroundProgress && (
               <div className="absolute top-0 left-0 right-0 h-0.5 bg-[var(--gold-primary)]/30 overflow-hidden z-20">
@@ -2050,32 +2051,32 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
             )}
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-[var(--bg-primary)]/60 border-b border-[var(--border)]">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-[var(--bg-primary)] text-[var(--text-muted)] uppercase tracking-wider font-bold border-b border-[var(--border)]">
                   <tr>
-                    <th className="py-3.5 px-4 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Order</th>
-                    <th className="py-3.5 px-4 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Date</th>
-                    <th className="py-3.5 px-4 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Customer</th>
-                    <th className="py-3.5 px-4 text-right text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Total Amount</th>
-                    <th className="py-3.5 px-4 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Payment Status</th>
-                    <th className="py-3.5 px-4 text-center text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Items</th>
-                    <th className="py-3.5 px-4 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Fulfillment Status</th>
-                    <th className="py-3.5 px-4 text-center text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Actions</th>
+                    <th className="py-3 px-4">Order</th>
+                    <th className="py-3 px-4">Date</th>
+                    <th className="py-3 px-4">Customer</th>
+                    <th className="py-3 px-4 text-right">Total Amount</th>
+                    <th className="py-3 px-4">Payment Status</th>
+                    <th className="py-3 px-4 text-center">Items</th>
+                    <th className="py-3 px-4">Fulfillment Status</th>
+                    <th className="py-3 px-4 text-center">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[var(--border)]/40">
+                <tbody className="divide-y divide-[var(--border)]/50">
                   {showInitialSkeleton ? (
                     [...Array(6)].map((_, i) => (
                       <tr key={`orders-skeleton-${i}`} className="animate-pulse border-b border-[var(--border)]/30">
-                        <td className="py-4 px-4">
+                        <td className="py-3 px-4">
                           <div className="h-4 w-20 bg-white/10 rounded mb-1.5" />
                           <div className="h-3 w-16 bg-white/5 rounded" />
                         </td>
-                        <td className="py-4 px-4">
+                        <td className="py-3 px-4">
                           <div className="h-4 w-24 bg-white/10 rounded mb-1.5" />
                           <div className="h-3 w-14 bg-white/5 rounded" />
                         </td>
-                        <td className="py-4 px-4">
+                        <td className="py-3 px-4">
                           <div className="flex items-center gap-2.5">
                             <div className="w-8 h-8 rounded-full bg-white/10 flex-shrink-0" />
                             <div className="space-y-1.5 flex-1">
@@ -2084,20 +2085,20 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
                             </div>
                           </div>
                         </td>
-                        <td className="py-4 px-4 text-right">
+                        <td className="py-3 px-4 text-right">
                           <div className="h-4 w-20 bg-white/10 rounded ml-auto" />
                         </td>
-                        <td className="py-4 px-4">
+                        <td className="py-3 px-4">
                           <div className="h-5 w-24 bg-white/10 rounded-full mb-1" />
                           <div className="h-3 w-20 bg-white/5 rounded" />
                         </td>
-                        <td className="py-4 px-4 text-center">
+                        <td className="py-3 px-4 text-center">
                           <div className="h-5 w-6 bg-white/10 rounded-full mx-auto" />
                         </td>
-                        <td className="py-4 px-4">
+                        <td className="py-3 px-4">
                           <div className="h-5 w-24 bg-white/10 rounded-full" />
                         </td>
-                        <td className="py-4 px-4 text-center">
+                        <td className="py-3 px-4 text-center">
                           <div className="flex items-center justify-center gap-1.5">
                             <div className="w-7 h-7 bg-white/10 rounded-lg" />
                             <div className="w-7 h-7 bg-white/10 rounded-lg" />
@@ -2124,10 +2125,10 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
                       const highlightClass = rowHighlight[orderStatus] || ''
 
                       return (
-                        <tr key={order.order_id} className={`hover:bg-white/5 transition-colors ${highlightClass}`}>
-                          <td className="py-4 px-4">
+                        <tr key={order.order_id} className={`hover:bg-[var(--bg-primary)]/40 transition-colors ${highlightClass}`}>
+                          <td className="py-3 px-4">
                             <div className="flex items-center gap-2">
-                              <span className="text-white font-mono text-sm font-bold">
+                              <span className="text-[var(--text-primary)] font-mono font-bold">
                                 #{order.order_number || order.order_id?.slice(0, 8)}
                               </span>
                             </div>
@@ -2142,32 +2143,32 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
                             </div>
                           </td>
 
-                          <td className="py-4 px-4 text-[var(--text-muted)] text-sm whitespace-nowrap">
+                          <td className="py-3 px-4 text-[var(--text-muted)] whitespace-nowrap">
                             {order.created_at ? (
                               <div>
-                                <p className="text-white font-medium">{new Date(order.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                                <p className="text-[var(--text-primary)] font-medium">{new Date(order.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                                 <p className="text-[11px] text-[var(--text-muted)]">{new Date(order.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}</p>
                               </div>
                             ) : '—'}
                           </td>
 
-                          <td className="py-4 px-4">
+                          <td className="py-3 px-4">
                             <div className="flex items-center gap-2.5">
                               <div className="w-8 h-8 rounded-full bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/30 text-[var(--gold-primary)] flex items-center justify-center text-xs font-bold flex-shrink-0">
                                 {customerName.charAt(0).toUpperCase() || 'U'}
                               </div>
                               <div className="min-w-0">
-                                <p className="text-white text-sm font-semibold truncate">{customerName}</p>
+                                <p className="text-[var(--text-primary)] font-semibold truncate">{customerName}</p>
                                 <p className="text-[var(--text-muted)] text-xs truncate">{order.email || order.customer_email || 'No email'}</p>
                               </div>
                             </div>
                           </td>
 
-                          <td className="py-4 px-4 text-right font-bold text-[var(--gold-primary)] text-sm whitespace-nowrap">
+                          <td className="py-3 px-4 text-right font-mono font-bold text-[var(--gold-primary)] whitespace-nowrap">
                             {formatCurrency(getOrderTotal(order))}
                           </td>
 
-                          <td className="py-4 px-4">
+                          <td className="py-3 px-4">
                             <div className="space-y-1">
                               <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${paymentConfig.bgColor} ${paymentConfig.textColor} ${paymentConfig.borderColor}`}>
                                 <span className="w-1.5 h-1.5 rounded-full bg-current" />
@@ -2177,13 +2178,13 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
                             </div>
                           </td>
 
-                          <td className="py-4 px-4 text-center">
-                            <span className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full bg-[var(--bg-primary)] border border-[var(--border)] text-xs font-bold text-white">
+                          <td className="py-3 px-4 text-center">
+                            <span className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full bg-[var(--bg-primary)] border border-[var(--border)] text-xs font-bold text-[var(--text-primary)]">
                               {itemCount}
                             </span>
                           </td>
 
-                          <td className="py-4 px-4">
+                          <td className="py-3 px-4">
                             {isCustomization ? (
                               <div className="space-y-1.5">
                                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-violet-500/10 text-violet-300 border-violet-500/30 capitalize">
@@ -2206,7 +2207,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
                             )}
                           </td>
 
-                          <td className="py-4 px-4 text-center">
+                          <td className="py-3 px-4 text-center">
                             <div className="flex items-center justify-center gap-1.5">
                               <button
                                 type="button"
@@ -2265,124 +2266,64 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
                 </tbody>
               </table>
             </div>
-          </div>
 
-          {/* Pagination Controls */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 py-2">
-            <div className="flex items-center gap-2">
-              <p className="text-[var(--text-muted)] text-sm">
-                Showing{' '}
-                <span className="font-semibold text-white">
-                  {(pagination?.total || orders.length) === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}
-                </span>{' '}
-                to{' '}
-                <span className="font-semibold text-white">
-                  {Math.min(page * PAGE_SIZE, pagination?.total ?? orders.length)}
-                </span>{' '}
-                of{' '}
-                <span className="font-semibold text-white">{pagination?.total ?? orders.length}</span> orders
-              </p>
-              {showBackgroundProgress && (
-                <div className="flex items-center gap-1.5 text-xs text-[var(--gold-primary)] bg-[var(--gold-primary)]/10 px-2.5 py-0.5 rounded-full border border-[var(--gold-primary)]/20">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  <span>Refreshing...</span>
-                </div>
-              )}
+            {/* Pagination Footer */}
+            <div className="p-4 border-t border-[var(--border)] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs bg-[var(--surface-dark)]">
+              <div className="flex items-center gap-3">
+                <span className="text-[var(--text-muted)]">
+                  Showing page <strong className="text-[var(--text-primary)]">{page}</strong> of{' '}
+                  <strong className="text-[var(--text-primary)]">{totalPages || 1}</strong> ({pagination?.total ?? orders.length} total records)
+                </span>
+
+            <div className="flex items-center gap-1.5 ml-2">
+              <span className="text-[var(--text-muted)] text-xs">Per page:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                  requestOrdersPage(1);
+                }}
+                aria-label="Orders per page"
+                className="bg-white text-black border border-gray-300 rounded px-2 py-0.5 text-xs font-semibold focus:outline-none"
+              >
+                <option value={10} className="text-black bg-white">10</option>
+                <option value={25} className="text-black bg-white">25</option>
+                <option value={50} className="text-black bg-white">50</option>
+                <option value={100} className="text-black bg-white">100</option>
+              </select>
             </div>
 
-            {totalPages > 1 && (
-              <div className="flex items-center gap-1.5">
-                {/* Previous Button */}
+                {showBackgroundProgress && (
+                  <div className="flex items-center gap-1.5 text-xs text-[var(--gold-primary)] bg-[var(--gold-primary)]/10 px-2.5 py-0.5 rounded-full border border-[var(--gold-primary)]/20">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Refreshing...</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => requestOrdersPage(Math.max(1, page - 1))}
                   disabled={page <= 1 || isDataLoading}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-[var(--surface-dark)] border border-[var(--border)] hover:border-[var(--gold-primary)]/50 rounded-xl text-xs font-semibold text-white transition-all disabled:opacity-40 disabled:hover:border-[var(--border)] disabled:cursor-not-allowed"
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] hover:border-[var(--gold-primary)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                 >
-                  <ChevronLeft className="w-3.5 h-3.5" /> Prev
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Previous</span>
                 </button>
 
-                {/* Page Number Buttons */}
-                {(() => {
-                  const pages = []
-                  const maxButtons = 5
-                  let start = Math.max(1, page - 2)
-                  let end = Math.min(totalPages, start + maxButtons - 1)
-                  if (end - start < maxButtons - 1) {
-                    start = Math.max(1, end - maxButtons + 1)
-                  }
-
-                  if (start > 1) {
-                    pages.push(
-                      <button
-                        key="page-1"
-                        type="button"
-                        onClick={() => requestOrdersPage(1)}
-                        disabled={isDataLoading}
-                        className="w-8 h-8 rounded-lg bg-[var(--surface-dark)] border border-[var(--border)] text-xs font-semibold text-white hover:border-[var(--gold-primary)]/50 transition-all disabled:opacity-40"
-                      >
-                        1
-                      </button>
-                    )
-                    if (start > 2) {
-                      pages.push(
-                        <span key="dots-start" className="text-[var(--text-muted)] text-xs px-1">...</span>
-                      )
-                    }
-                  }
-
-                  for (let p = start; p <= end; p++) {
-                    const isActive = p === page
-                    pages.push(
-                      <button
-                        key={`page-${p}`}
-                        type="button"
-                        onClick={() => requestOrdersPage(p)}
-                        disabled={isActive || isDataLoading}
-                        className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
-                          isActive
-                            ? 'bg-[var(--gold-primary)] text-black shadow-md shadow-[var(--gold-primary)]/20'
-                            : 'bg-[var(--surface-dark)] border border-[var(--border)] text-white hover:border-[var(--gold-primary)]/50 disabled:opacity-50'
-                        }`}
-                      >
-                        {p}
-                      </button>
-                    )
-                  }
-
-                  if (end < totalPages) {
-                    if (end < totalPages - 1) {
-                      pages.push(
-                        <span key="dots-end" className="text-[var(--text-muted)] text-xs px-1">...</span>
-                      )
-                    }
-                    pages.push(
-                      <button
-                        key={`page-${totalPages}`}
-                        type="button"
-                        onClick={() => requestOrdersPage(totalPages)}
-                        disabled={isDataLoading}
-                        className="w-8 h-8 rounded-lg bg-[var(--surface-dark)] border border-[var(--border)] text-xs font-semibold text-white hover:border-[var(--gold-primary)]/50 transition-all disabled:opacity-40"
-                      >
-                        {totalPages}
-                      </button>
-                    )
-                  }
-
-                  return pages
-                })()}
-
-                {/* Next Button */}
                 <button
                   type="button"
                   onClick={() => requestOrdersPage(Math.min(totalPages, page + 1))}
                   disabled={page >= totalPages || isDataLoading}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-[var(--surface-dark)] border border-[var(--border)] hover:border-[var(--gold-primary)]/50 rounded-xl text-xs font-semibold text-white transition-all disabled:opacity-40 disabled:hover:border-[var(--border)] disabled:cursor-not-allowed"
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] hover:border-[var(--gold-primary)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                 >
-                  Next <ChevronRight className="w-3.5 h-3.5" />
+                  <span>Next</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
-            )}
+            </div>
           </div>
         </div>
       )}

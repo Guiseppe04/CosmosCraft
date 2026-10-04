@@ -1,13 +1,14 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
-  Search, Filter, Calendar, Clock, User, ChevronLeft, ChevronRight,
+  Search, Filter, Calendar, Clock, User,
   X, CheckCircle, XCircle, AlertCircle, Loader2,
   MoreHorizontal, Eye, Trash2, Plus, Download, ChevronDown
 } from 'lucide-react'
 import { format, parseISO, isToday, isTomorrow, isPast, isFuture } from 'date-fns'
 import React from 'react';
 import AppointmentDetailsModal from './AppointmentDetailsModal';
+import { PaginationBar } from '../../pages/admin/components/shared/PaginationBar';
 import { adminApi } from '../../utils/adminApi';
 
 // Status configuration
@@ -157,6 +158,7 @@ export default function AppointmentList({
   onViewCalendar,
   pagination = {},
   onPageChange,
+  onPageSizeChange,
   onFilterChange,
   selectedDate = null,
   searchQuery: externalSearchQuery,
@@ -336,18 +338,6 @@ export default function AppointmentList({
   const currentPage = pagination.page || 1
   const totalPages = pagination.pages || 1
   const totalItems = pagination.total || 0
-
-  const handlePrevPage = () => {
-    if (currentPage > 1) {
-      onPageChange?.(currentPage - 1)
-    }
-  }
-
-  const handleNextPage = () => {
-    if (currentPage < totalPages) {
-      onPageChange?.(currentPage + 1)
-    }
-  }
 
   const handleViewDetails = (appointment) => {
     setSelectedAppointment(appointment)
@@ -565,114 +555,83 @@ export default function AppointmentList({
 
       {/* Compact Table */}
       {!loading && filteredAppointments.length > 0 && (
-        <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-[var(--border)] text-[var(--text-muted)]">
-                <th className="px-4 py-3 text-left font-semibold">Ref</th>
-                <th className="px-4 py-3 text-left font-semibold">Customer</th>
-                <th className="px-4 py-3 text-left font-semibold">Service</th>
-                <th className="px-4 py-3 text-left font-semibold">Date &amp; Time</th>
-                <th className="px-4 py-3 text-left font-semibold">Created</th>
-                <th className="px-4 py-3 text-left font-semibold">Status</th>
-                <th className="px-4 py-3 text-left font-semibold">Payment</th>
-                <th className="px-4 py-3 text-center font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredAppointments.map((apt) => (
-                <tr
-                  key={apt.appointment_id}
-                  className="border-b border-[var(--border)] hover:bg-[var(--bg-primary)]/40 transition-colors group cursor-pointer"
-                  onClick={() => (onViewDetails ? onViewDetails(apt) : handleViewDetails(apt))}
-                >
-                  <td className="px-4 py-3 whitespace-nowrap font-mono text-[var(--text-muted)]">
-                    {apt.reference_code || apt.appointment_id}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="font-semibold text-white">{getCustomerName(apt)}</span>
-                    {apt.user_email && (
-                      <div className="text-xs text-[var(--text-muted)]">{apt.user_email}</div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 capitalize text-[var(--gold-primary)]">
-                    {renderAppointmentServiceSummary(apt)}
-                  </td>
-                  <td className="px-4 py-3 text-white whitespace-nowrap">
-                    <div>{formatAppointmentDate(apt.scheduled_at)}</div>
-                  </td>
-                  <td className="px-4 py-3 text-[var(--text-muted)] whitespace-nowrap text-xs">
-                    <div>{formatAppointmentDate(apt.created_at)}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={apt.status} config={STATUS_CONFIG} />
-                  </td>
-                  <td className="px-4 py-3 text-white capitalize whitespace-nowrap">
-                    {(apt.payment_status || 'pending').replace(/_/g, ' ')}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <button
-                      onClick={e => {
-                        e.stopPropagation()
-                        if (onViewDetails) {
-                          onViewDetails(apt)
-                        } else {
-                          handleViewDetails(apt)
-                        }
-                      }}
-                      className="p-2 rounded-lg hover:bg-[var(--gold-primary)]/20 text-[var(--text-muted)] hover:text-[var(--gold-primary)] transition-colors"
-                      title="View Details"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                  </td>
+        <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[var(--bg-primary)] text-[var(--text-muted)] uppercase tracking-wider font-bold border-b border-[var(--border)]">
+                <tr>
+                  <th className="py-3 px-4">Ref</th>
+                  <th className="py-3 px-4">Customer</th>
+                  <th className="py-3 px-4">Service</th>
+                  <th className="py-3 px-4">Date &amp; Time</th>
+                  <th className="py-3 px-4">Created</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">Payment</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Pagination */}
-      {!loading && filteredAppointments.length > 0 && totalPages > 1 && (
-        <div className="flex items-center justify-between pt-4">
-          <p className="text-sm text-[var(--text-muted)]">
-            Showing {((currentPage - 1) * (pagination.limit || 20)) + 1} to {Math.min(currentPage * (pagination.limit || 20), totalItems)} of {totalItems} appointments
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handlePrevPage}
-              disabled={currentPage === 1}
-              className="p-2 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                const page = i + 1
-                return (
-                  <button
-                    key={page}
-                    onClick={() => onPageChange?.(page)}
-                    className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
-                      currentPage === page
-                        ? 'bg-[var(--gold-primary)] text-black'
-                        : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] border border-[var(--border)]'
-                    }`}
+              </thead>
+              <tbody className="divide-y divide-[var(--border)]/50">
+                {filteredAppointments.map((apt) => (
+                  <tr
+                    key={apt.appointment_id}
+                    className="hover:bg-[var(--bg-primary)]/40 transition-colors group cursor-pointer"
+                    onClick={() => (onViewDetails ? onViewDetails(apt) : handleViewDetails(apt))}
                   >
-                    {page}
-                  </button>
-                )
-              })}
-            </div>
-            <button
-              onClick={handleNextPage}
-              disabled={currentPage === totalPages}
-              className="p-2 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
+                    <td className="py-3 px-4 whitespace-nowrap font-mono font-bold text-[var(--text-primary)]">
+                      {apt.reference_code || apt.appointment_id}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="font-semibold text-[var(--text-primary)]">{getCustomerName(apt)}</span>
+                      {apt.user_email && (
+                        <div className="text-[var(--text-muted)]">{apt.user_email}</div>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 capitalize text-[var(--gold-primary)] font-semibold">
+                      {renderAppointmentServiceSummary(apt)}
+                    </td>
+                    <td className="py-3 px-4 text-[var(--text-primary)] whitespace-nowrap font-medium">
+                      <div>{formatAppointmentDate(apt.scheduled_at)}</div>
+                    </td>
+                    <td className="py-3 px-4 text-[var(--text-muted)] whitespace-nowrap font-mono">
+                      <div>{formatAppointmentDate(apt.created_at)}</div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <StatusBadge status={apt.status} config={STATUS_CONFIG} />
+                    </td>
+                    <td className="py-3 px-4 text-[var(--text-primary)] capitalize whitespace-nowrap font-medium">
+                      {(apt.payment_status || 'pending').replace(/_/g, ' ')}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <button
+                        onClick={e => {
+                          e.stopPropagation()
+                          if (onViewDetails) {
+                            onViewDetails(apt)
+                          } else {
+                            handleViewDetails(apt)
+                          }
+                        }}
+                        className="p-2 rounded-lg hover:bg-[var(--gold-primary)]/20 text-[var(--text-muted)] hover:text-[var(--gold-primary)] transition-colors"
+                        title="View Details"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+
+          <PaginationBar
+            attached
+            page={currentPage}
+            totalPages={totalPages}
+            total={totalItems}
+            pageSize={pagination.limit || 20}
+            onPageChange={onPageChange}
+            onPageSizeChange={onPageSizeChange}
+          />
         </div>
       )}
 

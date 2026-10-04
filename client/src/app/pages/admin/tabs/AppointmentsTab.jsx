@@ -25,6 +25,8 @@ export function AppointmentsTab({
   selectedCalendarDate,
   unavailableDates,
   availableDates,
+  holidays = [],
+  openOverrides = [],
   fetchAppointments,
   setSelectedAppointment,
   setAppointmentModalOpen,
@@ -114,6 +116,8 @@ export function AppointmentsTab({
           }}
           unavailableDates={unavailableDates}
           availableDates={availableDates}
+          holidays={holidays}
+          openOverrides={openOverrides}
           isAdminMode
         />
       ) : (
@@ -130,6 +134,7 @@ export function AppointmentsTab({
           onViewCalendar={() => setShowAppointmentsTable(false)}
           pagination={appointmentPagination}
           onPageChange={(page) => setAppointmentPagination((prev) => ({ ...prev, page }))}
+          onPageSizeChange={(limit) => setAppointmentPagination((prev) => ({ ...prev, page: 1, limit }))}
           selectedDate={selectedCalendarDate}
           searchQuery={searchQuery}
           onSearchChange={onSearchChange}

@@ -977,9 +977,6 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
             <span className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider">
               {REPORT_TABS.find((t) => t.key === reportType)?.label} Records
             </span>
-            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--bg-primary)] text-[var(--gold-primary)] border border-[var(--border)]">
-              {pagination.totalRecords} found
-            </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 no-print">

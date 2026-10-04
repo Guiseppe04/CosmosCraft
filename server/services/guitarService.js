@@ -2,6 +2,20 @@ const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const MAX_SAVED_CUSTOMIZATIONS_PER_USER = 10;
 
+exports.getWalkInCustomers = async ({ search = '', page = 1 } = {}) => {
+  const pageSize = 10;
+  const result = await pool.query(
+    `SELECT user_id, first_name, last_name, email
+     FROM users
+     WHERE role = 'customer' AND is_active = TRUE AND is_verified = TRUE AND deleted_at IS NULL
+       AND ($1 = '' OR CONCAT_WS(' ', first_name, last_name, email) ILIKE '%' || $1 || '%')
+     ORDER BY first_name, last_name, user_id
+     LIMIT $2 OFFSET $3`,
+    [search, pageSize + 1, (page - 1) * pageSize]
+  );
+  return { users: result.rows.slice(0, pageSize), hasMore: result.rows.length > pageSize, page };
+};
+
 let customizationColumnsReady = false;
 let customizationColumnsPromise = null;
 
@@ -211,7 +225,7 @@ const sanitizeStickersForStorage = async (stickers) => {
   return result;
 };
 
-exports.createMyCustomization = async (userId, payload) => {
+exports.createMyCustomization = async (userId, payload, db = pool, customizationId = null) => {
   await ensureCustomizationColumns();
   const {
     name,
@@ -230,7 +244,7 @@ exports.createMyCustomization = async (userId, payload) => {
     preview_image,
   } = payload;
 
-  const countRes = await pool.query(
+  const countRes = await db.query(
     `SELECT COUNT(*)::int AS total
      FROM customizations
      WHERE user_id = $1`,
@@ -247,18 +261,18 @@ exports.createMyCustomization = async (userId, payload) => {
 
   const resolvedStickers = Array.isArray(stickers) ? await sanitizeStickersForStorage(stickers) : null;
 
-  const res = await pool.query(
+  const res = await db.query(
     `INSERT INTO customizations (
       user_id, name, guitar_type, body_wood, neck_wood, fingerboard_wood,
       bridge_type, pickups, color, finish_type, total_price, is_saved,
-      config_json, stickers, preview_image
+      config_json, stickers, preview_image, customization_id
     )
     VALUES (
       $1, $2, $3, $4, $5, $6,
       $7, $8, $9, $10, $11, $12,
       COALESCE($13::jsonb, '{}'::jsonb),
       COALESCE($14::jsonb, '[]'::jsonb),
-      $15
+      $15, COALESCE($16::uuid, gen_random_uuid())
     )
     RETURNING *`,
     [
@@ -267,9 +281,64 @@ exports.createMyCustomization = async (userId, payload) => {
       config_json ? JSON.stringify(config_json) : null,
       resolvedStickers ? JSON.stringify(resolvedStickers) : null,
       preview_image || null,
+      customizationId,
     ]
   );
   return res.rows[0];
+};
+
+// Assignment creates a customer-owned build and its cart entry in one transaction.
+// The request's UUID is also the build ID, making retries safe without another table.
+exports.assignWalkInCustomization = async (adminId, payload) => {
+  await ensureCustomizationColumns();
+  const { customer_id, customization_id, quantity = 1, design } = payload;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [customization_id]);
+    const customer = await client.query(
+      `SELECT user_id FROM users WHERE user_id = $1 AND role = 'customer'
+       AND is_active = TRUE AND is_verified = TRUE AND deleted_at IS NULL FOR UPDATE`,
+      [customer_id]
+    );
+    if (!customer.rows.length) throw new AppError('Select an active, registered customer account.', 400);
+
+    const existing = await client.query(
+      'SELECT * FROM customizations WHERE customization_id = $1', [customization_id]
+    );
+    let customization = existing.rows[0];
+    const alreadyAssigned = Boolean(customization);
+    if (customization) {
+      if (String(customization.user_id) !== String(customer_id) ||
+          customization.config_json?._walkIn?.createdBy !== String(adminId)) {
+        throw new AppError('This assignment belongs to a different customer or administrator.', 409);
+      }
+    } else {
+      const config = { ...design.config_json, _walkIn: {
+        createdBy: String(adminId), customerId: customer_id,
+        summary: design.summary, pricingBreakdown: design.pricingBreakdown,
+        lineItems: design.lineItems,
+      } };
+      customization = await exports.createMyCustomization(customer_id,
+        { ...design, config_json: config, is_saved: true }, client, customization_id);
+      const { getOrCreateCart, recalculateCartTotals } = require('./cartService');
+      const cart = await getOrCreateCart(customer_id, client);
+      await client.query('SELECT cart_id FROM carts WHERE cart_id = $1 FOR UPDATE', [cart.cart_id]);
+      await client.query(
+        `INSERT INTO cart_items (cart_id, customization_id, quantity, unit_price)
+         VALUES ($1, $2, $3, $4)`,
+        [cart.cart_id, customization.customization_id, quantity, customization.total_price]
+      );
+      await recalculateCartTotals(cart.cart_id, client);
+    }
+    await client.query('COMMIT');
+    return { customization, alreadyAssigned };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 exports.updateMyCustomization = async (customizationId, userId, payload) => {

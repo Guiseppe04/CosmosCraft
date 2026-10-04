@@ -54,7 +54,7 @@ function readNumericZIndex(style, fallback = 0) {
   return Number.isFinite(value) ? value : fallback
 }
 
-export async function exportMaskedPreview(previewRoot, { fileName, background = '#111111', scale = 2 } = {}) {
+export async function exportMaskedPreview(previewRoot, { fileName, background = '#111111', scale = 2, download = true } = {}) {
   const DEBUG = Boolean(import.meta.env?.DEV)
   const stage = previewRoot?.querySelector('[data-export-stage="true"]')
   if (!stage) {
@@ -208,10 +208,13 @@ export async function exportMaskedPreview(previewRoot, { fileName, background = 
     })
   }
 
+  const dataUrl = canvas.toDataURL('image/png')
+  if (!download) return dataUrl
   const link = document.createElement('a')
   link.download = fileName ?? `preview-${Date.now()}.png`
-  link.href = canvas.toDataURL('image/png')
+  link.href = dataUrl
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
+  return dataUrl
 }

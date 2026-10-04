@@ -47,11 +47,21 @@ export function ProjectsTab({
   archivedProjectsPagination,
   setArchivedProjectsPagination,
   projectsPagination,
-  PROJECTS_PAGE_SIZE,
+  projectPageSize,
+  setProjectPageSize,
   debouncedSearch,
 }) {
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [projectView, setProjectView] = useState('table')
+  // A new page size invalidates the current offset, so both listings jump back to
+  // page 1 and the shared project page size is reused for the active list.
+  const changeProjectPageSize = (nextSize) => {
+    setProjectPageSize(nextSize)
+    setProjectPage(1)
+  }
+  const changeArchivedPageSize = (nextSize) => {
+    setArchivedProjectsPagination((prev) => ({ ...prev, page: 1, pageSize: nextSize }))
+  }
   const hasActiveFilters = projectStatusFilter !== 'all'
     || projectAssignedFilter !== 'all'
     || projectGuitarTypeFilter !== 'all'
@@ -80,24 +90,63 @@ export function ProjectsTab({
             <p className="mt-1 text-sm text-[var(--text-muted)]">
               Open a project to manage milestones and subtasks for the build.
             </p>
-            {isAdmin && (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => setShowDefaultWorkflowEditor(true)}
-                  className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2 text-sm font-semibold text-white transition-all hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
-                >
-                  <Settings className="w-4 h-4" />
-                  Edit Default Tasks
-                </button>
-                <button
-                  onClick={() => setShowGuitarTypeSelector(true)}
-                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2 text-sm font-semibold text-black transition-all hover:shadow-[0_0_20px_rgba(212,175,55,0.4)]"
-                >
-                  <Plus className="w-4 h-4" />
-                  New Project
-                </button>
-              </div>
-            )}
+<div className="mt-4 flex flex-wrap items-center gap-2">
+
+  {/* Admin Actions */}
+  {isAdmin && (
+    <>
+      <button
+        type="button"
+        onClick={() => setShowDefaultWorkflowEditor(true)}
+        className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2 text-sm font-semibold text-white transition-all hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
+      >
+        <Settings className="w-4 h-4" />
+        Edit Default Tasks
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setShowGuitarTypeSelector(true)}
+        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2 text-sm font-semibold text-black transition-all hover:shadow-[0_0_20px_rgba(212,175,55,0.4)]"
+      >
+        <Plus className="w-4 h-4" />
+        New Project
+      </button>
+    </>
+  )}
+  
+  {/* Separator */}
+  {isAdmin && (
+    <div className="hidden sm:block h-7 w-px bg-[var(--border)] mx-1" />
+  )}
+
+  {/* Project Tabs */}
+  <button
+    type="button"
+    onClick={() => setProjectArchiveTab('active')}
+    className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+      projectArchiveTab === 'active'
+        ? 'bg-[var(--gold-primary)] text-black'
+        : 'border border-[var(--border)] bg-[var(--bg-primary)] text-white hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]'
+    }`}
+  >
+    <Briefcase className="w-4 h-4" />
+    Active Projects
+  </button>
+
+  <button
+    type="button"
+    onClick={() => setProjectArchiveTab('archived')}
+    className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+      projectArchiveTab === 'archived'
+        ? 'bg-[var(--gold-primary)] text-black'
+        : 'border border-[var(--border)] bg-[var(--bg-primary)] text-white hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]'
+    }`}
+  >
+    <Archive className="w-4 h-4" />
+    Archived Projects
+  </button>
+</div>
             <DefaultWorkflowEditor
               isOpen={showDefaultWorkflowEditor}
               onClose={() => setShowDefaultWorkflowEditor(false)}
@@ -118,32 +167,6 @@ export function ProjectsTab({
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Archive Tab Switcher */}
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={() => setProjectArchiveTab('active')}
-          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-            projectArchiveTab === 'active'
-              ? 'bg-[var(--gold-primary)] text-black'
-              : 'border border-[var(--border)] text-white hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]'
-          }`}
-        >
-          <Briefcase className="w-4 h-4" />
-          Active Projects
-        </button>
-        <button
-          onClick={() => setProjectArchiveTab('archived')}
-          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-            projectArchiveTab === 'archived'
-              ? 'bg-[var(--gold-primary)] text-black'
-              : 'border border-[var(--border)] text-white hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]'
-          }`}
-        >
-          <Archive className="w-4 h-4" />
-          Archived Projects
-        </button>
       </div>
 
       {/* Search - full width row */}
@@ -274,7 +297,7 @@ export function ProjectsTab({
         ) : (
           <>
           {projectView === 'table' ? (
-            <ProjectsTable projects={visibleProjects} isAdmin={isAdmin} openModal={openModal} deleteProject={deleteProject} />
+            <ProjectsTable projects={visibleProjects} isAdmin={isAdmin} openModal={openModal} deleteProject={deleteProject} footer={<PaginationBar attached pagination={projectsPagination} onPageChange={(nextPage) => setProjectPage(nextPage)} onPageSizeChange={changeProjectPageSize} />} />
           ) : <div className="grid gap-6 xl:grid-cols-2">
             {visibleProjects.map((project) => {
               const status = String(project.status || 'not_started').toLowerCase()
@@ -386,10 +409,12 @@ export function ProjectsTab({
               )
             })}
           </div>}
-          <PaginationBar
-            pagination={projectsPagination}
-            onPageChange={(nextPage) => setProjectPage(nextPage)}
-          />
+          {projectView !== 'table' && (
+            <PaginationBar
+              pagination={projectsPagination}
+              onPageChange={(nextPage) => setProjectPage(nextPage)}
+            />
+          )}
           </>
         )
       ) : (
@@ -401,7 +426,7 @@ export function ProjectsTab({
         ) : (
           <>
           {projectView === 'table' ? (
-            <ProjectsTable projects={visibleArchivedProjects} archived isAdmin={isAdmin} openModal={openModal} restoreProject={restoreProject} />
+            <ProjectsTable projects={visibleArchivedProjects} archived isAdmin={isAdmin} openModal={openModal} restoreProject={restoreProject} footer={<PaginationBar attached pagination={archivedProjectsPagination} onPageChange={(nextPage) => setArchivedProjectsPagination((prev) => ({ ...prev, page: nextPage }))} onPageSizeChange={changeArchivedPageSize} />} />
           ) : <div className="grid gap-6 xl:grid-cols-2">
             {visibleArchivedProjects.map((project) => {
               const status = String(project.status || 'not_started').toLowerCase()
@@ -503,10 +528,12 @@ export function ProjectsTab({
               )
             })}
           </div>}
-          <PaginationBar
-            pagination={archivedProjectsPagination}
-            onPageChange={(nextPage) => setArchivedProjectsPagination((prev) => ({ ...prev, page: nextPage }))}
-          />
+          {projectView !== 'table' && (
+            <PaginationBar
+              pagination={archivedProjectsPagination}
+              onPageChange={(nextPage) => setArchivedProjectsPagination((prev) => ({ ...prev, page: nextPage }))}
+            />
+          )}
           </>
         )
       )}

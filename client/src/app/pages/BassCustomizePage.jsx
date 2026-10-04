@@ -25,6 +25,7 @@ import {
   normalizeStickerPlacement,
 } from '../utils/stickerPlacement.js'
 import { BuilderActionBar } from '../components/customize/BuilderActionBar.jsx'
+import { WalkInAssignmentModal } from '../components/customize/WalkInAssignmentModal.jsx'
 import { BuilderCheckoutSection } from '../components/customize/BuilderCheckoutSection.jsx'
 import { BuilderSavedBadge } from '../components/customize/BuilderSavedBadge.jsx'
 import { StickerPanel } from '../components/customize/StickerPanel.jsx'
@@ -742,7 +743,9 @@ export function BassCustomizePage() {
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false)
   const [bassTypeDropdownOpen, setBassTypeDropdownOpen] = useState(false)
   const categoryDropdownRef = useRef(null)
-  const { isAuthenticated, openLogin } = useAuth()
+  const { isAuthenticated, openLogin, user } = useAuth()
+  const isWalkInMode = searchParams.get('mode') === 'walk-in' && ['staff', 'admin', 'super_admin'].includes(user?.role)
+  const [walkInBuild, setWalkInBuild] = useState(null)
   const { addToCart, setIsOpen: setCartOpen } = useCart()
   const [savedSnapshot, setSavedSnapshot] = useState(() => {
     // If editing an existing build, consider it already saved
@@ -1335,6 +1338,11 @@ export function BassCustomizePage() {
       setSavedSnapshot(snap)
       window.sessionStorage.setItem('cosmoscraft.bassBuild.savedSnapshot', snap)
     } catch { }
+
+    if (isWalkInMode && !continueBlockedNavigation) {
+      setWalkInBuild({ buildId, config, summary, pricingBreakdown, lineItems: configurationLineItems, stickers, price: totalPrice })
+      return
+    }
 
     if (continueBlockedNavigation && blocker.state === 'blocked') {
       setShowUnsavedModal(false)
@@ -2617,6 +2625,20 @@ export function BassCustomizePage() {
       </div>
 
       {/* Load Builds Modal */}
+      {isWalkInMode && walkInBuild && (
+        <WalkInAssignmentModal
+          key={walkInBuild.buildId}
+          {...walkInBuild}
+          storageScope={walkInBuild.buildId}
+          guitarType="bass" previewRef={previewRef} loadingPrices={loadingPrices}
+          onClose={() => setWalkInBuild(null)} onNewBuild={handleCreateNewBuild}
+          onAssigned={(customer) => {
+            setWalkInBuild(null)
+            setToastMessage(`Build successfully sent to ${[customer.first_name, customer.last_name].filter(Boolean).join(' ') || customer.email}!`)
+          }}
+        />
+      )}
+
       {showLoadModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="relative max-w-2xl w-full max-h-[80vh] overflow-hidden rounded-2xl border border-white/10 bg-[var(--bg-primary)] shadow-2xl flex flex-col">

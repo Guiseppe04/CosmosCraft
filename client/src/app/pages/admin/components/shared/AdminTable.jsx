@@ -1,26 +1,27 @@
-export function AdminTable({ columns, rows, renderRow, empty }) {
+export function AdminTable({ columns, rows, renderRow, empty, footer }) {
   if (!rows || rows.length === 0) return empty || null
 
   return (
-    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
+    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-sm">
       <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-[var(--bg-primary)] border-b border-[var(--border)]">
+        <table className="w-full text-left text-xs">
+          <thead className="bg-[var(--bg-primary)] text-[var(--text-muted)] uppercase tracking-wider font-bold border-b border-[var(--border)]">
             <tr>
               {columns.map((col) => (
-                <th key={col} className="text-left py-4 px-6 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wider">{col}</th>
+                <th key={col} className="py-3 px-4">{col}</th>
               ))}
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-[var(--border)]/50">
             {rows.map((row, index) => (
-              <tr key={index} className="border-b border-[var(--border)]/50 hover:bg-[var(--bg-primary)]/50 transition-colors">
+              <tr key={index} className="hover:bg-[var(--bg-primary)]/40 transition-colors">
                 {renderRow(row)}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {footer}
     </div>
   )
 }

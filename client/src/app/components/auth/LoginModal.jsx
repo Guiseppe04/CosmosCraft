@@ -109,7 +109,7 @@ export function LoginModal() {
                 <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-12 w-auto object-contain" />
               </div>
               <h2 className="text-2xl font-bold text-[var(--text-light)] mb-1">Login to CosmosCraft</h2>
-              <p className="text-sm text-[var(--text-muted)]">Sign in to continue your purchase</p>
+              <p className="text-sm text-[var(--text-muted)]"style={{ color: '#ef4444' }}>Sign in to continue your purchase</p>
             </div>
 
             {error && <p className="mb-4 text-sm text-red-500">{error}</p>}
@@ -198,7 +198,7 @@ export function LoginModal() {
                   <span className="px-2 bg-[var(--surface-elevated)] text-[var(--text-muted)]">Or continue with</span>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 <button
                   type="button"
                   disabled={redirectingProvider !== null}
@@ -214,24 +214,6 @@ export function LoginModal() {
                     <>
                       <img src="/social/google-color-svgrepo-com.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
                       Google
-                    </>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  disabled={redirectingProvider !== null}
-                  onClick={() => {
-                    setRedirectingProvider('facebook')
-                    startSocialLogin('facebook')
-                  }}
-                  className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--text-light)] hover:bg-[var(--surface-elevated)]"
-                >
-                  {redirectingProvider === 'facebook' ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <>
-                      <img src="/social/facebook.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
-                      Facebook
                     </>
                   )}
                 </button>

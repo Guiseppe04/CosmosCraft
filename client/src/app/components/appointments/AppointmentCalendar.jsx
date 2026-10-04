@@ -3,47 +3,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { Calendar, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import { addDays, addWeeks, format, startOfWeek, subDays, subMonths, subYears } from 'date-fns'
 
-const DEFAULT_HOLIDAYS = [
-  '2026-01-01',
-  '2026-02-17',
-  '2026-04-02',
-  '2026-04-03',
-  '2026-04-04',
-  '2026-04-09',
-  '2026-05-01',
-  '2026-06-12',
-  '2026-08-21',
-  '2026-08-31',
-  '2026-11-01',
-  '2026-11-02',
-  '2026-11-30',
-  '2026-12-08',
-  '2026-12-24',
-  '2026-12-25',
-  '2026-12-30',
-  '2026-12-31',
-]
-
-const HOLIDAY_LABELS = {
-  '2026-01-01': "New Year's Day",
-  '2026-02-17': 'Chinese New Year',
-  '2026-04-02': 'Maundy Thursday',
-  '2026-04-03': 'Good Friday',
-  '2026-04-04': 'Black Saturday',
-  '2026-04-09': 'Araw ng Kagitingan',
-  '2026-05-01': 'Labor Day',
-  '2026-06-12': 'Independence Day',
-  '2026-08-21': 'Ninoy Aquino Day',
-  '2026-08-31': 'National Heroes Day',
-  '2026-11-01': 'All Saints Day',
-  '2026-11-02': 'All Souls Day',
-  '2026-11-30': 'Bonifacio Day',
-  '2026-12-08': 'Feast of the Immaculate Conception',
-  '2026-12-24': 'Christmas Eve',
-  '2026-12-25': 'Christmas Day',
-  '2026-12-30': 'Rizal Day',
-  '2026-12-31': 'Last Day of the Year',
-}
+import { getCalendarHolidays } from '../../utils/philippineHolidays.js'
 
 const TIME_SLOT_CONFIG = {
   startHour: 9,
@@ -257,14 +217,20 @@ function layoutOverlappingAppointments(appointments) {
   return intervals
 }
 
-function AdminWeekCalendar({ appointments, unavailableDates = [], onAppointmentClick, onMonthView }) {
-  const [weekOffset, setWeekOffset] = useState(0)
+function AdminWeekCalendar({ appointments, holidays = [], openOverrides = [], unavailableDates = [], onAppointmentClick, onMonthView, displayDate, onDisplayDateChange }) {
   const [staffFilter, setStaffFilter] = useState('all')
   const [summaryRange, setSummaryRange] = useState('week')
-  const weekStart = startOfWeek(addWeeks(new Date(), weekOffset), { weekStartsOn: 1 })
+  const weekStart = startOfWeek(displayDate, { weekStartsOn: 1 })
   const weekDays = Array.from({ length: 6 }, (_, index) => addDays(weekStart, index))
   const staffNames = [...new Set(appointments.map(getAssignedStaff).filter(Boolean))].sort()
   const unavailableSet = new Set(unavailableDates.map((entry) => toISODate(entry?.date || entry)).filter(Boolean))
+  const startYear = weekStart.getFullYear()
+  const endYear = weekDays[5].getFullYear()
+  const { labels: holidayLabels, closedDates: holidaySet } = useMemo(
+    () => getCalendarHolidays([...new Set([startYear, endYear])], holidays, openOverrides),
+    [startYear, endYear, holidays, openOverrides],
+  )
+  const todayKey = formatLocalISO(new Date())
   const now = new Date()
   const summaryStart = {
     week: subDays(now, 6),
@@ -298,14 +264,14 @@ function AdminWeekCalendar({ appointments, unavailableDates = [], onAppointmentC
           <p className="mt-1 text-sm text-[var(--text-muted)]">{format(weekStart, 'MMMM d')} - {format(weekDays[5], 'MMMM d, yyyy')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setWeekOffset(0)} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-light)] transition hover:border-[var(--gold-primary)]">Today</button>
+          <button type="button" onClick={() => onDisplayDateChange(new Date())} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-light)] transition hover:border-[var(--gold-primary)]">Today</button>
           <div className="flex overflow-hidden rounded-lg border border-[var(--border)]">
-            <button type="button" aria-label="Previous week" onClick={() => setWeekOffset((offset) => offset - 1)} className="p-2.5 text-[var(--text-light)] transition hover:bg-[var(--surface-elevated)]"><ChevronLeft className="h-4 w-4" /></button>
-            <button type="button" aria-label="Next week" onClick={() => setWeekOffset((offset) => offset + 1)} className="border-l border-[var(--border)] p-2.5 text-[var(--text-light)] transition hover:bg-[var(--surface-elevated)]"><ChevronRight className="h-4 w-4" /></button>
+            <button type="button" aria-label="Previous week" onClick={() => onDisplayDateChange(addWeeks(displayDate, -1))} className="p-2.5 text-[var(--text-light)] transition hover:bg-[var(--surface-elevated)]"><ChevronLeft className="h-4 w-4" /></button>
+            <button type="button" aria-label="Next week" onClick={() => onDisplayDateChange(addWeeks(displayDate, 1))} className="border-l border-[var(--border)] p-2.5 text-[var(--text-light)] transition hover:bg-[var(--surface-elevated)]"><ChevronRight className="h-4 w-4" /></button>
           </div>
           <div className="flex overflow-hidden rounded-lg border border-[var(--border)] p-1 text-sm">
             <span className="rounded-md bg-[var(--gold-primary)] px-3 py-1.5 font-semibold text-[var(--text-dark)]">Week</span>
-            <button type="button" onClick={onMonthView} className="px-3 py-1.5 text-[var(--text-muted)] transition hover:text-[var(--text-light)]">Month</button>
+            <button type="button" onClick={() => onMonthView(weekStart)} className="px-3 py-1.5 text-[var(--text-muted)] transition hover:text-[var(--text-light)]">Month</button>
           </div>
         </div>
       </header>
@@ -350,12 +316,19 @@ function AdminWeekCalendar({ appointments, unavailableDates = [], onAppointmentC
             <div className="border-r border-[var(--border)] p-3 text-[10px] text-[var(--text-muted)]">GMT+8</div>
             {weekDays.map((date) => {
               const dateKey = formatLocalISO(date)
+              const isHoliday = holidaySet.has(dateKey)
+              const holidayLabel = isHoliday ? (holidayLabels[dateKey] || 'Holiday') : null
               const isUnavailable = unavailableSet.has(dateKey)
               return (
-              <div key={dateKey} className={`border-r border-[var(--border)] px-2 py-3 text-center last:border-r-0 ${isUnavailable ? 'bg-amber-500/10' : dateKey === formatLocalISO(new Date()) ? 'bg-[var(--gold-primary)]/10' : ''}`}>
+              <div
+                key={dateKey}
+                title={isHoliday ? `${holidayLabel} — closed for bookings` : undefined}
+                className={`border-r border-[var(--border)] px-2 py-3 text-center last:border-r-0 ${isHoliday ? 'bg-[#758A93]/10' : isUnavailable ? 'bg-amber-500/10' : dateKey === todayKey ? 'bg-[var(--gold-primary)]/10' : ''}`}
+              >
                 <div className="text-[10px] font-semibold uppercase text-[var(--text-muted)]">{format(date, 'EEE')}</div>
                 <div className="mt-1 text-sm font-semibold text-[var(--text-light)]">{format(date, 'd')}</div>
-                {isUnavailable && <span className="mt-1 inline-block rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-200">Unavailable</span>}
+                {isHoliday && <span className="mt-1 inline-block max-w-full truncate rounded border border-[#758A93]/20 bg-[#758A93]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-[#c9d2db]" title={holidayLabel}>{holidayLabel}</span>}
+                {!isHoliday && isUnavailable && <span className="mt-1 inline-block rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-200">Unavailable</span>}
               </div>
               )
             })}
@@ -369,11 +342,15 @@ function AdminWeekCalendar({ appointments, unavailableDates = [], onAppointmentC
               ))}
             </div>
             {weekDays.map((date) => {
+              const dateKey = formatLocalISO(date)
               const dayAppointments = appointmentsForDay(date)
               const appointmentLayouts = layoutOverlappingAppointments(dayAppointments)
+              const isHoliday = holidaySet.has(dateKey)
+              const isUnavailable = unavailableSet.has(dateKey)
+              const closedTint = isHoliday ? 'bg-[#758A93]/[0.06]' : isUnavailable ? 'bg-amber-500/[0.04]' : ''
               return (
-                <div key={formatLocalISO(date)} className="relative border-r border-[var(--border)] last:border-r-0">
-                  {Array.from({ length: 9 }, (_, index) => <div key={index} className={`h-[72px] border-b border-[var(--border)] ${unavailableSet.has(formatLocalISO(date)) ? 'bg-amber-500/[0.04]' : ''}`} />)}
+                <div key={dateKey} title={isHoliday ? `${(holidayLabels[dateKey] || 'Holiday')} — closed for bookings` : undefined} className={`relative border-r border-[var(--border)] last:border-r-0 ${isHoliday ? 'cursor-not-allowed' : ''}`}>
+                  {Array.from({ length: 9 }, (_, index) => <div key={index} className={`h-[72px] border-b border-[var(--border)] ${closedTint}`} />)}
                   {appointmentLayouts.map(({ appointment, startMinutes, endMinutes, column, columnCount }, apptIdx) => {
                     const scheduledAt = new Date(appointment.scheduled_at || appointment.date)
                     const top = (startMinutes / 60) * 72
@@ -406,6 +383,15 @@ function AdminWeekCalendar({ appointments, unavailableDates = [], onAppointmentC
           </div>
         </div>
       </div>
+
+      {weekDays.some((date) => holidaySet.has(formatLocalISO(date))) && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] px-4 py-3">
+          <div className="flex items-center gap-2 rounded-xl border border-[#758A93]/20 bg-[#758A93]/10 px-3 py-1.5">
+            <span className="h-2 w-2 rounded-full bg-[#758A93]" />
+            Holiday — closed for bookings
+          </div>
+        </div>
+      )}
     </section>
   )
 }
@@ -432,12 +418,6 @@ export default function AppointmentCalendar({
     return new Set(openOverrides.map(toISODate).filter(Boolean))
   }, [openOverrides])
 
-  const holidaySet = useMemo(() => {
-    const source = holidays.length ? holidays : DEFAULT_HOLIDAYS
-    const set = new Set(source.map(toISODate).filter(Boolean))
-    openOverrideSet.forEach((d) => set.delete(d))
-    return set
-  }, [holidays, openOverrideSet])
 
 const unavailableSet = useMemo(() => {
      return new Set(unavailableDates.map(toISODate).filter(Boolean))
@@ -461,6 +441,11 @@ const unavailableSet = useMemo(() => {
 
   const [currentMonth, setCurrentMonth] = useState(today.getMonth())
   const [currentYear, setCurrentYear] = useState(today.getFullYear())
+  const [weekDisplayDate, setWeekDisplayDate] = useState(today)
+  const { labels: holidayLabels, closedDates: holidaySet } = useMemo(
+    () => getCalendarHolidays([currentYear], holidays, openOverrideSet),
+    [currentYear, holidays, openOverrideSet],
+  )
   const [selectedDateId, setSelectedDateId] = useState('')
   const [showTimeGrid, setShowTimeGrid] = useState(false)
   const [hoveredAppointment, setHoveredAppointment] = useState(null)
@@ -497,7 +482,11 @@ const unavailableSet = useMemo(() => {
   const selectedDateLabel = selectedDateId ? format(selectedDate, 'MMMM d, yyyy') : null
 
   if (isAdminMode && adminWeekView) {
-    return <AdminWeekCalendar appointments={appointments} unavailableDates={unavailableDates} onAppointmentClick={onAppointmentClick} onMonthView={() => setAdminWeekView(false)} />
+    return <AdminWeekCalendar appointments={appointments} holidays={holidays} openOverrides={openOverrides} unavailableDates={unavailableDates} onAppointmentClick={onAppointmentClick} displayDate={weekDisplayDate} onDisplayDateChange={setWeekDisplayDate} onMonthView={(date) => {
+      setCurrentYear(date.getFullYear())
+      setCurrentMonth(date.getMonth())
+      setAdminWeekView(false)
+    }} />
   }
 
 const getDateStatus = (dateKey) => {
@@ -510,7 +499,7 @@ const getDateStatus = (dateKey) => {
      const isAvailable = availableSet.has(dateKey)
      const isDisabled = isSunday || isHoliday || isPast || (isAdminMode ? false : isUnavailable)
      const status = isHoliday
-       ? HOLIDAY_LABELS[dateKey] || 'Holiday'
+       ? holidayLabels[dateKey] || 'Holiday'
        : isSunday
          ? 'Sunday Closed'
          : isPast
@@ -676,7 +665,10 @@ const getDateStatus = (dateKey) => {
                   <div className="flex overflow-hidden rounded-lg border border-[var(--border)] p-1 text-sm">
                     <button
                       type="button"
-                      onClick={() => setAdminWeekView(true)}
+                      onClick={() => {
+                        setWeekDisplayDate(new Date(currentYear, currentMonth, 1))
+                        setAdminWeekView(true)
+                      }}
                       className="px-3 py-1.5 text-[var(--text-muted)] transition hover:text-[var(--text-light)]"
                     >
                       Week

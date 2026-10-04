@@ -999,8 +999,11 @@ export function DashboardPage() {
   useSocketEvent('appointment:updated', (data) => {
     fetchMyAppointments()
     const status = data?.status || data?.appointment?.status
+    const paymentStatus = data?.appointment?.payment_status
     const actionMsg = data?.action === 'status_updated'
       ? `Appointment status updated to: ${status ? status.replace(/_/g, ' ') : 'Updated'}`
+      : data?.action === 'payment_updated'
+      ? `Payment ${paymentStatus ? paymentStatus.replace(/_/g, ' ') : 'status'} updated${paymentStatus ? `: ${paymentStatus.replace(/_/g, ' ')}` : ''}.`
       : data?.action === 'rescheduled'
       ? 'Your appointment has been rescheduled.'
       : data?.action === 'cancelled'

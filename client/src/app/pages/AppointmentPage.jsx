@@ -28,6 +28,7 @@
   } from 'lucide-react'
   import { AddressForm } from '../components/AddressForm.jsx'
   import { adminApi } from '../utils/adminApi'
+  import { getHolidaysForYear } from '../utils/philippineHolidays.js'
   import {
     PHONE_ERROR_MESSAGE,
     isValidPhoneNumber,
@@ -43,21 +44,6 @@
     { id: 5, label: 'Confirmation' },
   ]
 
-  // --- HOLIDAYS ---
-  const HOLIDAYS = [
-    // Format: 'MM-DD' (month-day)
-    '01-01', // New Year's Day
-    '04-02', // Maundy Thursday
-    '04-03', // Good Friday
-    '04-09', // Araw ng Kagitingan
-    '05-01', // Labor Day
-    '06-12', // Independence Day
-    '08-31', // National Heroes Day
-    '11-30', // Bonifacio Day
-    '12-25', // Christmas Day
-    '12-30', // Rizal Day
-  ]
-
   const OPENING_YEAR = 2026
   const MAX_REFERENCE_IMAGE_BYTES = 10 * 1024 * 1024
   const APPOINTMENT_GUITAR_TYPES = ['electric', 'bass', 'acoustic', 'ukulele']
@@ -65,9 +51,7 @@
   // --- UTILS ---
 
   function isHoliday(date) {
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return HOLIDAYS.includes(`${month}-${day}`)
+    return Boolean(getHolidaysForYear(date.getFullYear())[formatLocalDateId(date)])
   }
 
   function inferServiceIcon(service = {}) {
@@ -208,7 +192,7 @@
       .replace(/\b\w/g, (c) => c.toUpperCase())
   }
 
-  function getMonthMatrix(year, month, maxLeadTimeDays, disabledDateSet = new Set(), openOverrideSet = new Set()) {
+  function getMonthMatrix(year, month, maxLeadTimeDays, disabledDateSet = new Set(), openOverrideSet = new Set(), occupiedDateSet = new Set()) {
     const firstDay = new Date(year, month, 1)
     const firstWeekday = firstDay.getDay()
     const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -243,7 +227,7 @@
           isOpenHoliday = isHolidayDay && openOverrideSet.has(id)
           isHolidayDate = isHolidayDay && !isOpenHoliday
           isUnavailableDate = disabledDateSet.has(id)
-          isAvailable = !isPast && !isTooSoon && !isSunday && !isHolidayDate && !isUnavailableDate
+          isAvailable = !isPast && !isTooSoon && !isSunday && !isHolidayDate && !isUnavailableDate && !occupiedDateSet.has(id)
         }
 
         week.push({
@@ -253,6 +237,9 @@
           isAvailable,
           isHolidayDate,
           isOpenHoliday,
+          isOccupied: occupiedDateSet.has(id),
+          isNonWorkingDay: inCurrentMonth && date.getDay() === 0,
+          holidayLabel: id ? getHolidaysForYear(year)[id] : null,
           // Blocked by the shop (admin marked the date unavailable), as opposed
           // to a Sunday/holiday or a past date. The calendar marks these red.
           isUnavailableDate,
@@ -343,6 +330,10 @@
     const [selectedTime, setSelectedTime] = useState('')
     const [unavailableDateSet, setUnavailableDateSet] = useState(new Set())
     const [openOverrideSet, setOpenOverrideSet] = useState(new Set())
+    const [occupiedDateSet, setOccupiedDateSet] = useState(new Set())
+    const [calendarRefresh, setCalendarRefresh] = useState(0)
+    const [calendarLoading, setCalendarLoading] = useState(false)
+    const [calendarError, setCalendarError] = useState('')
     const [availableTimeSet, setAvailableTimeSet] = useState(new Set())
     const [slotsLoading, setSlotsLoading] = useState(false)
     const [dailyAppointmentLoad, setDailyAppointmentLoad] = useState(null)
@@ -834,7 +825,35 @@
      */
     useSocketEvent('appointment:schedule_updated', () => {
       loadUnavailableDates()
+      setCalendarRefresh(value => value + 1)
     })
+
+    useSocketEvent('appointment:created', () => setCalendarRefresh(value => value + 1))
+    useSocketEvent('appointment:updated', () => setCalendarRefresh(value => value + 1))
+
+    useEffect(() => {
+      const refresh = () => { if (document.visibilityState === 'visible') setCalendarRefresh(value => value + 1) }
+      const timer = setInterval(refresh, 30000)
+      window.addEventListener('focus', refresh)
+      return () => { clearInterval(timer); window.removeEventListener('focus', refresh) }
+    }, [])
+
+    useEffect(() => {
+      let active = true
+      const dateFrom = formatLocalDateId(new Date(currentYear, currentMonth, 1))
+      const dateTo = formatLocalDateId(new Date(currentYear, currentMonth + 1, 0))
+      setCalendarLoading(true)
+      setCalendarError('')
+      fetch(`${API}/api/appointments/available-dates?${new URLSearchParams({ date_from: dateFrom, date_to: dateTo })}`, { credentials: 'include', headers: getAuthHeaders() })
+        .then(async response => {
+          const payload = await response.json()
+          if (!response.ok) throw new Error(payload.message || 'Unable to check occupied dates.')
+          if (active) setOccupiedDateSet(new Set(payload.data?.occupied_dates || []))
+        })
+        .catch(error => { if (active) setCalendarError(error.message) })
+        .finally(() => { if (active) setCalendarLoading(false) })
+      return () => { active = false }
+    }, [currentYear, currentMonth, calendarRefresh])
 
     useEffect(() => {
       let isMounted = true
@@ -907,7 +926,7 @@
 
       loadAvailableSlots()
       return () => { isMounted = false }
-    }, [availableServices, selectedDateId, selectedServiceIds, selectedTime, timeSlots, unavailableDateSet])
+    }, [availableServices, selectedDateId, selectedServiceIds, selectedTime, timeSlots, unavailableDateSet, calendarRefresh])
 
     // Derived calculations
     const { maxLeadTime, totalPrice, selectedDetailedServices } = useMemo(() => {
@@ -932,9 +951,17 @@
     }, [selectedServices])
 
     const monthMatrix = useMemo(
-      () => getMonthMatrix(currentYear, currentMonth, maxLeadTime, unavailableDateSet, openOverrideSet),
-      [currentYear, currentMonth, maxLeadTime, unavailableDateSet, openOverrideSet]
+      () => getMonthMatrix(currentYear, currentMonth, maxLeadTime, unavailableDateSet, openOverrideSet, occupiedDateSet),
+      [currentYear, currentMonth, maxLeadTime, unavailableDateSet, openOverrideSet, occupiedDateSet]
     )
+
+    useEffect(() => {
+      const selectedDay = monthMatrix.flat().find(day => day.id === selectedDateId)
+      if (selectedDay && !selectedDay.isAvailable) {
+        setSelectedDateId('')
+        setSelectedTime('')
+      }
+    }, [monthMatrix, selectedDateId])
 
     const referenceNumber = selectedDate && selectedTime
       ? `CC-${selectedBranchId.toUpperCase()}-${selectedDateId.replace(/-/g, '')}-${selectedTime.replace(/[:\s]/g, '')}`
@@ -945,7 +972,7 @@
     // Validation
     const canProceed = () => {
       if (currentStep === 1) return selectedServiceIds.length > 0
-      if (currentStep === 2) return selectedDateId && selectedTime
+      if (currentStep === 2) return selectedDateId && selectedTime && !calendarLoading && !calendarError && !occupiedDateSet.has(selectedDateId)
       if (currentStep === 3) {
         if (!hasSelectedGuitar) return false
         return Boolean(selectedAppointmentType)
@@ -1906,7 +1933,7 @@
                   </button>
                 </div>
 
-                {servicesLoading && (
+                {(servicesLoading || calendarLoading) && (
                   <div className="absolute inset-0 flex items-center justify-center bg-[var(--surface-dark)]/80 backdrop-blur-sm rounded-2xl z-10">
                     <div className="flex flex-col items-center gap-3">
                       <Loader2 className="w-8 h-8 animate-spin text-[#d4af37]" />
@@ -1929,43 +1956,55 @@
 
                       const isSelected = selectedDateId === day.id
                       const isUnavailable = !day.isAvailable
-                      // Red is reserved for a date the shop actively closed.
-                      // Sundays, holidays, past dates and dates beyond the
-                      // booking window are simply not bookable, so they stay
-                      // grey — matching the legend under the grid.
+                      // Shop closures are red, occupied days amber, and
+                      // holidays/non-working days grey to match the legend.
                       const isClosedByShop = !day.isPastDate && day.isUnavailableDate
                       const blockedLabel = day.isUnavailableDate
                         ? 'Unavailable — the shop has closed bookings for this date'
                         : day.isHolidayDate
-                          ? 'Unavailable — holiday'
-                          : day.isPastDate
-                            ? 'Unavailable — date has passed'
-                            : 'Unavailable — not a working day'
+                          ? `${day.holidayLabel || 'Holiday'} — closed for bookings`
+                          : day.isNonWorkingDay
+                            ? 'Closed / Non Working Day — Sunday'
+                            : day.isOccupied
+                              ? 'Occupied — all staff capacity is reserved for this day'
+                              : day.isPastDate
+                                ? 'Unavailable — date has passed'
+                                : 'Unavailable — service lead time has not been met'
 
                       if (isUnavailable) {
-                        const disabledStyle = isClosedByShop
+                        const isOccupiedDay = !day.isPastDate && day.isOccupied && !day.isHolidayDate && !day.isNonWorkingDay && !day.isUnavailableDate
+                        const disabledStyle = isOccupiedDay
+                          ? 'text-amber-300 bg-amber-500/10 border border-amber-500/40'
+                          : isClosedByShop
                           ? 'text-[#FF3737]/80 bg-[#FF3737]/10 border border-[#FF3737]/20'
                           : 'text-[var(--text-muted)]/70 bg-[var(--surface-elevated)]/80 border border-[var(--border)]'
 
                         return (
-                          <div
+                          <button
+                            type="button"
+                            disabled
                             key={day.id}
                             title={blockedLabel}
                             aria-label={`${day.dayNumber} - ${blockedLabel}`}
-                            className={`flex items-center justify-center h-9 sm:h-10 rounded-xl text-xs sm:text-sm font-medium transition-colors ${disabledStyle} cursor-not-allowed`}>
-                            {day.dayNumber}
-                          </div>
+                            className={`flex flex-col items-center justify-center h-16 sm:h-16 rounded-xl text-xs sm:text-sm font-medium transition-colors ${disabledStyle} cursor-not-allowed`}>
+                            <span>{day.dayNumber}</span>
+                            {(day.isHolidayDate || day.isNonWorkingDay) && <span className="text-[8px] sm:text-[9px] leading-tight mt-1 px-0.5 text-center">{day.isHolidayDate ? day.holidayLabel || 'Holiday' : <>Closed /<br />Non Working Day</>}</span>}
+                            {isOccupiedDay && <span className="text-[8px] sm:text-[9px] mt-1">Occupied</span>}
+                          </button>
                         )
                       }
 
                       return (
                         <button
                           key={day.id}
+                          type="button"
+                          disabled={calendarLoading || Boolean(calendarError)}
+                          aria-label={`${day.id} — Available`}
                           onClick={() => {
                             setSelectedDateId(day.id)
                             setSelectedTime('')
                           }}
-                          className={`flex items-center justify-center h-9 sm:h-10 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                          className={`flex items-center justify-center h-16 sm:h-16 rounded-xl text-xs sm:text-sm font-medium transition-all disabled:opacity-50 ${
                             isSelected
                               ? 'bg-[#08CB00] text-black shadow-lg shadow-[#08CB00]/20 scale-105 border border-[#08CB00]/40'
                               : 'bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] hover:bg-[#08CB00]/10 hover:border-[#08CB00]/40'
@@ -1990,9 +2029,15 @@
                   </span>
                   <span className="inline-flex items-center gap-1.5">
                     <span className="w-3 h-3 rounded bg-[var(--surface-elevated)] border border-[var(--border)]" />
-                    Closed / Non-Working Day
+                    Closed / Non Working Day
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded bg-amber-500/20 border border-amber-500/40" />
+                    Occupied
                   </span>
                 </div>
+
+                {calendarError && <div role="alert" className="mt-3 text-xs text-red-400">{calendarError} <button type="button" onClick={() => setCalendarRefresh(value => value + 1)} className="underline">Retry</button></div>}
 
                 {/* Time Slots */}
                 {selectedDateId && (
@@ -2009,7 +2054,7 @@
                     )}
                     {!slotsLoading && slotAvailabilityStatus === 'fully_booked' && (
                       <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">
-                        Fully Booked: This date has reached its current appointment capacity.
+                        Occupied: All staff capacity is reserved for this day.
                       </p>
                     )}
                     {!slotsLoading && slotAvailabilityStatus === 'unavailable' && (
@@ -2030,20 +2075,25 @@
                             const isUnavailableTime = !availableTimeSet.has(time.toUpperCase())
                             const isPastTime = selectedDateId && isPastTimeSlot(selectedDateId, time)
                             const isDisabled = isUnavailableTime || slotsLoading || isPastTime
+                            const isOccupiedTime = isUnavailableTime && !isPastTime && slotAvailabilityStatus !== 'unavailable'
                             return (
                               <button
                                 key={time}
                                 onClick={() => { if (!isDisabled) setSelectedTime(time) }}
                                 disabled={isDisabled}
+                                title={isOccupiedTime ? 'Occupied — staff are already booked at this time' : undefined}
                                 className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
                                   isSelected
                                     ? 'bg-[#d4af37] text-black'
+                                    : isOccupiedTime
+                                      ? 'bg-amber-500/10 text-amber-300 border border-amber-500/40 cursor-not-allowed'
                                     : isDisabled
                                       ? 'bg-[var(--surface-elevated)] text-[var(--text-muted)]/70 border border-[var(--border)] cursor-not-allowed'
                                       : 'bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] hover:border-[#d4af37]/30'
                                 }`}
                               >
                                 {time}
+                                {isOccupiedTime && <span className="block text-[9px] mt-0.5">Occupied</span>}
                               </button>
                             )
                           })}

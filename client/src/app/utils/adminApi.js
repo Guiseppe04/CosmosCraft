@@ -20,15 +20,25 @@ async function request(path, options = {}) {
     : { 'Content-Type': 'application/json', ...options.headers }
   const headers = getAuthHeaders(baseHeaders)
 
-  const res = await fetch(`${API_URL}${path}`, {
-    credentials: 'include',
-    ...options,
-    headers,
-    body: isFormData ? options.body : (options.body ? JSON.stringify(options.body) : undefined),
-  })
+  let res
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      credentials: 'include',
+      ...options,
+      headers,
+      body: isFormData ? options.body : (options.body ? JSON.stringify(options.body) : undefined),
+    })
+  } catch (networkError) {
+    // fetch() rejects before any response exists (backend down, wrong port, CORS,
+    // offline). Report that plainly instead of leaking the raw "Failed to fetch".
+    const error = new Error('Cannot reach the server. Make sure the backend is running, then try again.')
+    error.cause = networkError
+    throw error
+  }
   const data = await res.json()
   if (!res.ok) {
     const error = new Error(data.message || 'Request failed')
+    error.status = res.status
     // Preserve field-level validation errors so the UI can map them to inputs.
     if (Array.isArray(data.errors) && data.errors.length > 0) {
       error.fieldErrors = data.errors
@@ -66,6 +76,8 @@ export const adminApi = {
     return request(`/api/guitars/customizations${qs ? '?' + qs : ''}`)
   },
   getMyCustomizations: () => request('/api/guitars/my-customizations'),
+  assignWalkInCustomization: (body) => request('/api/guitars/walk-in-customizations', { method: 'POST', body }),
+  getWalkInCustomers: (params = {}) => request(`/api/guitars/walk-in-customers?${new URLSearchParams(params)}`),
   deleteMyCustomization: (id) => request(`/api/guitars/my-customizations/${id}`, { method: 'DELETE' }),
   getCustomization: (id) => request(`/api/guitars/customizations/${id}`),
   updateCustomization: (id, body) => request(`/api/guitars/customizations/${id}`, { method: 'PUT', body }),

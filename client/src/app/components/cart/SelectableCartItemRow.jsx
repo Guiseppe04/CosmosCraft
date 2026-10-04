@@ -1,5 +1,8 @@
 import { motion } from 'motion/react'
 import { Check, Guitar, Minus, Plus, Trash2 } from 'lucide-react'
+import CustomBuildThumbnail from '../customize/CustomBuildThumbnail.jsx'
+import { BuilderConfigurationPanel } from '../customize/BuilderConfigurationPanel.jsx'
+import { getCustomBuildSummaryLines } from '../../utils/customBuildSummary.js'
 
 export function SelectableCartItemRow({
   item,
@@ -48,7 +51,7 @@ export function SelectableCartItemRow({
         )}
 
         <div className="w-20 h-20 rounded-lg bg-[var(--bg-primary)] border border-white/5 flex items-center justify-center overflow-hidden flex-shrink-0">
-          {item.image ? (
+          {item.customization ? <CustomBuildThumbnail item={item} /> : item.image ? (
             <img
               src={item.image}
               alt={item.name}
@@ -120,6 +123,18 @@ export function SelectableCartItemRow({
           </div>
         </div>
       </div>
+      {item.customization && (
+        <details className="mt-3 text-xs text-[var(--text-muted)]">
+          <summary className="cursor-pointer text-[var(--gold-primary)]">Review customization and price breakdown</summary>
+          <div className="mt-3 space-y-3">
+            <div className="h-56"><CustomBuildThumbnail item={item} /></div>
+            {item.customization.lineItems?.length ? (
+              <BuilderConfigurationPanel lineItems={item.customization.lineItems} configurationTotal={item.price} />
+            ) : getCustomBuildSummaryLines(item).map(line => <p key={line}>{line}</p>)}
+            <p>Quantity: {item.quantity} · Total: ₱{(item.price * item.quantity).toLocaleString('en-PH')}</p>
+          </div>
+        </details>
+      )}
     </motion.div>
   )
 }

@@ -4,6 +4,7 @@ import { CheckCircle } from 'lucide-react'
 import api from '../services/api.js'
 import { useAuth } from './AuthContext.jsx'
 import { useSocketEvent } from './SocketContext.jsx'
+import { mapDbCartItem } from '../utils/cartItemMapping.js'
 
 /**
  * CartContext - Global state management for shopping cart
@@ -57,16 +58,7 @@ export function CartProvider({ children }) {
     try {
       const dbCartParams = await api.cart.getCart()
       if (dbCartParams?.data?.items) {
-        const mappedCart = dbCartParams.data.items.map(item => ({
-          id: item.product?.product_id,
-          cart_item_id: item.cart_item_id,
-          name: item.product?.name,
-          price: item.unit_price,
-          image: item.product?.image || item.product?.primary_image || '/assets/placeholder.jpg',
-          stock: Number(item.product?.stock ?? 0),
-          quantity: item.quantity,
-          type: 'product'
-        }))
+        const mappedCart = dbCartParams.data.items.map(mapDbCartItem)
         setCart(mappedCart)
       } else {
         setCart([])
@@ -75,6 +67,15 @@ export function CartProvider({ children }) {
       console.error(err)
     }
   }, [])
+
+  useSocketEvent('cart:updated', () => { if (isAuthenticated) void fetchDbCart() })
+  useSocketEvent('connect', () => { if (isAuthenticated) void fetchDbCart() })
+
+  useEffect(() => {
+    const refresh = () => { if (isAuthenticated) void fetchDbCart() }
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
+  }, [isAuthenticated, fetchDbCart])
 
   // ── Real-Time Price & Stock sync for Cart ──────────────────────────────
   useSocketEvent('product:updated', (data) => {
