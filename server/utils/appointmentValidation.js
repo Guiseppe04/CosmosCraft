@@ -6,6 +6,21 @@
 
 const Joi = require('joi');
 
+const refundDestinationFields = {
+  refund_method: Joi.string().trim().max(100).required(),
+  destination_type: Joi.string().valid('account', 'qr').default('account'),
+  account_holder: Joi.when('destination_type', {
+    is: 'qr', then: Joi.any().strip(), otherwise: Joi.string().trim().max(200).required(),
+  }),
+  account_number: Joi.when('destination_type', {
+    is: 'qr', then: Joi.any().strip(), otherwise: Joi.string().trim().max(100).required(),
+  }),
+  qr_code_url: Joi.when('destination_type', {
+    is: 'qr', then: Joi.string().trim().uri({ scheme: ['https'] }).max(2048).required(), otherwise: Joi.any().strip(),
+  }),
+};
+const appointmentRefundDestinationSchema = Joi.object(refundDestinationFields);
+
 const GUITAR_TYPE_VALUES = ['electric', 'bass', 'acoustic', 'ukulele'];
 const APPOINTMENT_STATUS_VALUES = ['pending', 'confirmed', 'in_progress', 'ready_for_pickup', 'completed', 'cancelled', 'no_show'];
 
@@ -600,9 +615,7 @@ const appointmentValidation = {
   // ─── REFUND REQUEST ────────────────────────────────────────────────────────
 
   createRefundRequestSchema: Joi.object({
-    refund_method: Joi.string().trim().max(100).required(),
-    account_holder: Joi.string().trim().max(200).required(),
-    account_number: Joi.string().trim().max(100).required(),
+    ...refundDestinationFields,
     appointment_id: Joi.string()
       .uuid()
       .required()
@@ -640,4 +653,5 @@ const appointmentValidation = {
 
 module.exports = {
   appointmentValidation,
+  appointmentRefundDestinationSchema,
 };

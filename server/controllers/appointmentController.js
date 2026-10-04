@@ -1123,6 +1123,8 @@ exports.createRefundRequest = async (req, res, next) => {
       refund_method: validated.refund_method,
       account_holder: validated.account_holder,
       account_number: validated.account_number,
+      destination_type: validated.destination_type,
+      qr_code_url: validated.qr_code_url,
       payment_method: appointment.payment_method,
       payment_reference,
       amount,

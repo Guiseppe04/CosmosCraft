@@ -371,19 +371,8 @@ exports.reactivateAccount = asyncHandler(async (req, res, next) => {
  * For social-only accounts without local password, allows setting a local password.
  */
 exports.requestPasswordChange = asyncHandler(async (req, res, next) => {
-  const { oldPassword, newPassword, confirmPassword } = req.body;
-
-  if (newPassword !== confirmPassword) {
-    throw new AppError('New passwords do not match', 400);
-  }
-
-  if (newPassword.length < 8) {
-    throw new AppError('Password must be at least 8 characters', 400);
-  }
-
-  if (!/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword) || !/[@$!%*?&]/.test(newPassword)) {
-    throw new AppError('Password must contain uppercase, lowercase, number, and special character', 400);
-  }
+  // Routes validate password complexity and confirmation using changePasswordSchema.
+  const { oldPassword, newPassword } = req.body;
 
   const authInfo = await userService.getUserAuthInfo(req.user.id);
   const hasLocalPassword = Boolean(authInfo.has_local_password);
@@ -412,7 +401,7 @@ exports.requestPasswordChange = asyncHandler(async (req, res, next) => {
     status: 'success',
     message: hasLocalPassword
       ? 'Password changed successfully.'
-      : 'Local password set successfully.',
+      : 'Password set successfully.',
     data: {
       provider: authInfo.provider,
       hasLocalPassword: true,
