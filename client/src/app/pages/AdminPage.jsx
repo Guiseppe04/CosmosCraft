@@ -12,7 +12,7 @@ import {
   ChevronDown, ChevronUp, ArrowUp, ArrowDown,
   Printer, Mail, FileText, CreditCard, RotateCcw, Copy, Truck, MapPin, Smartphone, Upload,
   UserCheck, Clock10, PackageCheck, CircleCheck,
-  Layers, User, Tag, AlertCircle, DollarSign, Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal, Shield, Settings, Guitar, Wrench, PaintBucket, Hammer, Zap, Sparkles, Wallet, CalendarX,
+  Layers, User, Tag, AlertCircle, DollarSign, Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal, Shield, Settings, Guitar, Wrench, PaintBucket, Hammer, Zap, Sparkles, Wallet, CalendarX, ArrowLeft,
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
@@ -269,6 +269,28 @@ export function AdminPage() {
   const [dashboardOrderPaymentFilter, setDashboardOrderPaymentFilter] = useState('all')
   const [dashboardOrderStatusFilter, setDashboardOrderStatusFilter] = useState('all')
   const [dashboardAppointmentStatusFilter, setDashboardAppointmentStatusFilter] = useState('all')
+
+  // Redirect context: set when admin is sent from ProjectTaskTracker → OrdersTab to verify a payment.
+  // Stores { orderId, projectData } so we can auto-open the right order and prompt the admin to return.
+  const [orderRedirectState, setOrderRedirectState] = useState(null)
+  // Set to the updated order after the admin verifies payment from a redirect, to show the return prompt.
+  const [postPaymentUpdatedOrder, setPostPaymentUpdatedOrder] = useState(null)
+
+  // Dashboard deep-link filters are one-shot: DashboardTab sets them right before
+  // switching tabs and the target tab applies them on mount via the existing
+  // initial-filter props (OrdersTab → OrderManagement, AppointmentsTab). Reset
+  // them immediately after that mount so a later sidebar navigation or an order
+  // redirect never re-applies a stale dashboard filter.
+  useEffect(() => {
+    if (activeTab === 'orders') {
+      setDashboardOrderPaymentFilter('all')
+      setDashboardOrderStatusFilter('all')
+    }
+    if (activeTab === 'appointments') {
+      setDashboardAppointmentStatusFilter('all')
+    }
+  }, [activeTab])
+
   // Projects tab state
   const [projectStatusFilter, setProjectStatusFilter] = useState('all')
   const [projectAssignedFilter, setProjectAssignedFilter] = useState('all')
@@ -466,7 +488,8 @@ export function AdminPage() {
         const threshold = item.type === 'product' ? Number(item.low_stock_threshold ?? 10) : 10
         const tier = getStockTier(stock, threshold, item.max_stock)
         if (inventoryStatusFilter === 'out_of_stock') return tier === 'out_of_stock'
-        if (inventoryStatusFilter === 'critical') return tier === 'critical'
+        if (inventoryStatusFilter === 'low_stock' || inventoryStatusFilter === 'critical') return tier === 'critical'
+        if (inventoryStatusFilter === 'attention' || inventoryStatusFilter === 'issues') return tier === 'out_of_stock' || tier === 'critical'
         if (inventoryStatusFilter === 'warning') return tier === 'warning'
         if (inventoryStatusFilter === 'healthy') return tier === 'healthy'
         return true
@@ -506,7 +529,8 @@ export function AdminPage() {
         const threshold = Number(item.low_stock_threshold ?? 10)
         const tier = getStockTier(stock, threshold, item.max_stock)
         if (statusFilter === 'out_of_stock') return tier === 'out_of_stock'
-        if (statusFilter === 'critical') return tier === 'critical'
+        if (statusFilter === 'low_stock' || statusFilter === 'critical') return tier === 'critical'
+        if (statusFilter === 'attention' || statusFilter === 'issues') return tier === 'out_of_stock' || tier === 'critical'
         if (statusFilter === 'warning') return tier === 'warning'
         if (statusFilter === 'healthy') return tier === 'healthy'
         return true
@@ -567,7 +591,8 @@ export function AdminPage() {
         const threshold = 10 // parts always use 10 as threshold
         const tier = getStockTier(stock, threshold, item.max_stock)
         if (statusFilter === 'out_of_stock') return tier === 'out_of_stock'
-        if (statusFilter === 'critical') return tier === 'critical'
+        if (statusFilter === 'low_stock' || statusFilter === 'critical') return tier === 'critical'
+        if (statusFilter === 'attention' || statusFilter === 'issues') return tier === 'out_of_stock' || tier === 'critical'
         if (statusFilter === 'warning') return tier === 'warning'
         if (statusFilter === 'healthy') return tier === 'healthy'
         return true
@@ -600,11 +625,18 @@ export function AdminPage() {
   }, [filteredInventory, inventoryPage])
 
   const inventoryHealthData = (() => {
-    const productItems = visibleProducts.map((p) => ({ stock: Number(p.stock ?? 0), threshold: Number(p.low_stock_threshold ?? 10), maxStock: Number(p.max_stock ?? 0) }))
+    const productList = (visibleInventory && visibleInventory.length > 0) ? visibleInventory : (visibleProducts || [])
+    const productItems = productList.map((p) => ({ stock: Number(p.stock ?? 0), threshold: Number(p.low_stock_threshold ?? 10), maxStock: Number(p.max_stock ?? 0) }))
     const partItems = visibleParts.map((p) => ({ stock: Number(p.stock ?? p.quantity ?? 0), threshold: 10, maxStock: 0 }))
     const items = [...productItems, ...partItems]
-    if (items.length === 0) return { value: '0%', status: 'Healthy', statusClass: 'text-emerald-400', iconBg: 'bg-emerald-500/15' }
+    if (items.length === 0) return { value: '0%', status: 'Healthy', statusClass: 'text-emerald-400', iconBg: 'bg-emerald-500/15', outOfStockCount: 0, lowStockCount: 0, totalAttentionCount: 0 }
     let critical = false, warning = false, healthyCount = 0
+    let outOfStockCount = 0, lowStockCount = 0
+    productItems.forEach(({ stock, threshold, maxStock }) => {
+      const tier = getStockTier(stock, threshold, maxStock)
+      if (tier === 'out_of_stock') outOfStockCount += 1
+      else if (tier === 'critical') lowStockCount += 1
+    })
     items.forEach(({ stock, threshold, maxStock }) => {
       const tier = getStockTier(stock, threshold, maxStock)
       if (tier === 'out_of_stock' || tier === 'critical') critical = true
@@ -614,7 +646,15 @@ export function AdminPage() {
     const status = critical ? 'Critical' : warning ? 'Warning' : 'Healthy'
     const statusClass = critical ? 'text-red-400' : warning ? 'text-amber-400' : 'text-emerald-400'
     const iconBg = critical ? 'bg-red-500/15' : warning ? 'bg-amber-500/15' : 'bg-emerald-500/15'
-    return { value: `${Math.round((healthyCount / items.length) * 100)}%`, status, statusClass, iconBg }
+    return {
+      value: `${Math.round((healthyCount / items.length) * 100)}%`,
+      status,
+      statusClass,
+      iconBg,
+      outOfStockCount,
+      lowStockCount,
+      totalAttentionCount: outOfStockCount + lowStockCount,
+    }
   })()
 
   useEffect(() => {
@@ -842,7 +882,7 @@ export function AdminPage() {
       'inventory': () => { fetchInventory(); fetchParts(); fetchProducts(); },
       'pos': () => { fetchInventory(); fetchProducts(); },
       'sales-report': fetchSalesReport,
-      'dashboard': () => { fetchOrders(); refreshProjects(); fetchAppointments(); fetchCalendarAppointments(); fetchSalesReport() },
+      'dashboard': () => { fetchOrders(); refreshProjects(); fetchAppointments(); fetchCalendarAppointments(); fetchSalesReport(); fetchInventory({ silent: true }); fetchProducts(); },
     }
     loaders[activeTab]?.()
   }, [activeTab]) // run only when switching tabs
@@ -902,6 +942,7 @@ export function AdminPage() {
   // ── Real-time Event-Driven Updates for Admin Dashboard ─────────────────
   useSocketEvent('order:created', () => {
     fetchOrders()
+    fetchInventory({ silent: true })
     if (['dashboard', 'sales-report'].includes(activeTab)) {
       fetchSalesReport()
     }
@@ -910,6 +951,7 @@ export function AdminPage() {
 
   useSocketEvent('order:updated', () => {
     fetchOrders()
+    fetchInventory({ silent: true })
     if (['dashboard', 'sales-report'].includes(activeTab)) {
       fetchSalesReport()
     }
@@ -946,22 +988,27 @@ export function AdminPage() {
 
   useSocketEvent('stock:updated', () => {
     fetchInventory({ silent: true })
+    fetchProducts()
   })
 
   useSocketEvent('inventory:updated', () => {
     fetchInventory({ silent: true })
+    fetchProducts()
   })
 
   useSocketEvent('product:updated', () => {
     fetchProducts()
+    fetchInventory({ silent: true })
   })
 
   useSocketEvent('product:created', () => {
     fetchProducts()
+    fetchInventory({ silent: true })
   })
 
   useSocketEvent('product:deleted', () => {
     fetchProducts()
+    fetchInventory({ silent: true })
   })
 
   useSocketEvent('builder-part:updated', () => {
@@ -1178,7 +1225,10 @@ export function AdminPage() {
     }
 
     if (project?.project_id) {
-      openModal('project_tasks', project)
+      openModal('project_tasks', {
+        ...project,
+        source_order: order || null,
+      })
     } else if (order) {
       showToast('This customization order does not have an associated project yet.', 'error')
     }
@@ -1524,6 +1574,21 @@ export function AdminPage() {
       fetchUsers()
       fetchAppointmentCapacity()
     } catch (e) { showToast(e.message, 'error') }
+  }
+
+  // Create a staff/admin account from the Users tab's "Add Staff" modal.
+  // Throws on failure so the modal stays open for the admin to correct the form.
+  const createStaffAccount = async (staffData) => {
+    try {
+      const result = await adminApi.createUser(staffData)
+      showToast(result?.data?.user?.role === 'admin' ? 'Admin account created!' : 'Staff account created!')
+      await fetchUsers()
+      fetchAppointmentCapacity()
+      return result
+    } catch (e) {
+      showToast(e.message || 'Failed to create account', 'error')
+      throw e
+    }
   }
 
   // ── CRUD: Orders ─────────────────────────────────────────────────────────
@@ -2599,7 +2664,10 @@ export function AdminPage() {
               visibleProjects={visibleProjects}
               visibleAppointments={visibleAppointments}
               inventoryHealthData={inventoryHealthData}
+              visibleProducts={visibleInventory}
               enhancedOrderStats={enhancedOrderStats}
+              fetchInventory={fetchInventory}
+              handleRefresh={handleRefresh}
               isLoading={isLoading}
               setActiveTab={setActiveTab}
               // Dashboard filter-aware navigation setters
@@ -2750,6 +2818,7 @@ export function AdminPage() {
               changeUserRole={changeUserRole}
               toggleUserStatus={toggleUserStatus}
               appointmentCapacity={appointmentCapacity}
+              createStaffAccount={createStaffAccount}
             />
           )}
 
@@ -2771,20 +2840,80 @@ export function AdminPage() {
             />
           )}
 
-          {/* ── ORDERS ─────────────────────────────────────────────────────── */}
           {activeTab === 'orders' && (
-            <OrdersTab
-              orders={visibleOrders}
-              fetchOrders={fetchOrders}
-              user={user}
-              pagination={ordersPagination}
-              showToast={showToast}
-              onManageProject={handleManageCustomizationProject}
-              onGoToProjects={() => handleManageCustomizationProject()}
-              ordersLoading={ordersLoading}
-              initialPaymentStatusFilter={dashboardOrderPaymentFilter}
-              initialStatusFilter={dashboardOrderStatusFilter}
-            />
+            <>
+              {/* Return-to-tracker banner: shown after admin updates payment from a ProjectTaskTracker redirect */}
+              {postPaymentUpdatedOrder && orderRedirectState?.projectData && (
+                <motion.div
+                  key="return-to-tracker-banner"
+                  initial={{ opacity: 0, y: -12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  className="mb-4 flex flex-col gap-3 rounded-2xl border border-emerald-500/40 bg-gradient-to-r from-emerald-500/15 via-emerald-500/10 to-transparent p-4 shadow-lg sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
+                      <CheckCircle className="h-5 w-5 text-emerald-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-emerald-300">Payment Updated Successfully</p>
+                      <p className="mt-0.5 text-xs text-emerald-200/70">
+                        Would you like to return to the Project Task Tracker for{' '}
+                        <span className="font-semibold text-emerald-200">
+                          {orderRedirectState.projectData?.name || orderRedirectState.projectData?.title || 'this project'}
+                        </span>{' '}
+                        and continue working?
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2 pl-12 sm:pl-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPostPaymentUpdatedOrder(null)
+                        setOrderRedirectState(null)
+                      }}
+                      className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-white/60 hover:text-white transition-colors"
+                    >
+                      Stay Here
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const projectData = orderRedirectState.projectData
+                        setPostPaymentUpdatedOrder(null)
+                        setOrderRedirectState(null)
+                        openModal('project_tasks', projectData)
+                        setActiveTab('projects')
+                      }}
+                      className="inline-flex items-center gap-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 px-4 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 hover:text-white transition-all"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                      Go Back to Tracker
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+              <OrdersTab
+                orders={visibleOrders}
+                fetchOrders={fetchOrders}
+                user={user}
+                pagination={ordersPagination}
+                showToast={showToast}
+                onManageProject={handleManageCustomizationProject}
+                onGoToProjects={() => handleManageCustomizationProject()}
+                ordersLoading={ordersLoading}
+                initialPaymentStatusFilter={dashboardOrderPaymentFilter}
+                initialStatusFilter={dashboardOrderStatusFilter}
+                initialOrderId={orderRedirectState?.orderId ?? null}
+                onPaymentStatusUpdated={(updatedOrder) => {
+                  // Only trigger the return-to-tracker prompt when this was a redirect from ProjectTaskTracker
+                  if (orderRedirectState) {
+                    setPostPaymentUpdatedOrder(updatedOrder)
+                  }
+                }}
+              />
+            </>
           )}
 
           {/* ── APPOINTMENTS ───────────────────────────────────────────────── */}
@@ -2878,6 +3007,22 @@ export function AdminPage() {
                   staffMembers={users}
                   onProjectChange={(updated) => {
                     setProjects(previous => previous.map(project => project.project_id === updated.project_id ? { ...project, progress: updated.progress, task_summary: updated.task_summary } : project))
+                  }}
+                  onRedirectToOrder={(order) => {
+                    if (!order) {
+                      setActiveTab('orders')
+                      closeModal()
+                      return
+                    }
+                    // Store redirect context so OrdersTab can auto-open the order
+                    // and we can show the return-to-tracker prompt after payment update.
+                    setOrderRedirectState({
+                      orderId: order.order_id,
+                      projectData: modal.data,
+                    })
+                    setPostPaymentUpdatedOrder(null)
+                    setActiveTab('orders')
+                    closeModal()
                   }}
                 />
               )}

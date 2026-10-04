@@ -10,20 +10,21 @@ const SETTINGS_SEARCH_TERMS = {
   account: 'your account profile email name role administrator',
   contact: 'site contact information email phone storefront landing page terms conditions',
   branch: 'appointment branch address location pickup country street province city barangay postal',
-  general: 'general settings dashboard theme light dark appearance',
+  // general: 'general settings dashboard theme light dark appearance',
   audit: 'audit logs history orders projects refunds payments inventory',
   system: 'system information version updated admin role',
 }
 
-function SettingsCard({ icon: Icon, title, description, children }) {
+function SettingsCard({ icon: Icon, title, description, action, children }) {
   return (
     <section className="admin-settings-card">
       <div className="admin-settings-heading">
         <span className="admin-settings-icon"><Icon /></span>
-        <div>
+        <div className="admin-settings-heading-copy">
           <h3 className="admin-settings-title">{title}</h3>
           <p className="admin-settings-description">{description}</p>
         </div>
+        {action && <div className="admin-settings-heading-action">{action}</div>}
       </div>
       {children}
     </section>
@@ -98,11 +99,12 @@ export function SettingsTab({
           )}
 
           {visibleSections.includes('audit') && (
-            <SettingsCard icon={History} title="Audit logs" description="Review order updates, project milestones, refunds, payments, and inventory changes.">
-              <button type="button" onClick={() => setActiveSubTab('audit')} className="admin-settings-link">
-                Open Audit Logs<ArrowRight />
-              </button>
-            </SettingsCard>
+            <SettingsCard icon={History} title="Audit logs" description="Review order updates, project milestones, refunds, payments, and inventory changes."
+              action={(
+                <button type="button" onClick={() => setActiveSubTab('audit')} className="admin-settings-button">
+                  Open Audit Logs<ArrowRight />
+                </button>
+              )} />
           )}
 
           {visibleSections.includes('system') && (

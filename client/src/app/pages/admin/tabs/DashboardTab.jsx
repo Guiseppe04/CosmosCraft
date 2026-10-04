@@ -27,6 +27,8 @@ import {
 import { formatCurrency } from '../../../utils/formatCurrency'
 import { adminApi } from '../../../utils/adminApi'
 import { getOrderCustomerName } from '../../../utils/invoiceBuilder.js'
+import { getStockTier } from '../../../utils/stockUtils'
+import { useSocketEvent } from '../../../context/SocketContext'
 
 /* ─── Helper Functions ─── */
 
@@ -102,9 +104,22 @@ export function DashboardTab({
   visibleProjects = [],
   visibleAppointments = [],
   inventoryHealthData,
+  visibleProducts = [],
   enhancedOrderStats,
+  fetchInventory,
   isLoading,
   setActiveTab,
+  // Dashboard deep-link filter setters (AdminPage passes them). They pre-apply a
+  // filter to a workspace tab before navigating so an attention item opens
+  // directly into the relevant records. StaffDashboard omits them, in which case
+  // navigation simply degrades to a plain tab switch.
+  setDashboardOrderPaymentFilter,
+  setDashboardOrderStatusFilter,
+  setDashboardAppointmentStatusFilter,
+  setProjectStatusFilter,
+  setProductsInventoryFilter,
+  setPartsInventoryFilter,
+  setInventorySubTab,
 }) {
   const [salesTrendMetric, setSalesTrendMetric] = useState('net')
   const [reportDays, setReportDays] = useState(30)
@@ -130,6 +145,23 @@ export function DashboardTab({
     }).finally(() => { if (active) setPeriodLoading(false) })
     return () => { active = false }
   }, [initialSalesReport, reportDays])
+
+  // Live WebSocket listeners for real-time dashboard stock/inventory updates
+  useSocketEvent('inventory:updated', () => {
+    fetchInventory?.({ silent: true })
+  })
+  useSocketEvent('stock:updated', () => {
+    fetchInventory?.({ silent: true })
+  })
+  useSocketEvent('order:created', () => {
+    fetchInventory?.({ silent: true })
+  })
+  useSocketEvent('order:updated', () => {
+    fetchInventory?.({ silent: true })
+  })
+  useSocketEvent('pos:sale_completed', () => {
+    fetchInventory?.({ silent: true })
+  })
 
   // `salesReport` stays null until the first dashboard fetch resolves, so it is
   // a reliable "nothing rendered yet" signal alongside the shared isLoading flag.
@@ -209,7 +241,45 @@ export function DashboardTab({
     }
   }, [visibleOrders, visibleProjects, visibleAppointments, salesReport])
 
-  /* ── 2. Needs Attention Items (Prioritized by Urgency) ── */
+  /* ── 2. Inventory Stock Counts & Attention Items ── */
+  const inventoryCounts = useMemo(() => {
+    if (
+      typeof inventoryHealthData?.outOfStockCount === 'number' &&
+      typeof inventoryHealthData?.lowStockCount === 'number'
+    ) {
+      const outOfStock = Math.max(0, inventoryHealthData.outOfStockCount)
+      const lowStock = Math.max(0, inventoryHealthData.lowStockCount)
+      return {
+        outOfStock,
+        lowStock,
+        total: outOfStock + lowStock,
+      }
+    }
+
+    const prods = Array.isArray(visibleProducts) ? visibleProducts : []
+    let outOfStock = 0
+    let lowStock = 0
+
+    prods.forEach((p) => {
+      const stock = Number(p.stock ?? 0)
+      const threshold = Number(p.low_stock_threshold ?? 10)
+      const maxStock = Number(p.max_stock ?? 0)
+      const tier = getStockTier(stock, threshold, maxStock)
+      if (tier === 'out_of_stock') {
+        outOfStock += 1
+      } else if (tier === 'critical') {
+        lowStock += 1
+      }
+    })
+
+    return {
+      outOfStock,
+      lowStock,
+      total: outOfStock + lowStock,
+    }
+  }, [inventoryHealthData, visibleProducts])
+
+  /* ── 3. Needs Attention Items (Prioritized by Urgency) ── */
   const attentionItems = useMemo(() => {
     const orders = Array.isArray(visibleOrders) ? visibleOrders : []
     const projects = Array.isArray(visibleProjects) ? visibleProjects : []
@@ -231,6 +301,7 @@ export function DashboardTab({
         } awaiting payment verification`,
         actionLabel: 'View Orders',
         tab: 'orders',
+        filter: { paymentStatus: 'for_verification' },
       })
     }
 
@@ -246,6 +317,7 @@ export function DashboardTab({
         } awaiting confirmation`,
         actionLabel: 'View Appointments',
         tab: 'appointments',
+        filter: { appointmentStatus: 'pending' },
       })
     }
 
@@ -286,6 +358,7 @@ export function DashboardTab({
         } awaiting payment`,
         actionLabel: 'View Orders',
         tab: 'orders',
+        filter: { paymentStatus: 'pending' },
       })
     }
 
@@ -310,21 +383,50 @@ export function DashboardTab({
       })
     }
 
-    // Priority 6: Inventory Status Warning or Critical
-    if (
-      inventoryHealthData?.status &&
-      ['Critical', 'Warning'].includes(inventoryHealthData.status)
-    ) {
-      items.push({
-        id: 'inventory-health',
-        priority: 6,
-        severity: inventoryHealthData.status === 'Critical' ? 'high' : 'medium',
-        label: `Inventory health is ${inventoryHealthData.status.toLowerCase()} (${
-          inventoryHealthData.value || 'Low'
-        } healthy)`,
-        actionLabel: 'View Inventory',
-        tab: 'inventory',
-      })
+    // Priority 6: Inventory Stock Problems (Actual out-of-stock and low-stock products)
+    const { outOfStock, lowStock, total: stockIssuesCount } = inventoryCounts
+
+    if (stockIssuesCount > 0) {
+      if (outOfStock > 0 && lowStock > 0) {
+        items.push({
+          id: 'inventory-stock-attention',
+          type: 'inventory-combined',
+          priority: 6,
+          severity: 'high',
+          label: `${stockIssuesCount} products need stock attention`,
+          actionLabel: 'View All Issues',
+          tab: 'inventory',
+          filter: { status: 'attention', subTab: 'products' },
+          outOfStockCount: outOfStock,
+          lowStockCount: lowStock,
+        })
+      } else if (outOfStock > 0) {
+        items.push({
+          id: 'inventory-out-of-stock',
+          type: 'inventory-single',
+          priority: 6,
+          severity: 'high',
+          label: `${outOfStock} product${outOfStock > 1 ? 's are' : ' is'} out of stock`,
+          actionLabel: 'View Out of Stock',
+          tab: 'inventory',
+          filter: { status: 'out_of_stock', subTab: 'products' },
+          outOfStockCount: outOfStock,
+          lowStockCount: 0,
+        })
+      } else if (lowStock > 0) {
+        items.push({
+          id: 'inventory-low-stock',
+          type: 'inventory-single',
+          priority: 6,
+          severity: 'medium',
+          label: `${lowStock} product${lowStock > 1 ? 's are' : ' is'} low in stock`,
+          actionLabel: 'View Low Stock',
+          tab: 'inventory',
+          filter: { status: 'low_stock', subTab: 'products' },
+          outOfStockCount: 0,
+          lowStockCount: lowStock,
+        })
+      }
     }
 
     // Priority 7: Projects On Hold
@@ -339,12 +441,13 @@ export function DashboardTab({
         } on hold`,
         actionLabel: 'View Projects',
         tab: 'projects',
+        filter: { projectStatus: 'on_hold' },
       })
     }
 
     // Sort by explicit priority
     return items.sort((a, b) => a.priority - b.priority)
-  }, [visibleOrders, visibleProjects, visibleAppointments, inventoryHealthData])
+  }, [visibleOrders, visibleProjects, visibleAppointments, inventoryCounts])
 
   /* ── 3. Recent Orders ── */
   const recentOrders = useMemo(() => {
@@ -474,6 +577,57 @@ export function DashboardTab({
     { label: 'Active projects', value: summary.activeProjects, detail: `${overdueCount} overdue · ${summary.onHoldProjects} on hold`, icon: Briefcase, color: 'bg-orange-500/10 text-orange-500', tab: 'projects' },
   ]
 
+  /**
+   * Centralized Dashboard → workspace navigation.
+   *
+   * Attention items can carry a `filter` describing the records they want opened
+   * (e.g. orders awaiting payment verification). When provided, the matching
+   * deep-link state in AdminPage is set right before switching tabs; the target
+   * tab then consumes it on mount by reusing its existing filter UI/query, so no
+   * second filtering system is introduced.
+   *
+   * Every navigation also clears the deep-link states it does NOT target, so a
+   * filter from a previous attention item never leaks into a normal visit (the
+   * "Total orders" metric, Recent orders, Recent activity, etc. always open the
+   * Orders tab unfiltered).
+   */
+  const openWorkspaceTab = (tab, filter) => {
+    // Orders: one-shot deep-link consumed by OrdersTab/OrderManagement on mount.
+    if (tab === 'orders') {
+      setDashboardOrderPaymentFilter?.(filter?.paymentStatus || 'all')
+      setDashboardOrderStatusFilter?.(filter?.orderStatus || 'all')
+    } else {
+      setDashboardOrderPaymentFilter?.('all')
+      setDashboardOrderStatusFilter?.('all')
+    }
+
+    // Appointments: one-shot deep-link consumed by AppointmentsTab on mount.
+    if (tab === 'appointments') {
+      setDashboardAppointmentStatusFilter?.(filter?.appointmentStatus || 'all')
+    } else {
+      setDashboardAppointmentStatusFilter?.('all')
+    }
+
+    // Projects: the status filter is shared live state, so only touch it when an
+    // attention item explicitly requests a project status (e.g. "on hold").
+    if (tab === 'projects' && filter?.projectStatus) {
+      setProjectStatusFilter?.(filter.projectStatus)
+    }
+
+    // Inventory: deep-link to products subTab and apply stock status filter
+    if (tab === 'inventory') {
+      setInventorySubTab?.(filter?.subTab || 'products')
+      const targetStatus = filter?.status || filter?.stockStatus || 'all'
+      setProductsInventoryFilter?.((prev) => ({
+        ...prev,
+        status: targetStatus,
+        page: 1,
+      }))
+    }
+
+    setActiveTab(tab)
+  }
+
   return (
     <motion.div key="dashboard" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
       <header className="py-1">
@@ -484,7 +638,7 @@ export function DashboardTab({
 
       <section aria-label="Business snapshot" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map(({ label, value, detail, icon: Icon, color, tab }) => (
-          <button type="button" key={label} onClick={() => setActiveTab(tab)} className={`${card} p-5 text-left transition-colors hover:border-[var(--gold-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold-primary)]`}>
+          <button type="button" key={label} onClick={() => openWorkspaceTab(tab)} className={`${card} p-5 text-left transition-colors hover:border-[var(--gold-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold-primary)]`}>
             <span className={`inline-flex rounded-xl p-2 ${color}`}><Icon className="h-4 w-4" /></span>
             <p className="mt-3 text-xs text-[var(--text-muted)]">{label}</p>
             {showSkeleton ? <SkeletonBlock className="mt-2 h-7 w-28" /> : <p className="mt-1 break-words text-xl font-bold tabular-nums text-[var(--text-light)]">{value}</p>}
@@ -522,7 +676,7 @@ export function DashboardTab({
               </div>
             ) : <div className="flex min-h-64 items-center justify-center text-center text-xs text-[var(--text-muted)]">Historical daily trends will appear as transactions are recorded.</div>}
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-              <button type="button" onClick={() => setActiveTab('sales-report')} className="inline-flex items-center gap-1 text-xs text-[var(--gold-primary)]">View detailed report <ArrowRight className="h-3 w-3" /></button>
+              <button type="button" onClick={() => openWorkspaceTab('sales-report')} className="inline-flex items-center gap-1 text-xs text-[var(--gold-primary)]">View detailed report <ArrowRight className="h-3 w-3" /></button>
               <div className="inline-flex gap-2">{[['net','Net sales'],['transactions','Transactions']].map(([value,label]) => <button type="button" key={value} aria-pressed={salesTrendMetric === value} onClick={() => setSalesTrendMetric(value)} className={`rounded-md px-2 py-1 text-[10px] ${salesTrendMetric === value ? 'bg-[var(--bg-primary)] text-[var(--text-light)]' : 'text-[var(--text-muted)]'}`}>{label}</button>)}</div>
             </div>
           </div>
@@ -531,22 +685,103 @@ export function DashboardTab({
         <section aria-labelledby="needs-attention-heading" className={`${card} flex flex-col p-5`}>
           <div className="flex items-start justify-between gap-2"><div><h2 id="needs-attention-heading" className="text-sm font-semibold text-[var(--text-light)]">Needs attention</h2><p className="mt-1 text-[11px] text-[var(--text-muted)]">Prioritized by urgency</p></div>{!showSkeleton && <span className="rounded-full bg-red-500/10 px-2 py-1 text-[10px] text-red-500">{attentionItems.length} items</span>}</div>
           <div className="mt-4 flex-1 space-y-2">
-            {showSkeleton ? [0,1,2].map(index => <SkeletonBlock key={index} className="h-14 w-full" />) : attentionItems.length ? attentionItems.map(item => (
-              <button type="button" key={item.id} onClick={() => setActiveTab(item.tab)} className="flex w-full items-center gap-3 rounded-xl border border-[var(--border)] p-3 text-left transition-colors hover:border-[var(--gold-primary)]">
-                <span className={`rounded-lg p-2 ${item.severity === 'high' ? 'bg-orange-500/10 text-orange-500' : 'bg-violet-500/10 text-violet-500'}`}>{item.tab === 'appointments' ? <Calendar className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}</span>
-                <span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-[var(--text-light)]">{item.label}</span><span className="mt-1 block text-[10px] text-[var(--text-muted)]">{item.actionLabel}</span></span><ArrowRight className="h-3 w-3 shrink-0 text-[var(--text-muted)]" />
-              </button>
-            )) : <div className="flex items-center gap-2 p-3 text-xs text-[var(--text-muted)]"><CheckCircle2 className="h-4 w-4 text-emerald-500" />No urgent actions needed.</div>}
+            {showSkeleton ? [0,1,2].map(index => <SkeletonBlock key={index} className="h-14 w-full" />) : attentionItems.length ? attentionItems.map(item => {
+              if (item.type === 'inventory-combined') {
+                return (
+                  <div
+                    key={item.id}
+                    className="rounded-xl border border-[var(--border)] p-3 transition-colors hover:border-[var(--gold-primary)]"
+                  >
+                    <div className="flex w-full items-start gap-3">
+                      <span className="rounded-lg p-2 bg-red-500/10 text-red-400 shrink-0 mt-0.5">
+                        <Package className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <button
+                          type="button"
+                          onClick={() => openWorkspaceTab(item.tab, item.filter)}
+                          className="group flex w-full items-center justify-between gap-2 text-left focus-visible:outline-none"
+                        >
+                          <span className="block text-xs font-semibold text-[var(--text-light)] group-hover:text-[var(--gold-primary)] transition-colors">
+                            {item.label}
+                          </span>
+                          <ArrowRight className="h-3 w-3 shrink-0 text-[var(--text-muted)] group-hover:text-[var(--gold-primary)] transition-colors" />
+                        </button>
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openWorkspaceTab('inventory', { status: 'out_of_stock', subTab: 'products' })}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[11px] font-medium text-red-400 transition-colors hover:bg-red-500/20"
+                          >
+                            <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+                            Out of stock: {item.outOfStockCount} {item.outOfStockCount === 1 ? 'product' : 'products'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openWorkspaceTab('inventory', { status: 'low_stock', subTab: 'products' })}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-300 transition-colors hover:bg-amber-500/20"
+                          >
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                            Low stock: {item.lowStockCount} {item.lowStockCount === 1 ? 'product' : 'products'}
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => openWorkspaceTab(item.tab, item.filter)}
+                          className="mt-2 inline-flex items-center gap-1 text-[10px] text-[var(--text-muted)] hover:text-[var(--gold-primary)] transition-colors"
+                        >
+                          <span>{item.actionLabel}</span>
+                          <ArrowRight className="h-2.5 w-2.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+
+              return (
+                <button
+                  type="button"
+                  key={item.id}
+                  onClick={() => openWorkspaceTab(item.tab, item.filter)}
+                  className="flex w-full items-center gap-3 rounded-xl border border-[var(--border)] p-3 text-left transition-colors hover:border-[var(--gold-primary)]"
+                >
+                  <span
+                    className={`rounded-lg p-2 ${
+                      item.severity === 'high'
+                        ? 'bg-red-500/10 text-red-400'
+                        : item.severity === 'medium'
+                        ? 'bg-amber-500/10 text-amber-400'
+                        : 'bg-violet-500/10 text-violet-500'
+                    }`}
+                  >
+                    {item.tab === 'appointments' ? (
+                      <Calendar className="h-4 w-4" />
+                    ) : item.tab === 'inventory' ? (
+                      <Package className="h-4 w-4" />
+                    ) : (
+                      <AlertTriangle className="h-4 w-4" />
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-semibold text-[var(--text-light)]">
+                      {item.label}
+                    </span>
+                    <span className="mt-1 block text-[10px] text-[var(--text-muted)]">
+                      {item.actionLabel}
+                    </span>
+                  </span>
+                  <ArrowRight className="h-3 w-3 shrink-0 text-[var(--text-muted)]" />
+                </button>
+              )
+            }) : <div className="flex items-center gap-2 p-3 text-xs text-[var(--text-muted)]"><CheckCircle2 className="h-4 w-4 text-emerald-500" />No urgent actions needed.</div>}
           </div>
-          <button type="button" onClick={() => setActiveTab('inventory')} className="mt-4 rounded-xl bg-[var(--bg-primary)] p-3 text-left">
-            <div className="flex justify-between gap-2 text-[10px]"><span className="text-[var(--text-muted)]">Inventory health</span><span className="font-semibold text-[var(--text-light)]">{inventoryHealthData?.status || 'Not available'} {inventoryHealthData?.value || ''}</span></div>
-          </button>
         </section>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.8fr)_minmax(300px,1fr)]">
         <section aria-labelledby="recent-orders-heading" className={card}>
-          <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] p-5"><div><h2 id="recent-orders-heading" className="text-sm font-semibold text-[var(--text-light)]">Recent orders</h2><p className="mt-1 text-[11px] text-[var(--text-muted)]">Latest order activity</p></div><button type="button" onClick={() => setActiveTab('orders')} className="inline-flex shrink-0 items-center gap-1 text-xs text-[var(--gold-primary)]">View all <ArrowRight className="h-3 w-3" /></button></div>
+          <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] p-5"><div><h2 id="recent-orders-heading" className="text-sm font-semibold text-[var(--text-light)]">Recent orders</h2><p className="mt-1 text-[11px] text-[var(--text-muted)]">Latest order activity</p></div><button type="button" onClick={() => openWorkspaceTab('orders')} className="inline-flex shrink-0 items-center gap-1 text-xs text-[var(--gold-primary)]">View all <ArrowRight className="h-3 w-3" /></button></div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] text-left text-xs">
               <thead className="border-b border-[var(--border)] text-[10px] uppercase tracking-wider text-[var(--text-muted)]"><tr>{['Order','Customer','Amount','Status','Date'].map(label => <th key={label} className="px-4 py-3 font-medium">{label}</th>)}</tr></thead>
@@ -554,7 +789,7 @@ export function DashboardTab({
                 {showSkeleton ? [0,1,2,3].map(index => <tr key={index}><td colSpan={5} className="p-4"><SkeletonBlock className="h-4 w-full" /></td></tr>) : recentOrders.length ? recentOrders.map(order => {
                   const customer = getCustomerName(order)
                   const initials = customer.split(' ').slice(0,2).map(part => part[0]).join('')
-                  return <tr key={order.order_id} className="text-[var(--text-light)] hover:bg-[var(--bg-primary)]/50"><td className="whitespace-nowrap px-4 py-4"><button type="button" onClick={() => setActiveTab('orders')} className="text-[var(--gold-primary)]">{order.order_number || order.order_id?.slice(0,8)}</button></td><td className="px-4 py-4"><div className="flex items-center gap-2"><span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--bg-primary)] text-[10px]">{initials}</span><span className="max-w-[140px] truncate">{customer}</span></div></td><td className="whitespace-nowrap px-4 py-4 font-semibold">{formatCurrency(getOrderTotal(order))}</td><td className="px-4 py-4"><StatusBadge status={order.status} /></td><td className="whitespace-nowrap px-4 py-4 text-[var(--text-muted)]">{formatRecordTimeOrDate(order.created_at)}</td></tr>
+                  return <tr key={order.order_id} className="text-[var(--text-light)] hover:bg-[var(--bg-primary)]/50"><td className="whitespace-nowrap px-4 py-4"><button type="button" onClick={() => openWorkspaceTab('orders')} className="text-[var(--gold-primary)]">{order.order_number || order.order_id?.slice(0,8)}</button></td><td className="px-4 py-4"><div className="flex items-center gap-2"><span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--bg-primary)] text-[10px]">{initials}</span><span className="max-w-[140px] truncate">{customer}</span></div></td><td className="whitespace-nowrap px-4 py-4 font-semibold">{formatCurrency(getOrderTotal(order))}</td><td className="px-4 py-4"><StatusBadge status={order.status} /></td><td className="whitespace-nowrap px-4 py-4 text-[var(--text-muted)]">{formatRecordTimeOrDate(order.created_at)}</td></tr>
                 }) : <tr><td colSpan={5} className="p-8 text-center text-[var(--text-muted)]">No recent orders.</td></tr>}
               </tbody>
             </table>
@@ -567,21 +802,21 @@ export function DashboardTab({
             {showSkeleton ? [0,1,2].map(index => <SkeletonBlock key={index} className="h-12 w-full" />) : upcomingAppointments.length ? upcomingAppointments.map(apt => {
               const date = apt.scheduled_at ? new Date(apt.scheduled_at) : null
               const validDate = date && !isNaN(date.getTime())
-              return <button type="button" key={apt.appointment_id} onClick={() => setActiveTab('appointments')} className="flex w-full items-center gap-3 rounded-lg py-2 text-left hover:bg-[var(--bg-primary)]">
+              return <button type="button" key={apt.appointment_id} onClick={() => openWorkspaceTab('appointments')} className="flex w-full items-center gap-3 rounded-lg py-2 text-left hover:bg-[var(--bg-primary)]">
                 <span className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-500"><span className="text-[9px] uppercase">{validDate ? date.toLocaleDateString('en-PH',{month:'short', timeZone:'Asia/Manila'}) : 'TBA'}</span><span className="text-sm font-semibold">{validDate ? date.toLocaleDateString('en-PH',{day:'numeric', timeZone:'Asia/Manila'}) : '-'}</span></span>
                 <span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold text-[var(--text-light)]">{apt.service_name || apt.title || 'Appointment'}</span><span className="mt-1 block truncate text-[10px] text-[var(--text-muted)]">{apt.customer_name || apt.user_name || 'Customer'} · {String(apt.status || 'pending').replace(/_/g,' ')}</span></span>
                 <span className="shrink-0 text-[10px] text-[var(--text-muted)]">{validDate ? date.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Manila'}) : apt.time || 'TBA'}</span>
               </button>
             }) : <p className="py-6 text-center text-xs text-[var(--text-muted)]">No upcoming appointments.</p>}
           </div>
-          <button type="button" onClick={() => setActiveTab('appointments')} className="mt-4 w-full rounded-xl border border-dashed border-[var(--border)] p-3 text-xs text-[var(--gold-primary)] hover:border-[var(--gold-primary)]">View appointment calendar</button>
+          <button type="button" onClick={() => openWorkspaceTab('appointments')} className="mt-4 w-full rounded-xl border border-dashed border-[var(--border)] p-3 text-xs text-[var(--gold-primary)] hover:border-[var(--gold-primary)]">View appointment calendar</button>
         </section>
       </div>
 
       <section aria-labelledby="recent-activity-heading" className={card}>
         <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] p-5"><div><h2 id="recent-activity-heading" className="text-sm font-semibold text-[var(--text-light)]">Recent activity</h2><p className="mt-1 text-[11px] text-[var(--text-muted)]">A chronological view of business events</p></div><span className="text-[10px] text-[var(--text-muted)]">Latest business activity</span></div>
         <div className="divide-y divide-[var(--border)]">
-          {showSkeleton ? [0,1,2].map(index => <div key={index} className="p-4"><SkeletonBlock className="h-4 w-full" /></div>) : recentActivity.length ? recentActivity.map(event => <button type="button" key={event.id} onClick={() => setActiveTab(event.tab)} className="flex w-full items-center gap-3 p-4 text-left hover:bg-[var(--bg-primary)]/50"><span className="w-16 shrink-0 text-[10px] text-[var(--text-muted)]">{formatRecordTimeOrDate(event.timestamp)}</span><span className="rounded-lg bg-[var(--bg-primary)] p-2"><Activity className="h-3 w-3 text-[var(--text-muted)]" /></span><span className="min-w-0 flex-1 text-xs text-[var(--text-light)]">{event.description}{event.detail && <span className="text-[var(--text-muted)]"> &middot; {event.detail}</span>}</span><ArrowRight className="h-3 w-3 shrink-0 text-[var(--text-muted)]" /></button>) : <p className="p-8 text-center text-xs text-[var(--text-muted)]">No recent activity.</p>}
+          {showSkeleton ? [0,1,2].map(index => <div key={index} className="p-4"><SkeletonBlock className="h-4 w-full" /></div>) : recentActivity.length ? recentActivity.map(event => <button type="button" key={event.id} onClick={() => openWorkspaceTab(event.tab)} className="flex w-full items-center gap-3 p-4 text-left hover:bg-[var(--bg-primary)]/50"><span className="w-16 shrink-0 text-[10px] text-[var(--text-muted)]">{formatRecordTimeOrDate(event.timestamp)}</span><span className="rounded-lg bg-[var(--bg-primary)] p-2"><Activity className="h-3 w-3 text-[var(--text-muted)]" /></span><span className="min-w-0 flex-1 text-xs text-[var(--text-light)]">{event.description}{event.detail && <span className="text-[var(--text-muted)]"> &middot; {event.detail}</span>}</span><ArrowRight className="h-3 w-3 shrink-0 text-[var(--text-muted)]" /></button>) : <p className="p-8 text-center text-xs text-[var(--text-muted)]">No recent activity.</p>}
         </div>
       </section>
     </motion.div>

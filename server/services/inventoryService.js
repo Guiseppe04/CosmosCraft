@@ -673,8 +673,8 @@ exports.getInventorySummary = async () => {
     `SELECT 
       COUNT(DISTINCT p.product_id) as total_products,
       SUM(i.stock) as total_units,
-       COUNT(DISTINCT CASE WHEN i.stock <= COALESCE(i.max_stock * (i.low_stock_threshold / 100.0), i.max_stock * 0.10) THEN p.product_id END) as low_stock_count,
-      COUNT(DISTINCT CASE WHEN i.stock = 0 THEN p.product_id END) as out_of_stock_count,
+      COUNT(DISTINCT CASE WHEN i.stock > 0 AND i.stock <= COALESCE(i.max_stock * (i.low_stock_threshold / 100.0), i.max_stock * 0.10) THEN p.product_id END) as low_stock_count,
+      COUNT(DISTINCT CASE WHEN i.stock <= 0 OR i.stock IS NULL THEN p.product_id END) as out_of_stock_count,
       SUM(i.stock * p.price) as total_inventory_value
      FROM products p
      LEFT JOIN inventory i ON p.product_id = i.product_id

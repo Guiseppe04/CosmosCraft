@@ -135,9 +135,11 @@ html[data-theme="light"] .admin-workspace {
 .admin-workspace .admin-settings-search input::placeholder { color: var(--admin-subtle); }
 .admin-workspace .admin-settings-search:focus-within { border-color: #e4b727; box-shadow: 0 0 0 3px #ebbc2520; }
 .admin-workspace .admin-settings-main { padding: 28px 32px 48px; }
-.admin-settings-stack { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 860px; margin: 0 auto; }
+.admin-settings-stack { display: flex; flex-direction: column; gap: 16px; width: 100%; }
 .admin-workspace .admin-settings-card { padding: 22px; border: 1px solid var(--admin-line); border-radius: 17px; background: var(--admin-panel); box-shadow: 0 1px 2px #16192203, 0 8px 28px #16192203; }
 .admin-workspace .admin-settings-heading { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 22px; }
+.admin-workspace .admin-settings-heading-copy { min-width: 0; }
+.admin-workspace .admin-settings-heading-action { display: flex; align-items: center; gap: 8px; height: 36px; margin-left: auto; padding-left: 12px; }
 .admin-workspace .admin-settings-icon { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 11px; background: var(--admin-icon-bg); color: var(--admin-icon); }
 .admin-workspace .admin-settings-icon svg { width: 18px; height: 18px; }
 .admin-workspace .admin-settings-title { margin: 2px 0 4px; font-size: 15px; line-height: 22px; font-weight: 600; color: var(--admin-ink); }
@@ -164,6 +166,9 @@ html[data-theme="light"] .admin-workspace {
 .admin-workspace .admin-settings-link { display: inline-flex; align-items: center; gap: 8px; color: var(--admin-icon); font-size: 10px; font-weight: 500; }
 .admin-workspace .admin-settings-link:hover { text-decoration: underline; }
 .admin-workspace .admin-settings-link svg { width: 13px; height: 13px; }
+.admin-workspace .admin-settings-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 14px; border: 1px solid var(--admin-line); border-radius: 10px; background: var(--admin-input); color: var(--admin-ink); font-size: 10px; font-weight: 500; white-space: nowrap; transition: border-color .18s, color .18s, box-shadow .18s; }
+.admin-workspace .admin-settings-button svg { width: 13px; height: 13px; }
+.admin-workspace .admin-settings-button:hover { border-color: #e4b727; color: var(--admin-icon); box-shadow: 0 0 0 3px #ebbc2520; }
 .admin-workspace .admin-branch-preview { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border: 1px solid var(--admin-line); border-radius: 12px; }
 .admin-workspace .admin-branch-preview > .admin-settings-icon { width: 28px; height: 28px; border-radius: 9px; }
 .admin-workspace .admin-branch-preview > .admin-settings-icon svg { width: 15px; height: 15px; }
@@ -195,7 +200,8 @@ html[data-theme="light"] .admin-workspace {
   .admin-workspace .admin-settings-search { width: 160px; }
   .admin-workspace .admin-settings-main { padding: 20px 14px 32px; }
   .admin-workspace .admin-settings-card { padding: 18px; }
-  .admin-workspace .admin-settings-heading { gap: 10px; }
+  .admin-workspace .admin-settings-heading { gap: 10px; flex-wrap: wrap; }
+  .admin-workspace .admin-settings-heading-action { margin-left: 46px; padding-left: 0; }
   .admin-workspace .admin-settings-title { font-size: 14px; }
   .admin-workspace .admin-settings-detail-row { align-items: flex-start; flex-direction: column; gap: 5px; }
   .admin-workspace .admin-settings-detail-value { text-align: left; }

@@ -1,13 +1,46 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { motion } from 'motion/react'
-import { Search, Filter, Users, X, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { motion, AnimatePresence } from 'motion/react'
+import { Search, Filter, Users, X, ChevronLeft, ChevronRight, ChevronDown, UserPlus } from 'lucide-react'
 import { StatusBadge } from '../components/shared/StatusBadge'
 import { ConfirmModal } from '../../../components/ui/ConfirmModal'
+import { FormField } from '../components/shared/FormField'
+import { ModalHeader } from '../components/shared/ModalHeader'
+import { ModalFooter } from '../components/shared/ModalFooter'
 import { VALID_ROLES } from '../constants/adminOptions'
 
 const SUPER_ADMIN_PATTERN = /super[\s_-]*admin/i
 const SUPER_ADMIN_LABEL_KEYS = ['role', 'role_name', 'role_label', 'label', 'name', 'title']
 const PAGE_SIZE_VALUES = [10, 25, 50, 100]
+
+const EMPTY_STAFF_FORM = {
+  firstName: '',
+  middleName: '',
+  lastName: '',
+  email: '',
+  phone: '',
+  role: 'staff',
+  password: '',
+  confirmPassword: '',
+}
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,64}$/
+
+// Mirrors the server-side signup/account password rules.
+const validateStaffForm = (form) => {
+  const errors = {}
+  if (!form.firstName?.trim()) errors.firstName = 'First name is required'
+  if (!form.lastName?.trim()) errors.lastName = 'Last name is required'
+  if (!form.email?.trim()) errors.email = 'Email is required'
+  else if (!EMAIL_PATTERN.test(form.email.trim())) errors.email = 'Please provide a valid email address'
+  if (!form.password) errors.password = 'Password is required'
+  else if (form.password.length < 8) errors.password = 'Password must be at least 8 characters'
+  else if (!PASSWORD_PATTERN.test(form.password)) errors.password = 'Password must include uppercase, lowercase, and special character'
+  if (!form.confirmPassword) errors.confirmPassword = 'Confirm password is required'
+  else if (form.confirmPassword !== form.password) errors.confirmPassword = 'Passwords do not match'
+  return errors
+}
 
 const isSuperAdminText = (value) => (typeof value === 'string' ? SUPER_ADMIN_PATTERN.test(value.trim()) : false)
 
@@ -36,6 +69,7 @@ export function UsersTab({
   changeUserRole,
   toggleUserStatus,
   appointmentCapacity,
+  createStaffAccount,
 }) {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -43,6 +77,12 @@ export function UsersTab({
   const [pendingRoleChange, setPendingRoleChange] = useState(null)
   const [isRoleChangeBusy, setIsRoleChangeBusy] = useState(false)
   const filterDropdownRef = useRef(null)
+
+  // Add Staff modal state
+  const [showAddStaffModal, setShowAddStaffModal] = useState(false)
+  const [staffForm, setStaffForm] = useState(EMPTY_STAFF_FORM)
+  const [staffFormErrors, setStaffFormErrors] = useState({})
+  const [isStaffSaving, setIsStaffSaving] = useState(false)
 
   const totalRecords = visibleUsers?.length || 0
   const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize))
@@ -119,6 +159,50 @@ export function UsersTab({
     setPendingRoleChange(null)
   }
 
+  // ── Add Staff handlers ─────────────────────────────────────────────────────
+  const openAddStaffModal = () => {
+    setStaffForm(EMPTY_STAFF_FORM)
+    setStaffFormErrors({})
+    setShowAddStaffModal(true)
+  }
+
+  const closeAddStaffModal = () => {
+    if (isStaffSaving) return
+    setShowAddStaffModal(false)
+    setStaffForm(EMPTY_STAFF_FORM)
+    setStaffFormErrors({})
+  }
+
+  const updateStaffField = (field, value) => {
+    setStaffForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const confirmAddStaff = async () => {
+    const errors = validateStaffForm(staffForm)
+    setStaffFormErrors(errors)
+    if (Object.keys(errors).length > 0) return
+
+    setIsStaffSaving(true)
+    try {
+      await createStaffAccount({
+        firstName: staffForm.firstName.trim(),
+        middleName: staffForm.middleName.trim(),
+        lastName: staffForm.lastName.trim(),
+        email: staffForm.email.trim(),
+        phone: staffForm.phone.trim(),
+        role: staffForm.role,
+        password: staffForm.password,
+        confirmPassword: staffForm.confirmPassword,
+      })
+      setShowAddStaffModal(false)
+      setStaffForm(EMPTY_STAFF_FORM)
+    } catch {
+      // Keep the modal open — AdminPage has already surfaced the error via toast.
+    } finally {
+      setIsStaffSaving(false)
+    }
+  }
+
   return (
     <motion.div key="users" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
       <div className="p-4 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl shadow-sm">
@@ -148,6 +232,17 @@ export function UsersTab({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* Add Staff Button */}
+            <button
+              type="button"
+              onClick={openAddStaffModal}
+              className="inline-flex h-9 sm:h-10 items-center gap-2 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-3.5 text-sm font-bold text-[var(--text-dark)] transition-all hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] shadow-sm"
+              title="Create a staff account"
+            >
+              <UserPlus className="h-4 w-4" />
+              <span>Add Staff</span>
+            </button>
+
             {/* Search Input */}
             <div className="relative">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
@@ -394,6 +489,129 @@ export function UsersTab({
         onConfirm={confirmRoleChange}
         onCancel={cancelRoleChange}
       />
+
+      {/* Add Staff Account Modal */}
+      {createPortal(
+        <AnimatePresence>
+          {showAddStaffModal && (
+            <motion.div
+              key="add-staff-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              className="fixed inset-0 z-[400] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+              onClick={(e) => { if (e.target === e.currentTarget && !isStaffSaving) closeAddStaffModal() }}
+            >
+              <motion.div
+                key="add-staff-panel"
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                role="dialog"
+                aria-modal="true"
+                className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-8 shadow-2xl"
+              >
+                <ModalHeader title="Add Staff Account" onClose={closeAddStaffModal} />
+                <p className="mt-1 text-sm text-[var(--text-muted)]">
+                  Create a staff account. The new user can sign in right away with the password you set.
+                </p>
+
+                <div className="space-y-4 mt-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormField
+                      label="First Name"
+                      required
+                      error={staffFormErrors.firstName}
+                      value={staffForm.firstName}
+                      onChange={(value) => updateStaffField('firstName', value)}
+                      placeholder="Juan"
+                    />
+                    <FormField
+                      label="Last Name"
+                      required
+                      error={staffFormErrors.lastName}
+                      value={staffForm.lastName}
+                      onChange={(value) => updateStaffField('lastName', value)}
+                      placeholder="Dela Cruz"
+                    />
+                  </div>
+
+                  <FormField
+                    label="Middle Name"
+                    value={staffForm.middleName}
+                    onChange={(value) => updateStaffField('middleName', value)}
+                    placeholder="Optional"
+                  />
+
+                  <FormField
+                    label="Email Address"
+                    required
+                    type="email"
+                    error={staffFormErrors.email}
+                    value={staffForm.email}
+                    onChange={(value) => updateStaffField('email', value)}
+                    placeholder="juan@example.com"
+                  />
+
+                  <FormField
+                    label="Phone Number"
+                    type="tel"
+                    value={staffForm.phone}
+                    onChange={(value) => updateStaffField('phone', value)}
+                    placeholder="+63 9XX XXX XXXX (optional)"
+                  />
+
+                  <FormField label="Role" required>
+                    <select
+                      value={staffForm.role}
+                      onChange={(e) => updateStaffField('role', e.target.value)}
+                      className="w-full px-4 py-3 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm"
+                    >
+                      <option value="staff" className="bg-[var(--surface-dark)] text-[var(--text-light)]">Staff</option>
+                      <option value="admin" className="bg-[var(--surface-dark)] text-[var(--text-light)]">Admin</option>
+                    </select>
+                  </FormField>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormField
+                      label="Password"
+                      required
+                      type="password"
+                      error={staffFormErrors.password}
+                      value={staffForm.password}
+                      onChange={(value) => updateStaffField('password', value)}
+                      placeholder="Min 8 chars"
+                    />
+                    <FormField
+                      label="Confirm Password"
+                      required
+                      type="password"
+                      error={staffFormErrors.confirmPassword}
+                      value={staffForm.confirmPassword}
+                      onChange={(value) => updateStaffField('confirmPassword', value)}
+                      placeholder="Re-enter password"
+                    />
+                  </div>
+
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Password must be at least 8 characters with an uppercase letter, lowercase letter, and special character.
+                  </p>
+                </div>
+
+                <ModalFooter
+                  onCancel={closeAddStaffModal}
+                  onSave={confirmAddStaff}
+                  isSaving={isStaffSaving}
+                  disabled={isStaffSaving}
+                />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </motion.div>
   )
 }

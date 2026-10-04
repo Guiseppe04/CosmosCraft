@@ -20,6 +20,12 @@ export function useAppointmentsAdmin({ debouncedSearch: externalDebouncedSearch,
   const inFlightRequestRef = useRef(null)
   const latestRequestIdRef = useRef(0)
   const inFlightCalendarRef = useRef(false)
+  // A socket-triggered refresh arriving while a request is already in flight is
+  // queued here and re-run once the in-flight request completes, so an
+  // "appointment:created" event can never be dropped silently (which would leave
+  // the calendar stale until a manual refresh).
+  const appointmentsRefreshQueued = useRef(null) // { options }
+  const calendarRefreshQueued = useRef(false)
 
   useEffect(() => {
     appointmentsRef.current = appointments
@@ -46,6 +52,10 @@ export function useAppointmentsAdmin({ debouncedSearch: externalDebouncedSearch,
     })
     if (inFlightRequestRef.current === requestKey) {
       if (import.meta.env.DEV) console.debug('[useAppointmentsAdmin] skipping duplicate request', requestKey)
+      // A silent refresh (e.g. triggered by a websocket event) must not be lost
+      // while a request for the same key is in flight — remember it and re-run
+      // when the in-flight request finishes.
+      if (options.silent) appointmentsRefreshQueued.current = options
       return appointmentsRef.current
     }
 
@@ -98,6 +108,11 @@ export function useAppointmentsAdmin({ debouncedSearch: externalDebouncedSearch,
       if (inFlightRequestRef.current === requestKey) {
         inFlightRequestRef.current = null
       }
+      const queuedRefresh = appointmentsRefreshQueued.current
+      if (queuedRefresh) {
+        appointmentsRefreshQueued.current = null
+        fetchAppointments(queuedRefresh).catch(() => {})
+      }
     }
   }, [debouncedSearch, showToast, appointmentPagination])
 
@@ -107,7 +122,12 @@ export function useAppointmentsAdmin({ debouncedSearch: externalDebouncedSearch,
   // This function fetches up to 1000 appointments regardless of the table
   // page and feeds them to the calendar only.
   const fetchCalendarAppointments = useCallback(async () => {
-    if (inFlightCalendarRef.current) return calendarAppointmentsRef.current
+    if (inFlightCalendarRef.current) {
+      // Queue instead of dropping so a websocket-triggered refresh is re-run
+      // once the in-flight calendar fetch completes.
+      calendarRefreshQueued.current = true
+      return calendarAppointmentsRef.current
+    }
     inFlightCalendarRef.current = true
     try {
       const res = await adminApi.getAppointments({
@@ -128,6 +148,10 @@ export function useAppointmentsAdmin({ debouncedSearch: externalDebouncedSearch,
       return calendarAppointmentsRef.current
     } finally {
       inFlightCalendarRef.current = false
+      if (calendarRefreshQueued.current) {
+        calendarRefreshQueued.current = false
+        fetchCalendarAppointments().catch(() => {})
+      }
     }
   }, [debouncedSearch])
 

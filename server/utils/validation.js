@@ -309,6 +309,42 @@ exports.emailSignupSchema = Joi.object({
   }).required(),
 });
 
+// Admin-created staff/admin accounts (Users tab → Add Staff)
+exports.createStaffUserSchema = Joi.object({
+  firstName: nameFields.firstName,
+  middleName: nameFields.middleName,
+  lastName: nameFields.lastName,
+  email: Joi.string()
+    .email()
+    .required()
+    .lowercase()
+    .messages({
+      'string.email': 'Please provide a valid email address',
+      'any.required': 'Email is required',
+    }),
+  phone: Joi.string()
+    .pattern(PH_MOBILE_REGEX)
+    .optional()
+    .allow('')
+    .messages({
+      'string.pattern.base': PH_MOBILE_MESSAGE,
+    }),
+  password: passwordField,
+  confirmPassword: Joi.string()
+    .valid(Joi.ref('password'))
+    .required()
+    .messages({
+      'any.only': 'Confirmation password must match password',
+      'any.required': 'Confirmation password is required',
+    }),
+  role: Joi.string()
+    .valid('staff', 'admin')
+    .default('staff')
+    .messages({
+      'any.only': 'Role must be either staff or admin',
+    }),
+});
+
 // Email/Password Login
 exports.emailLoginSchema = Joi.object({
   email: Joi.string()
@@ -1226,6 +1262,7 @@ const listOrdersSchema = Joi.object({
     'pending',
     'proof_submitted',
     'under_review',
+    'for_verification',
     'approved',
     'rejected',
     'failed',

@@ -107,10 +107,12 @@ export function InventoryTab({
               className="appearance-none rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] py-2.5 pl-9 pr-8 text-sm text-white"
             >
               <option value="all">All Status</option>
-              <option value="healthy">Healthy</option>
-              <option value="warning">Low Stock</option>
-              <option value="critical">Critical</option>
+              <option value="attention">Needs Attention</option>
               <option value="out_of_stock">Out of Stock</option>
+              <option value="low_stock">Low Stock</option>
+              <option value="healthy">Healthy</option>
+              <option value="critical">Critical</option>
+              <option value="warning">Low Stock (Warning)</option>
             </select>
           </div>
 

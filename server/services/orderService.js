@@ -1077,8 +1077,16 @@ exports.getAllOrders = async (params = {}) => {
     queryParams.push(status)
   }
   if (payment_status) {
-    where.push(`o.payment_status = $${idx++}`)
-    queryParams.push(payment_status)
+    // `for_verification` is a grouped filter ("awaiting payment verification")
+    // used when the Dashboard opens Orders from an attention item: it matches
+    // orders whose proof was submitted and/or is under review.
+    if (payment_status === 'for_verification') {
+      where.push(`o.payment_status IN ($${idx++}, $${idx++})`)
+      queryParams.push('proof_submitted', 'under_review')
+    } else {
+      where.push(`o.payment_status = $${idx++}`)
+      queryParams.push(payment_status)
+    }
   }
   if (date_from) {
     where.push(`o.created_at >= $${idx++}`)

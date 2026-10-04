@@ -1,7 +1,7 @@
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const userService = require('../services/userService');
 const rbacService = require('../services/rbacService');
-const { addAddressSchema, updateAddressSchema, updateProfileSchema, updatePhoneSchema } = require('../utils/validation');
+const { addAddressSchema, updateAddressSchema, updateProfileSchema, updatePhoneSchema, createStaffUserSchema } = require('../utils/validation');
 const { hasRole } = require('../utils/roles');
 const { lockAppointmentCapacity } = require('../middleware/appointmentCapacityLock');
 
@@ -188,6 +188,55 @@ exports.getAllUsers = asyncHandler(async (req, res, next) => {
     status: 'success',
     data: result,
   });
+});
+
+/**
+ * Create Staff / Admin Account (admin+ access)
+ * Creates a verified, active account with the chosen role (staff by default).
+ */
+exports.createUser = asyncHandler(async (req, res, next) => {
+  const { error, value } = createStaffUserSchema.validate(req.body, { abortEarly: false });
+  if (error) {
+    const errors = error.details.map((detail) => ({ field: detail.path.join('.'), message: detail.message }));
+    throw new AppError('Validation failed', 400, errors);
+  }
+
+  const role = value.role || 'staff';
+  const auditService = require('../services/auditService');
+
+  try {
+    const newUser = await userService.createStaffUser(value, req.user.user_id);
+
+    const fullName = [newUser.first_name, newUser.last_name].filter(Boolean).join(' ') || newUser.email;
+    await auditService.logUserEvent({
+      userId: req.user.user_id,
+      action: 'USER_CREATED',
+      entityId: newUser.user_id,
+      details: { role, note: 'Staff/Admin account created via admin Users tab' },
+      context: { userId: newUser.user_id, fullName, email: newUser.email, role },
+    });
+
+    res.status(201).json({
+      status: 'success',
+      message: `${role === 'admin' ? 'Admin' : 'Staff'} account created successfully`,
+      data: {
+        user: {
+          user_id: newUser.user_id,
+          first_name: newUser.first_name,
+          last_name: newUser.last_name,
+          email: newUser.email,
+          role,
+          is_active: newUser.is_active,
+          created_at: newUser.created_at,
+        },
+      },
+    });
+  } catch (err) {
+    if (err.message && err.message.includes('already exists')) {
+      throw new AppError('An account with this email already exists.', 409, [], 'EMAIL_EXISTS');
+    }
+    throw new AppError(err.message || 'Failed to create account', 400);
+  }
 });
 
 /**

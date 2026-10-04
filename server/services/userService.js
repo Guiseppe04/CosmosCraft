@@ -150,6 +150,62 @@ exports.createEmailUser = async (userData) => {
   }
 };
 
+/**
+ * Create a staff/admin account (admin action).
+ * Accounts are created verified & active so the appointee can sign in
+ * immediately with the password chosen by the admin. Staff members affect
+ * appointment capacity, so the whole transaction is guarded by the capacity lock.
+ */
+exports.createStaffUser = async (userData, assignedByUserId) => {
+  const roleName = userData.role === 'admin' ? 'admin' : 'staff';
+
+  if (!userData.email || !userData.password || !userData.firstName || !userData.lastName) {
+    throw new Error('Missing required fields');
+  }
+
+  const client = await pool.connect();
+  try {
+    const existRes = await client.query('SELECT user_id FROM users WHERE email = $1', [userData.email.toLowerCase().trim()]);
+    if (existRes.rows.length > 0) {
+      throw new Error(`User with email '${userData.email}' already exists`);
+    }
+
+    const hashedPassword = await bcrypt.hash(userData.password, 12);
+
+    await client.query('BEGIN');
+    await lockAppointmentCapacity(client);
+
+    const userRes = await client.query(
+      `INSERT INTO users (email, password_hash, first_name, middle_name, last_name, phone, role, is_verified, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true, true) RETURNING *`,
+      [
+        userData.email.toLowerCase().trim(),
+        hashedPassword,
+        userData.firstName.trim(),
+        userData.middleName?.trim() || null,
+        userData.lastName.trim(),
+        userData.phone?.trim() || null,
+        roleName,
+      ]
+    );
+    const user = userRes.rows[0];
+
+    const roleRecord = await rbacService.getRoleByName(roleName);
+    if (roleRecord) {
+      await rbacService.assignRoleToUser(user.user_id, roleRecord.role_id, assignedByUserId || user.user_id, null, client);
+    }
+
+    await client.query('COMMIT');
+    delete user.password_hash;
+    return user;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
 exports.getUserById = async (userId) => {
   const res = await pool.query('SELECT * FROM users WHERE user_id = $1', [userId]);
   if (res.rows.length === 0) throw new Error('User not found');

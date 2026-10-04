@@ -122,6 +122,7 @@ export const adminApi = {
   },
   updateUserRole: (id, role) => request(`/api/users/${id}/role`, { method: 'PUT', body: { role } }),
   updateUserStatus: (id, is_active) => request(`/api/users/${id}/status`, { method: 'PUT', body: { is_active } }),
+  createUser: (body) => request('/api/users', { method: 'POST', body }),
 
   // User Profile
   getProfile: () => request('/api/users/me'),

@@ -56,6 +56,20 @@ const ORDER_STATUS_TRANSITIONS = {
 
 const PAGE_SIZE = 10
 
+// Labels for the payment status filter dropdown. `for_verification` is a grouped
+// value (proof submitted OR under review) used when the Dashboard opens Orders
+// from the "awaiting payment verification" attention item.
+const PAYMENT_STATUS_FILTER_LABELS = {
+  pending: 'Pending payment',
+  proof_submitted: 'Proof submitted',
+  under_review: 'Under review',
+  for_verification: 'Awaiting payment verification',
+  approved: 'Approved / paid',
+  rejected: 'Payment rejected',
+  failed: 'Payment failed',
+}
+const ORDER_STATUS_FILTER_LABELS = Object.fromEntries(ORDER_STATUS_LIFECYCLE.map(s => [s.value, s.label]))
+
 function getOrderStatusConfig(status) {
   return ORDER_STATUS_MAP[status] || ORDER_STATUS_LIFECYCLE[0]
 }
@@ -1584,12 +1598,18 @@ function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
 }
 
 
-export function OrderManagement({ orders, onRefresh, user, pagination, onManageProject, loading = false, initialPaymentStatusFilter = 'all', initialStatusFilter = 'all' }) {
+export function OrderManagement({ orders, onRefresh, user, pagination, onManageProject, loading = false, initialPaymentStatusFilter = 'all', initialStatusFilter = 'all', initialOrder = null, onPaymentStatusUpdated = null }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
   const [orderTypeFilter, setOrderTypeFilter] = useState('all')
   const [paymentStatusFilter, setPaymentStatusFilter] = useState(initialPaymentStatusFilter)
+  // One-shot notice shown when the Orders tab was opened from a Dashboard
+  // attention item with a pre-applied filter, so the admin knows why the list is
+  // scoped and can clear it to return to normal manual filtering.
+  const [showDeepLinkNotice, setShowDeepLinkNotice] = useState(
+    initialPaymentStatusFilter !== 'all' || initialStatusFilter !== 'all'
+  )
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -1599,6 +1619,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
   const [pageSize, setPageSize] = useState(PAGE_SIZE)
   const [isPageLoading, setIsPageLoading] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState(null)
+  const initialOrderOpenedRef = useRef(false)
   const [selectedSection, setSelectedSection] = useState('details')
   const [isUpdatingPayment, setIsUpdatingPayment] = useState(false)
   const [isUpdatingOrder, setIsUpdatingOrder] = useState(false)
@@ -1764,6 +1785,15 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
     requestOrdersPage(1)
   }, [debouncedSearch, orderTypeFilter, statusFilter, paymentStatusFilter, paymentMethodFilter, dateFrom, dateTo, sortField, sortDirection, requestOrdersPage])
 
+  // Auto-open a specific order immediately when initialOrder is provided (redirected from ProjectTaskTracker).
+  // We use the full order object so it works even before the orders list loads.
+  useEffect(() => {
+    if (!initialOrder || initialOrderOpenedRef.current) return
+    initialOrderOpenedRef.current = true
+    setSelectedSection('payment')
+    setSelectedOrder(initialOrder)
+  }, [initialOrder])
+
   const handleUpdatePaymentStatus = async (orderId, newStatus, referenceNumber, notes) => {
     setIsUpdatingPayment(true)
     try {
@@ -1857,7 +1887,12 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
         admin_email: user?.email
       })
       // Payment updates arrive over the socket and reload the visible page.
-      setSelectedOrder(prev => prev ? { ...prev, payment_status: newStatus } : null)
+      const updatedOrder = selectedOrder ? { ...selectedOrder, payment_status: newStatus } : null
+      setSelectedOrder(updatedOrder)
+      // Notify parent so it can prompt the admin to return to the ProjectTaskTracker
+      if (onPaymentStatusUpdated) {
+        onPaymentStatusUpdated(updatedOrder || { order_id: orderId, payment_status: newStatus })
+      }
     } catch (error) {
       console.error('Failed to verify payment:', error)
     } finally {
@@ -1932,6 +1967,45 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
           <p className="mt-1 text-xs text-[var(--text-muted)]">Completed & received</p>
         </div>
       </div>
+
+      {/* Dashboard deep-link notice — shown when the Orders tab was opened from
+          an attention item with a pre-applied filter so the admin knows why the
+          list is scoped. Dismissing or changing filters returns to normal
+          manual filtering. */}
+      {showDeepLinkNotice && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-[var(--gold-primary)]/35 bg-[var(--gold-primary)]/10 px-3.5 py-2.5 text-xs text-[var(--text-light)]"
+        >
+          <AlertCircle className="h-4 w-4 shrink-0 text-[var(--gold-primary)]" />
+          <span className="min-w-0 flex-1">
+            Showing orders where{' '}
+            {initialPaymentStatusFilter !== 'all' ? (
+              <span className="font-semibold text-white">
+                payment status is “{PAYMENT_STATUS_FILTER_LABELS[initialPaymentStatusFilter] || initialPaymentStatusFilter}”
+              </span>
+            ) : null}
+            {initialStatusFilter !== 'all' ? (
+              <span className="font-semibold text-white">
+                {initialPaymentStatusFilter !== 'all' ? ' and order status is ' : 'order status is '}
+                “{ORDER_STATUS_FILTER_LABELS[initialStatusFilter] || initialStatusFilter}”
+              </span>
+            ) : null}{' '}
+            — opened from the Dashboard.
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setPaymentStatusFilter('all')
+              setStatusFilter('all')
+              setShowDeepLinkNotice(false)
+            }}
+            className="inline-flex shrink-0 items-center gap-1 font-semibold text-[var(--gold-primary)] hover:underline"
+          >
+            <X className="h-3.5 w-3.5" /> Clear filter
+          </button>
+        </div>
+      )}
 
       {/* Advanced Search & Filter Controls Box */}
       <div className="border-y border-[var(--border)] py-4">
@@ -2015,6 +2089,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
                     <option value="pending">Pending payment</option>
                     <option value="proof_submitted">Proof submitted</option>
                     <option value="under_review">Under review</option>
+                    <option value="for_verification">Awaiting verification</option>
                     <option value="approved">Approved / paid</option>
                     <option value="rejected">Payment rejected</option>
                     <option value="failed">Payment failed</option>

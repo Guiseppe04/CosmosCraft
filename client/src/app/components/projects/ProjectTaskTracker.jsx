@@ -1,9 +1,10 @@
 import ProjectTaskForm from './ProjectTaskForm';
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, Flag, Loader2, MapPin, Package, Lock, Edit3 } from 'lucide-react';
+import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, Flag, Loader2, MapPin, Package, Lock, Edit3, ArrowRight } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { staffApi } from '../../utils/staffApi';
+import { normalizePaymentStatus } from '../../utils/orderPaymentStatus';
 
 import { useAuth } from '../../context/AuthContext';
 import { ConfirmModal } from '../ui/ConfirmModal';
@@ -80,7 +81,7 @@ const formatDisplayDate = (value) => {
   return date.toLocaleDateString();
 };
 
-export default function ProjectTaskTracker({ projectId, projectName, isAdmin = false, parts = [], projectData = null, showTracker = true, onRestockPart = null, staffMembers = [], onProjectChange = null }) {
+export default function ProjectTaskTracker({ projectId, projectName, isAdmin = false, parts = [], projectData = null, showTracker = true, onRestockPart = null, staffMembers = [], onProjectChange = null, orderPaymentStatus = null, orderId = null, sourceOrder = null, onRedirectToOrder = null }) {
   const { user } = useAuth();
   const toast = useToast();
   const [hierarchy, setHierarchy] = useState(null);
@@ -327,6 +328,9 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   // Check if project is on hold
   const isOnHold = String(hierarchy?.status || '').toLowerCase() === 'on_hold';
 
+  const normalizedPaymentStatus = normalizePaymentStatus(orderPaymentStatus || null);
+  const isTaskUpdateBlocked = isAdmin && normalizedPaymentStatus && normalizedPaymentStatus !== 'approved';
+
   const isMilestoneLocked = (milestone) => {
     if (!isAdmin) return false;
     const milestoneIndex = milestones.findIndex((item) => item.milestone_id === milestone.milestone_id);
@@ -341,6 +345,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const toggleSubtaskStatus = async (subtask) => {
     if (!isAdmin && !subtask.is_customer_updatable) return;
     if (isAdmin && isOnHold) return;
+    if (isTaskUpdateBlocked) return;
     if (togglingSubtaskId || taskMutationBusy) return;
 
     const parentMilestone = milestones.find((milestone) =>
@@ -409,6 +414,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
 
   const handleConfirmUncheckSubtask = async () => {
     if (!pendingUncheckSubtask) return;
+    if (isTaskUpdateBlocked) return;
     const subtask = pendingUncheckSubtask;
 
     try {
@@ -459,7 +465,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
 
   // Admin Actions
   const handleAddMilestone = async () => {
-    if (isOnHold) return;
+    if (isOnHold || isTaskUpdateBlocked) return;
     setTaskMutationBusy(true);
     try {
       await adminApi.createMilestone(projectId, { title: form.milestoneTitle, description: form.milestoneDesc });
@@ -475,12 +481,12 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   };
 
   const requestDeleteMilestone = (milestone) => {
-    if (isOnHold || taskMutationBusy) return;
+    if (isOnHold || taskMutationBusy || isTaskUpdateBlocked) return;
     setPendingDeleteMilestone(milestone);
   };
 
   const confirmDeleteMilestone = async () => {
-    if (!pendingDeleteMilestone || deletingMilestoneId) return;
+    if (!pendingDeleteMilestone || deletingMilestoneId || isTaskUpdateBlocked) return;
     const milestone = pendingDeleteMilestone;
 
     setDeletingMilestoneId(milestone.milestone_id);
@@ -499,6 +505,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   };
 
   const handleTaskSaved = async (_result) => {
+    if (isTaskUpdateBlocked) return;
     setAddingSubtaskTo(null);
     setEditingTaskId(null);
     setTaskFeedback({ type: 'success', message: 'Task saved successfully.' });
@@ -506,12 +513,12 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   };
 
   const requestDeleteSubtask = (subtask) => {
-    if (isOnHold || taskMutationBusy) return;
+    if (isOnHold || taskMutationBusy || isTaskUpdateBlocked) return;
     setPendingDeleteSubtask(subtask);
   };
 
   const confirmDeleteSubtask = async () => {
-    if (!pendingDeleteSubtask || deletingSubtaskId) return;
+    if (!pendingDeleteSubtask || deletingSubtaskId || isTaskUpdateBlocked) return;
     const subtask = pendingDeleteSubtask;
 
     setDeletingSubtaskId(subtask.subtask_id);
@@ -532,7 +539,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   // Mark-all-as-done asks for confirmation through the branded modal, then reports
   // progress on the milestone it is working on.
   const requestCompleteAllSubtasks = (milestone) => {
-    if (!isAdmin || isOnHold || isMilestoneLocked(milestone) || taskMutationBusy || togglingSubtaskId) return;
+    if (!isAdmin || isOnHold || isMilestoneLocked(milestone) || taskMutationBusy || togglingSubtaskId || isTaskUpdateBlocked) return;
     const remainingTasks = (milestone.subtasks || []).filter((subtask) => subtask.status !== 'completed');
     if (!remainingTasks.length) return;
     setPendingCompleteAll({ milestone, remainingCount: remainingTasks.length });
@@ -544,7 +551,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   };
 
   const completeAllSubtasks = async () => {
-    if (!pendingCompleteAll || completingMilestoneId) return;
+    if (!pendingCompleteAll || completingMilestoneId || isTaskUpdateBlocked) return;
     const { milestone, remainingCount } = pendingCompleteAll;
 
     setCompletingMilestoneId(milestone.milestone_id);
@@ -568,6 +575,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   };
 
   const handleSaveEstimatedCompletion = async () => {
+    if (isTaskUpdateBlocked) return;
     try {
       await adminApi.updateProject(projectId, {
         estimated_completion_date: editCompletionValue || null,
@@ -580,6 +588,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   };
 
   const handleSubmitFulfillment = async () => {
+    if (isTaskUpdateBlocked) return;
     try {
       setFulfillmentSaving(true);
       setFulfillmentFeedback(null);
@@ -613,6 +622,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
 
   const handleToggleReceive = async (part) => {
     if (isAdmin && isOnHold) return;
+    if (isTaskUpdateBlocked) return;
 
     if (part.is_received) {
       setPendingUncheckPart(part);
@@ -654,7 +664,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   };
 
   const handleConfirmUncheckPart = async () => {
-    if (!pendingUncheckPart) return;
+    if (!pendingUncheckPart || isTaskUpdateBlocked) return;
     const part = pendingUncheckPart;
     setPendingUncheckPart(null);
 
@@ -706,6 +716,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   };
 
   const handleRestockPart = async (part) => {
+    if (isTaskUpdateBlocked) return;
     const isBuilderPart = Boolean(part.builder_part_id);
     if (!isBuilderPart && !part.product_id) return;
     try {
@@ -770,6 +781,31 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
       <div className="space-y-6">
         
         {taskFeedback && <p role={taskFeedback.type === 'error' ? 'alert' : 'status'} className={`mb-4 text-sm ${taskFeedback.type === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>{taskFeedback.message}</p>}
+        {isTaskUpdateBlocked && (
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 shrink-0">
+                  <Clock className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-amber-300">Payment Verification Required</p>
+                  <p className="mt-1 text-xs text-amber-200/70">Task updates are locked until the payment proof for this order is verified. Please verify the payment to continue.</p>
+                </div>
+              </div>
+              {onRedirectToOrder && (
+                <button
+                  type="button"
+                  onClick={() => onRedirectToOrder?.(sourceOrder)}
+                  className="inline-flex items-center gap-2 rounded-xl bg-amber-500/20 border border-amber-500/40 px-4 py-2 text-xs font-bold text-amber-300 hover:bg-amber-500/30 hover:text-white transition-all shrink-0"
+                >
+                  Verify Payment
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         {/* Progress Header */}
         <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 md:p-7 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--gold-primary)]/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
@@ -804,9 +840,9 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                   />
                 ) : (
                   <span
-                    className={`text-white font-medium ${isAdmin ? 'cursor-pointer hover:underline' : ''}`}
+                    className={`text-white font-medium ${isAdmin && !isTaskUpdateBlocked ? 'cursor-pointer hover:underline' : ''}`}
                     onClick={() => {
-                      if (isAdmin) {
+                      if (isAdmin && !isTaskUpdateBlocked) {
                         setEditCompletionValue(formatInputDate(estimatedCompletionDisplay) || '');
                         setIsEditingCompletion(true);
                       }
@@ -992,8 +1028,8 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                             type="checkbox"
                             checked={isReceived}
                             onChange={() => handleToggleReceive(part)}
-                            disabled={(togglingSaving && togglingPartKey === part.part_key) || isOutOfStock}
-                            title={isOutOfStock ? 'Out of stock. Restock this part before marking it received.' : undefined}
+                             disabled={(togglingSaving && togglingPartKey === part.part_key) || isOutOfStock || isTaskUpdateBlocked}
+                             title={isOutOfStock ? 'Out of stock. Restock this part before marking it received.' : undefined}
                             className="w-4 h-4 rounded border-[var(--border)] bg-[var(--surface-dark)] text-[var(--gold-primary)] focus:ring-[var(--gold-primary)] shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
                           />
                           <div className="flex-1 min-w-0">
@@ -1006,7 +1042,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                         <span className={`rounded-full px-2 py-1 text-[10px] font-semibold shrink-0 ${getStockBadgeStyle(isStockTracked ? part.stock_status : (isReceived ? 'in_stock' : 'unknown'))}`}>
                           {stockLabel}
                         </span>
-                        {isAdmin && isOutOfStock && !isRestocking && (
+                        {isAdmin && isOutOfStock && !isRestocking && !isTaskUpdateBlocked && (
                           <button
                             type="button"
                             onClick={() => onRestockPart ? onRestockPart(part) : setRestockingPartKey(part.part_key)}
@@ -1481,8 +1517,8 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                   <button
                     type="button"
                     onClick={handleSubmitFulfillment}
-                    disabled={fulfillmentSaving || (selectedFulfillmentMethod === 'delivery' && !hierarchy.shop_delivery_eligible)}
-                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-6 py-3 text-sm font-bold text-black disabled:cursor-not-allowed disabled:opacity-60 shadow-lg shadow-[var(--gold-primary)]/20 hover:opacity-95 transition-all cursor-pointer"
+                     disabled={fulfillmentSaving || isTaskUpdateBlocked || (selectedFulfillmentMethod === 'delivery' && !hierarchy.shop_delivery_eligible)}
+                     className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-6 py-3 text-sm font-bold text-black disabled:cursor-not-allowed disabled:opacity-60 shadow-lg shadow-[var(--gold-primary)]/20 hover:opacity-95 transition-all cursor-pointer"
                   >
                     <CheckCircle className="h-4 w-4" />
                     {fulfillmentSaving
@@ -1557,8 +1593,8 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                        {isAdmin && milestone.status !== 'completed' && milestone.subtasks?.some((subtask) => subtask.status !== 'completed') && (
                          <button 
                            onClick={(e) => { e.stopPropagation(); requestCompleteAllSubtasks(milestone); }}
-                           disabled={isOnHold || isLockedMilestone || taskMutationBusy || Boolean(togglingSubtaskId)}
-                           className="p-2 hover:bg-green-500/10 rounded-lg text-green-400 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={isOnHold || isLockedMilestone || taskMutationBusy || Boolean(togglingSubtaskId) || isTaskUpdateBlocked}
+                            className="p-2 hover:bg-green-500/10 rounded-lg text-green-400 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                            title="Complete all tasks in this milestone"
                            aria-label={`Complete all tasks in ${milestone.title}`}
                          >
@@ -1570,19 +1606,19 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                        {isAdmin && milestone.status === 'completed' && (
                          <span className="text-xs font-semibold text-green-400 bg-green-500/10 px-2 py-1 rounded-lg border border-green-500/30">Done</span>
                        )}
-                       {isAdmin && (
-                         <button
-                           onClick={(e) => { e.stopPropagation(); requestDeleteMilestone(milestone); }}
-                           disabled={isOnHold || taskMutationBusy}
-                           className="p-2 hover:bg-red-500/10 rounded-lg text-red-500 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                           title={`Delete milestone ${milestone.title}`}
-                           aria-label={`Delete milestone ${milestone.title}`}
-                         >
-                           {deletingMilestoneId === milestone.milestone_id
-                             ? <Loader2 className="w-4 h-4 animate-spin" />
-                             : <Trash2 className="w-4 h-4" />}
-                         </button>
-                       )}
+                        {isAdmin && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); requestDeleteMilestone(milestone); }}
+                            disabled={isOnHold || taskMutationBusy || isTaskUpdateBlocked}
+                            className="p-2 hover:bg-red-500/10 rounded-lg text-red-500 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                            title={`Delete milestone ${milestone.title}`}
+                            aria-label={`Delete milestone ${milestone.title}`}
+                          >
+                            {deletingMilestoneId === milestone.milestone_id
+                              ? <Loader2 className="w-4 h-4 animate-spin" />
+                              : <Trash2 className="w-4 h-4" />}
+                          </button>
+                        )}
                        <div className="p-2 bg-[var(--bg-primary)] rounded-lg">
                          {isExpanded ? <ChevronDown className="w-5 h-5 text-white" /> : <ChevronRight className="w-5 h-5 text-white" />}
                        </div>
@@ -1611,17 +1647,17 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                             <p className="text-[var(--text-muted)] text-sm text-center italic py-2">No tasks defined for this milestone.</p>
                           ) : (
                             milestone.subtasks?.map((subtask) => {
-                              const isCompleted = subtask.status === 'completed';
-                              const isLocked = isLockedMilestone;
-                              const canUserUpdate = (isAdmin || subtask.is_customer_updatable) && !isLocked;
+                               const isCompleted = subtask.status === 'completed';
+                               const isLocked = isLockedMilestone;
+                               const canUserUpdate = (isAdmin || subtask.is_customer_updatable) && !isLocked && !isTaskUpdateBlocked;
 
-                              if (editingTaskId === subtask.subtask_id) return <ProjectTaskForm key={subtask.subtask_id} task={subtask}
-                                staff={[...staffMembers, ...(hierarchy.team || [])]} onSaved={handleTaskSaved} onCancel={() => setEditingTaskId(null)} />;
-                              return (
-                                <div key={subtask.subtask_id} className={`flex items-start gap-4 p-4 rounded-xl border transition-all ${isLocked ? 'opacity-60' : ''} ${isCompleted ? 'bg-green-500/5 border-green-500/30' : 'bg-[var(--surface-dark)] border-[var(--border)] hover:border-[var(--gold-primary)]/50'}`}>
-                                  <button
-                                    onClick={() => toggleSubtaskStatus(subtask)}
-                                    disabled={!canUserUpdate || taskMutationBusy || Boolean(togglingSubtaskId)}
+                               if (editingTaskId === subtask.subtask_id) return <ProjectTaskForm key={subtask.subtask_id} task={subtask}
+                                 staff={[...staffMembers, ...(hierarchy.team || [])]} onSaved={handleTaskSaved} onCancel={() => setEditingTaskId(null)} />;
+                               return (
+                                 <div key={subtask.subtask_id} className={`flex items-start gap-4 p-4 rounded-xl border transition-all ${isLocked ? 'opacity-60' : ''} ${isCompleted ? 'bg-green-500/5 border-green-500/30' : 'bg-[var(--surface-dark)] border-[var(--border)] hover:border-[var(--gold-primary)]/50'}`}>
+                                   <button
+                                     onClick={() => toggleSubtaskStatus(subtask)}
+                                     disabled={!canUserUpdate || taskMutationBusy || Boolean(togglingSubtaskId)}
                                     title={isLocked ? 'Complete all tasks in the previous milestone first' : undefined}
                                     className={`mt-0.5 rounded-full outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all ${canUserUpdate && !isCompleted && togglingSubtaskId !== subtask.subtask_id ? 'hover:scale-110' : 'cursor-not-allowed opacity-60'}`}
                                   >
@@ -1649,12 +1685,12 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                                       )}
                                     </div>
                                   </div>
-                                  {isAdmin && !isOnHold && <button type="button" aria-label={`Edit task ${subtask.title}`} onClick={() => { setEditingTaskId(subtask.subtask_id); setAddingSubtaskTo(null); }} className="p-1.5 hover:bg-white/10 rounded"><Edit3 className="w-4 h-4" /></button>}
-{isAdmin && (
-                                     <button
-                                       type="button"
-                                       disabled={taskMutationBusy || isOnHold}
-                                       onClick={() => requestDeleteSubtask(subtask)}
+                                   {isAdmin && !isOnHold && !isTaskUpdateBlocked && <button type="button" aria-label={`Edit task ${subtask.title}`} onClick={() => { setEditingTaskId(subtask.subtask_id); setAddingSubtaskTo(null); }} className="p-1.5 hover:bg-white/10 rounded"><Edit3 className="w-4 h-4" /></button>}
+                                   {isAdmin && (
+                                      <button
+                                        type="button"
+                                        disabled={taskMutationBusy || isOnHold || isTaskUpdateBlocked}
+                                        onClick={() => requestDeleteSubtask(subtask)}
                                        title={`Delete task ${subtask.title}`}
                                        aria-label={`Delete task ${subtask.title}`}
                                        className="p-1.5 hover:bg-red-500/10 text-[var(--text-muted)] hover:text-red-400 rounded disabled:cursor-not-allowed disabled:opacity-50"
@@ -1675,7 +1711,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                               <ProjectTaskForm milestoneId={milestone.milestone_id} staff={[...staffMembers, ...(hierarchy.team || [])]}
                                 onSaved={handleTaskSaved} onCancel={() => setAddingSubtaskTo(null)} />
                             ) : (
-                              <button disabled={isOnHold} onClick={() => { setAddingSubtaskTo(milestone.milestone_id); setEditingTaskId(null); }} className="flex items-center gap-2 w-full p-3 rounded-xl border border-dashed border-[var(--border)] hover:border-[var(--gold-primary)]/50 text-[var(--text-muted)] hover:text-[var(--gold-primary)] transition-all justify-center mt-2">
+                              <button disabled={isOnHold || isTaskUpdateBlocked} onClick={() => { setAddingSubtaskTo(milestone.milestone_id); setEditingTaskId(null); }} className="flex items-center gap-2 w-full p-3 rounded-xl border border-dashed border-[var(--border)] hover:border-[var(--gold-primary)]/50 text-[var(--text-muted)] hover:text-[var(--gold-primary)] transition-all justify-center mt-2">
                                 <Plus className="w-4 h-4" /> Add Task
                               </button>
                             )
@@ -1699,7 +1735,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                    <input type="text" placeholder="Milestone Title (e.g. Body Construction)" value={form.milestoneTitle || ''} onChange={e => setForm({...form, milestoneTitle: e.target.value})} className="w-full px-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white outline-none focus:border-[var(--gold-primary)]" />
                    <textarea placeholder="Description (optional)" value={form.milestoneDesc || ''} onChange={e => setForm({...form, milestoneDesc: e.target.value})} className="w-full px-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white outline-none focus:border-[var(--gold-primary)] min-h-[80px]" />
 <div className="flex gap-3">
-                      <button type="button" onClick={handleAddMilestone} disabled={taskMutationBusy} className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 bg-[var(--gold-primary)] text-black font-bold rounded-xl disabled:opacity-60">
+                      <button type="button" onClick={handleAddMilestone} disabled={taskMutationBusy || isTaskUpdateBlocked} className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 bg-[var(--gold-primary)] text-black font-bold rounded-xl disabled:opacity-60">
                         {taskMutationBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                         {taskMutationBusy ? 'Creating...' : 'Create Milestone'}
                       </button>
@@ -1707,11 +1743,11 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                     </div>
                  </div>
                </div>
-             ) : (
-               <button onClick={() => setIsAddingMilestone(true)} className="flex items-center justify-center gap-2 w-full p-4 rounded-2xl border-2 border-dashed border-[var(--border)] hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/5 text-[var(--text-muted)] hover:text-white transition-all font-semibold">
-                 <Plus className="w-5 h-5" /> Add Milestone
-               </button>
-             )
+              ) : (
+                <button disabled={isTaskUpdateBlocked} onClick={() => setIsAddingMilestone(true)} className="flex items-center justify-center gap-2 w-full p-4 rounded-2xl border-2 border-dashed border-[var(--border)] hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/5 text-[var(--text-muted)] hover:text-white transition-all font-semibold">
+                  <Plus className="w-5 h-5" /> Add Milestone
+                </button>
+              )
           )}
 
         </div>
@@ -1790,7 +1826,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                 <button
                   type="button"
                   onClick={handleConfirmUncheckPart}
-                  disabled={togglingSaving}
+                  disabled={togglingSaving || isTaskUpdateBlocked}
                   className="flex-1 rounded-lg bg-[var(--gold-primary)] px-3 py-2 text-sm font-semibold text-black hover:bg-[var(--gold-secondary)] disabled:opacity-60"
                 >
                   {togglingSaving ? 'Returning...' : 'Confirm Return'}

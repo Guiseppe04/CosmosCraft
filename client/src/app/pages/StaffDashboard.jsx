@@ -544,12 +544,14 @@ export function StaffDashboard() {
   // ── Real-Time WebSocket Event Listeners (replaces polling) ──────────────
   useSocketEvent('order:created', () => {
     fetchOrders()
+    fetchInventory({ silent: true })
     if (activeTab === 'dashboard' || activeTab === 'sales-report') fetchSalesReport()
     showToast('New customer order received!', 'info')
   })
 
   useSocketEvent('order:updated', () => {
     fetchOrders()
+    fetchInventory({ silent: true })
     if (activeTab === 'dashboard' || activeTab === 'sales-report') fetchSalesReport()
   })
 
@@ -689,7 +691,8 @@ export function StaffDashboard() {
         const threshold = Number(item.low_stock_threshold ?? 10)
         const tier = getStockTier(stock, threshold, item.max_stock)
         if (statusFilter === 'out_of_stock') return tier === 'out_of_stock'
-        if (statusFilter === 'critical') return tier === 'critical'
+        if (statusFilter === 'low_stock' || statusFilter === 'critical') return tier === 'critical'
+        if (statusFilter === 'attention' || statusFilter === 'issues') return tier === 'out_of_stock' || tier === 'critical'
         if (statusFilter === 'warning') return tier === 'warning'
         if (statusFilter === 'healthy') return tier === 'healthy'
         return true
@@ -749,7 +752,8 @@ export function StaffDashboard() {
         const threshold = 10
         const tier = getStockTier(stock, threshold, item.max_stock)
         if (statusFilter === 'out_of_stock') return tier === 'out_of_stock'
-        if (statusFilter === 'critical') return tier === 'critical'
+        if (statusFilter === 'low_stock' || statusFilter === 'critical') return tier === 'critical'
+        if (statusFilter === 'attention' || statusFilter === 'issues') return tier === 'out_of_stock' || tier === 'critical'
         if (statusFilter === 'warning') return tier === 'warning'
         if (statusFilter === 'healthy') return tier === 'healthy'
         return true
@@ -798,7 +802,8 @@ export function StaffDashboard() {
 
   // ── Inventory Health Calculation ─────────────────────────────────────────
   const inventoryHealthData = useMemo(() => {
-    const productItems = visibleProducts.map((p) => ({
+    const productList = (visibleInventory && visibleInventory.length > 0) ? visibleInventory : (products || [])
+    const productItems = productList.map((p) => ({
       stock: Number(p.stock ?? 0),
       threshold: Number(p.low_stock_threshold ?? 10),
       maxStock: Number(p.max_stock ?? 0),
@@ -809,10 +814,17 @@ export function StaffDashboard() {
       maxStock: 0,
     }))
     const items = [...productItems, ...partItems]
-    if (items.length === 0) return { value: '0%', status: 'Healthy', statusClass: 'text-emerald-400', iconBg: 'bg-emerald-500/15' }
+    if (items.length === 0) return { value: '0%', status: 'Healthy', statusClass: 'text-emerald-400', iconBg: 'bg-emerald-500/15', outOfStockCount: 0, lowStockCount: 0, totalAttentionCount: 0 }
     let critical = false
     let warning = false
     let healthyCount = 0
+    let outOfStockCount = 0
+    let lowStockCount = 0
+    productItems.forEach(({ stock, threshold, maxStock }) => {
+      const tier = getStockTier(stock, threshold, maxStock)
+      if (tier === 'out_of_stock') outOfStockCount += 1
+      else if (tier === 'critical') lowStockCount += 1
+    })
     items.forEach(({ stock, threshold, maxStock }) => {
       const tier = getStockTier(stock, threshold, maxStock)
       if (tier === 'out_of_stock' || tier === 'critical') critical = true
@@ -822,8 +834,16 @@ export function StaffDashboard() {
     const status = critical ? 'Critical' : warning ? 'Warning' : 'Healthy'
     const statusClass = critical ? 'text-red-400' : warning ? 'text-amber-400' : 'text-emerald-400'
     const iconBg = critical ? 'bg-red-500/15' : warning ? 'bg-amber-500/15' : 'bg-emerald-500/15'
-    return { value: `${Math.round((healthyCount / items.length) * 100)}%`, status, statusClass, iconBg }
-  }, [visibleParts, visibleProducts])
+    return {
+      value: `${Math.round((healthyCount / items.length) * 100)}%`,
+      status,
+      statusClass,
+      iconBg,
+      outOfStockCount,
+      lowStockCount,
+      totalAttentionCount: outOfStockCount + lowStockCount,
+    }
+  }, [visibleInventory, products, visibleParts])
 
   const enhancedOrderStats = useMemo(() => {
     const counts = { pending: 0, processing: 0, completed: 0, cancelled: 0 }
@@ -1207,11 +1227,16 @@ export function StaffDashboard() {
               visibleProjects={projects}
               visibleAppointments={appointments}
               inventoryHealthData={inventoryHealthData}
+              visibleProducts={visibleInventory}
               enhancedOrderStats={enhancedOrderStats}
+              fetchInventory={fetchInventory}
               handleRefresh={handleRefresh}
               isLoading={isLoading}
               setActiveTab={setActiveTab}
               lastRefreshed={lastRefreshed}
+              setProductsInventoryFilter={setProductsInventoryFilter}
+              setPartsInventoryFilter={setPartsInventoryFilter}
+              setInventorySubTab={setInventorySubTab}
             />
           )}
 
@@ -1313,6 +1338,7 @@ export function StaffDashboard() {
               selectedCalendarDate={selectedCalendarDate}
               unavailableDates={unavailableDates.map((entry) => entry?.date || entry).filter(Boolean)}
               availableDates={availableDates}
+              openOverrides={openOverrides}
               fetchAppointments={fetchAppointments}
               setSelectedAppointment={setSelectedAppointment}
               setAppointmentModalOpen={setAppointmentModalOpen}

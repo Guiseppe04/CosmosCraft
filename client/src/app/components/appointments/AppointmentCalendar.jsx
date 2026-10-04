@@ -25,6 +25,7 @@ const STATUS_COLORS = {
 
 function toISODate(value) {
   if (!value) return null
+  if (value?.date) return toISODate(value.date)
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return null
@@ -221,11 +222,12 @@ function AdminWeekCalendar({ appointments, holidays = [], openOverrides = [], un
   const [staffFilter, setStaffFilter] = useState('all')
   const [summaryRange, setSummaryRange] = useState('week')
   const weekStart = startOfWeek(displayDate, { weekStartsOn: 1 })
-  const weekDays = Array.from({ length: 6 }, (_, index) => addDays(weekStart, index))
+  const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index))
   const staffNames = [...new Set(appointments.map(getAssignedStaff).filter(Boolean))].sort()
   const unavailableSet = new Set(unavailableDates.map((entry) => toISODate(entry?.date || entry)).filter(Boolean))
+  const openOverrideSet = new Set(openOverrides.map((entry) => toISODate(entry?.date || entry)).filter(Boolean))
   const startYear = weekStart.getFullYear()
-  const endYear = weekDays[5].getFullYear()
+  const endYear = weekDays[6].getFullYear()
   const { labels: holidayLabels, closedDates: holidaySet } = useMemo(
     () => getCalendarHolidays([...new Set([startYear, endYear])], holidays, openOverrides),
     [startYear, endYear, holidays, openOverrides],
@@ -261,7 +263,7 @@ function AdminWeekCalendar({ appointments, holidays = [], openOverrides = [], un
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] px-5 py-4">
         <div>
           <h3 className="text-lg font-semibold text-[var(--text-light)]">Appointment schedule</h3>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">{format(weekStart, 'MMMM d')} - {format(weekDays[5], 'MMMM d, yyyy')}</p>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">{format(weekStart, 'MMMM d')} - {format(weekDays[6], 'MMMM d, yyyy')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => onDisplayDateChange(new Date())} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-light)] transition hover:border-[var(--gold-primary)]">Today</button>
@@ -312,28 +314,33 @@ function AdminWeekCalendar({ appointments, holidays = [], openOverrides = [], un
 
       <div className="overflow-x-auto">
         <div className="min-w-[820px]">
-          <div className="grid grid-cols-[64px_repeat(6,minmax(0,1fr))] border-b border-[var(--border)]">
+          <div className="grid grid-cols-[64px_repeat(7,minmax(0,1fr))] border-b border-[var(--border)]">
             <div className="border-r border-[var(--border)] p-3 text-[10px] text-[var(--text-muted)]">GMT+8</div>
             {weekDays.map((date) => {
               const dateKey = formatLocalISO(date)
               const isHoliday = holidaySet.has(dateKey)
               const holidayLabel = isHoliday ? (holidayLabels[dateKey] || 'Holiday') : null
               const isUnavailable = unavailableSet.has(dateKey)
+              const isOpenOverride = openOverrideSet.has(dateKey)
+              const isSunday = date.getDay() === 0
+              const isSundayClosed = isSunday && !isOpenOverride
               return (
               <div
                 key={dateKey}
-                title={isHoliday ? `${holidayLabel} — closed for bookings` : undefined}
-                className={`border-r border-[var(--border)] px-2 py-3 text-center last:border-r-0 ${isHoliday ? 'bg-[#758A93]/10' : isUnavailable ? 'bg-amber-500/10' : dateKey === todayKey ? 'bg-[var(--gold-primary)]/10' : ''}`}
+                title={isHoliday ? `${holidayLabel} — closed for bookings` : isSundayClosed ? 'Sunday — closed for bookings' : undefined}
+                className={`border-r border-[var(--border)] px-2 py-3 text-center last:border-r-0 ${isHoliday ? 'bg-[#758A93]/10' : isSundayClosed ? 'bg-slate-600/25' : isUnavailable ? 'bg-amber-500/10' : dateKey === todayKey ? 'bg-[var(--gold-primary)]/10' : ''}`}
               >
                 <div className="text-[10px] font-semibold uppercase text-[var(--text-muted)]">{format(date, 'EEE')}</div>
                 <div className="mt-1 text-sm font-semibold text-[var(--text-light)]">{format(date, 'd')}</div>
                 {isHoliday && <span className="mt-1 inline-block max-w-full truncate rounded border border-[#758A93]/20 bg-[#758A93]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-[#c9d2db]" title={holidayLabel}>{holidayLabel}</span>}
-                {!isHoliday && isUnavailable && <span className="mt-1 inline-block rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-200">Unavailable</span>}
+                {!isHoliday && isSundayClosed && <span className="mt-1 inline-block rounded bg-slate-600/25 px-1.5 py-0.5 text-[9px] font-semibold text-slate-200">Closed</span>}
+                {!isHoliday && !isSundayClosed && isOpenOverride && <span className="mt-1 inline-block rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-300">Open</span>}
+                {!isHoliday && !isSundayClosed && !isOpenOverride && isUnavailable && <span className="mt-1 inline-block rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-200">Unavailable</span>}
               </div>
               )
             })}
           </div>
-          <div className="grid grid-cols-[64px_repeat(6,minmax(0,1fr))]">
+          <div className="grid grid-cols-[64px_repeat(7,minmax(0,1fr))]">
             <div className="relative border-r border-[var(--border)]">
               {Array.from({ length: 9 }, (_, index) => (
                 <div key={index} className="h-[72px] border-b border-[var(--border)] px-2 pt-1 text-[10px] text-[var(--text-muted)]">
@@ -347,9 +354,12 @@ function AdminWeekCalendar({ appointments, holidays = [], openOverrides = [], un
               const appointmentLayouts = layoutOverlappingAppointments(dayAppointments)
               const isHoliday = holidaySet.has(dateKey)
               const isUnavailable = unavailableSet.has(dateKey)
-              const closedTint = isHoliday ? 'bg-[#758A93]/[0.06]' : isUnavailable ? 'bg-amber-500/[0.04]' : ''
+              const isOpenOverride = openOverrideSet.has(dateKey)
+              const isSunday = date.getDay() === 0
+              const isSundayClosed = isSunday && !isOpenOverride
+              const closedTint = isHoliday ? 'bg-[#758A93]/[0.06]' : isSundayClosed ? 'bg-slate-600/[0.08]' : isUnavailable ? 'bg-amber-500/[0.04]' : ''
               return (
-                <div key={dateKey} title={isHoliday ? `${(holidayLabels[dateKey] || 'Holiday')} — closed for bookings` : undefined} className={`relative border-r border-[var(--border)] last:border-r-0 ${isHoliday ? 'cursor-not-allowed' : ''}`}>
+                <div key={dateKey} title={isHoliday ? `${(holidayLabels[dateKey] || 'Holiday')} — closed for bookings` : isSundayClosed ? 'Sunday — closed for bookings' : undefined} className={`relative border-r border-[var(--border)] last:border-r-0 ${isHoliday || isSundayClosed ? 'cursor-not-allowed' : ''}`}>
                   {Array.from({ length: 9 }, (_, index) => <div key={index} className={`h-[72px] border-b border-[var(--border)] ${closedTint}`} />)}
                   {appointmentLayouts.map(({ appointment, startMinutes, endMinutes, column, columnCount }, apptIdx) => {
                     const scheduledAt = new Date(appointment.scheduled_at || appointment.date)
@@ -384,12 +394,20 @@ function AdminWeekCalendar({ appointments, holidays = [], openOverrides = [], un
         </div>
       </div>
 
-      {weekDays.some((date) => holidaySet.has(formatLocalISO(date))) && (
+      {(weekDays.some((date) => holidaySet.has(formatLocalISO(date))) || weekDays.some((date) => date.getDay() === 0 && !openOverrideSet.has(formatLocalISO(date)))) && (
         <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] px-4 py-3">
-          <div className="flex items-center gap-2 rounded-xl border border-[#758A93]/20 bg-[#758A93]/10 px-3 py-1.5">
-            <span className="h-2 w-2 rounded-full bg-[#758A93]" />
-            Holiday — closed for bookings
-          </div>
+          {weekDays.some((date) => holidaySet.has(formatLocalISO(date))) && (
+            <div className="flex items-center gap-2 rounded-xl border border-[#758A93]/20 bg-[#758A93]/10 px-3 py-1.5">
+              <span className="h-2 w-2 rounded-full bg-[#758A93]" />
+              Holiday — closed for bookings
+            </div>
+          )}
+          {weekDays.some((date) => date.getDay() === 0 && !openOverrideSet.has(formatLocalISO(date))) && (
+            <div className="flex items-center gap-2 rounded-xl border border-slate-600/30 bg-slate-600/20 px-3 py-1.5">
+              <span className="h-2 w-2 rounded-full bg-slate-400" />
+              Sunday — closed for bookings
+            </div>
+          )}
         </div>
       )}
     </section>
@@ -494,22 +512,25 @@ const getDateStatus = (dateKey) => {
      const dayOfWeek = date.getDay()
      const isSunday = dayOfWeek === 0
      const isHoliday = holidaySet.has(dateKey)
+     const isOpenOverride = openOverrideSet.has(dateKey)
      const isPast = date < today
      const isUnavailable = unavailableSet.has(dateKey)
      const isAvailable = availableSet.has(dateKey)
-     const isDisabled = isSunday || isHoliday || isPast || (isAdminMode ? false : isUnavailable)
-     const status = isHoliday
-       ? holidayLabels[dateKey] || 'Holiday'
-       : isSunday
-         ? 'Sunday Closed'
-         : isPast
-           ? 'Past'
-           : isUnavailable
-             ? 'Marked Unavailable'
-             : isAvailable
-               ? 'Has Availability'
-               : 'Available'
-     return { isSunday, isHoliday, isPast, isDisabled, isUnavailable, isAvailable, status }
+     const isDisabled = isPast || ((isSunday || isHoliday) && !isOpenOverride) || (isAdminMode ? false : isUnavailable)
+     const status = isPast
+       ? 'Past'
+       : isOpenOverride
+         ? 'Open'
+         : isHoliday
+           ? holidayLabels[dateKey] || 'Holiday'
+           : isSunday
+             ? 'Sunday Closed'
+             : isUnavailable
+               ? 'Marked Unavailable'
+               : isAvailable
+                 ? 'Has Availability'
+                 : 'Available'
+     return { isSunday, isHoliday, isPast, isOpenOverride, isDisabled, isUnavailable, isAvailable, status }
    }
 
   const handleDateSelect = (dateKey, isUnavailableCell) => {
@@ -745,13 +766,14 @@ const getDateStatus = (dateKey) => {
 
 const dateKey = day.id
                    const bookingCount = appointmentsByDate.get(dateKey)?.length || 0
-                   const { isSunday, isHoliday, isPast, isDisabled, isUnavailable, isAvailable, status } = getDateStatus(dateKey)
+                   const { isSunday, isHoliday, isPast, isOpenOverride, isDisabled, isUnavailable, isAvailable, status } = getDateStatus(dateKey)
                    const isSelected = dateKey && selectedDateId === dateKey
                    const isHolidayCell = isDisabled && isHoliday
                    const isSundayClosed = isDisabled && isSunday
                    const isPastDate = isDisabled && isPast
                    const isUnavailableCell = isUnavailable
-                   const isAvailableCell = isAvailable && !isUnavailable && !isHoliday && !isSunday && !isPast
+                   const isOpenDay = isOpenOverride && !isPast
+                   const isAvailableCell = !isDisabled && !isUnavailable && (isAvailable || isOpenDay)
                    const dayAppointments = (appointmentsByDate.get(dateKey) || [])
                      .filter((appointment) => monthStaffFilter === 'all' || getAssignedStaff(appointment) === monthStaffFilter)
                      .sort((left, right) => new Date(left.scheduled_at || left.date) - new Date(right.scheduled_at || right.date))
@@ -791,7 +813,7 @@ const dateKey = day.id
                               type="button"
                               onClick={() => handleDateSelect(dateKey, isUnavailableCell)}
                               title={status}
-                              disabled={isSunday || isHoliday}
+                              disabled={(isSunday || isHoliday) && !isOpenOverride}
                               className="rounded-md px-1.5 py-0.5 text-sm font-semibold transition hover:bg-black/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--gold-primary)] disabled:cursor-not-allowed"
                             >
                               {day.dayNumber}
@@ -848,7 +870,7 @@ const dateKey = day.id
                         type="button"
                         onClick={() => handleDateSelect(dateKey, isUnavailableCell)}
                         title={status}
-                        disabled={isSunday || isHoliday || (isPast && !isAdminMode && !isUnavailableCell)}
+                        disabled={((isSunday || isHoliday) && !isOpenOverride) || (isPast && !isAdminMode && !isUnavailableCell)}
                         className={`flex h-20 flex-col items-center justify-between rounded-3xl border px-3 py-3 text-sm transition-all ${cellClasses}`}
                       >
                         <div className="flex w-full items-center justify-between">
@@ -874,7 +896,7 @@ const dateKey = day.id
 <div className="mt-6 grid gap-2 sm:grid-cols-5 text-sm text-[var(--text-muted)]">
                <div className="flex items-center gap-2 rounded-3xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                 Has Availability
+                 Has Availability / Open
                </div>
                <div className="flex items-center gap-2 rounded-3xl border border-red-500/20 bg-red-500/10 px-3 py-2">
                  <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
@@ -888,10 +910,14 @@ const dateKey = day.id
                  <span className="h-2.5 w-2.5 rounded-full bg-[#758A93]" />
                  Holiday / Sunday Closed
                </div>
+               <div className="flex items-center gap-2 rounded-3xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
+                 Holiday / Sunday (opened)
+               </div>
              </div>
             {isAdminMode && (
               <p className="mt-4 text-xs text-[var(--text-muted)] text-center">
-                Click on any available date (Mon-Sat) to view time slots. Click on marked unavailable dates to toggle availability.
+                Click on an available date or an opened holiday/Sunday to view time slots. Use Mark Unavailable to manage closures and reopened days.
               </p>
             )}
             </div>

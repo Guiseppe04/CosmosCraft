@@ -33,6 +33,7 @@ router.post('/reactivate', authenticateToken, userController.reactivateAccount);
 
 // ── Admin: User CRUD ──────────────────────────────────────────────────────────
 router.get('/', authenticateToken, authorize('admin', 'super_admin'), userController.getAllUsers);
+router.post('/', authenticateToken, authorize('admin', 'super_admin'), userController.createUser);
 router.put('/:userId/role',   authenticateToken, authorize('admin'), userController.updateUserRole);
 router.put('/:userId/status', authenticateToken, authorize('admin', 'super_admin'), userController.updateUserStatus);
 

@@ -137,3 +137,16 @@ export function formatLowStockHelper(thresholdPct, maxStock) {
   }
   return `${pct}% threshold`;
 }
+
+/**
+ * Check if an item requires stock attention (either out of stock or low stock).
+ *
+ * @param {number} stock
+ * @param {number} lowStockThreshold
+ * @param {number|null} maxStock
+ * @returns {boolean}
+ */
+export function isStockAttentionRequired(stock, lowStockThreshold, maxStock) {
+  const status = getStockStatus(stock, lowStockThreshold, maxStock);
+  return status === 'out_of_stock' || status === 'low_stock';
+}

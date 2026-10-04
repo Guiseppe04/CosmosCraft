@@ -224,10 +224,12 @@
           const isTooSoon = date < minAvailableDate
           const isSunday = date.getDay() === 0
           const isHolidayDay = isHoliday(date)
-          isOpenHoliday = isHolidayDay && openOverrideSet.has(id)
-          isHolidayDate = isHolidayDay && !isOpenHoliday
+          const isOpenDay = openOverrideSet.has(id)
+          isOpenHoliday = isHolidayDay && isOpenDay
+          isHolidayDate = isHolidayDay && !isOpenDay
+          const isSundayClosed = isSunday && !isOpenDay
           isUnavailableDate = disabledDateSet.has(id)
-          isAvailable = !isPast && !isTooSoon && !isSunday && !isHolidayDate && !isUnavailableDate && !occupiedDateSet.has(id)
+          isAvailable = !isPast && !isTooSoon && !isSundayClosed && !isHolidayDate && !isUnavailableDate && !occupiedDateSet.has(id)
         }
 
         week.push({
@@ -238,7 +240,7 @@
           isHolidayDate,
           isOpenHoliday,
           isOccupied: occupiedDateSet.has(id),
-          isNonWorkingDay: inCurrentMonth && date.getDay() === 0,
+          isNonWorkingDay: inCurrentMonth && date.getDay() === 0 && !openOverrideSet.has(id),
           holidayLabel: id ? getHolidaysForYear(year)[id] : null,
           // Blocked by the shop (admin marked the date unavailable), as opposed
           // to a Sunday/holiday or a past date. The calendar marks these red.
@@ -1898,7 +1900,7 @@
             <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
               <div>
                 <h2 className="text-2xl font-bold text-white mb-2">Select Date and Time</h2>
-                <p className="text-sm text-[var(--text-muted)]">Select an available date (Mon-Sat) and time. Sundays, official holidays, and dates the shop has closed are unavailable.</p>
+                <p className="text-sm text-[var(--text-muted)]">Select an available date and time. Sundays and official holidays are unavailable unless the shop has marked them open; dates the shop has closed are also unavailable.</p>
               </div>
 
               <div className="bg-theme-surface-deep border border-[var(--border)] rounded-2xl p-6 shadow-xl relative">

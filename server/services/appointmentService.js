@@ -209,7 +209,14 @@ async function assertNoScheduleConflict(client, scheduledAt, excludeAppointmentI
 
    const dayOfWeek = new Date(`${appointmentDateKey(scheduledDate)}T00:00:00Z`).getUTCDay();
    if (dayOfWeek === 0) {
-     throw new AppError('Selected appointment date is unavailable (Sunday closure)', 409);
+     const sundayOverride = await client.query(
+       `SELECT id FROM unavailable_dates
+        WHERE date = ($1::timestamptz AT TIME ZONE 'Asia/Manila')::date AND is_open_override = TRUE LIMIT 1`,
+       [scheduledAt]
+     );
+     if (sundayOverride.rows.length === 0) {
+       throw new AppError('Selected appointment date is unavailable (Sunday closure)', 409);
+     }
    }
 
    // Check for holiday — but allow if admin has created an open override
@@ -1151,7 +1158,10 @@ exports.getAvailableDates = async (dateFrom, dateTo) => {
     `SELECT d::date AS date,
        EXISTS (SELECT 1 FROM unavailable_dates WHERE date = d::date AND is_open_override = TRUE) AS is_open_override
      FROM generate_series($1::date, $2::date, '1 day'::interval) d
-     WHERE EXTRACT(DOW FROM d) != 0
+     WHERE (EXTRACT(DOW FROM d) != 0
+       OR EXISTS (
+         SELECT 1 FROM unavailable_dates WHERE date = d::date AND is_open_override = TRUE
+       ))
        AND NOT EXISTS (
          SELECT 1 FROM unavailable_dates WHERE date = d::date AND is_open_override = FALSE
        )
@@ -1303,13 +1313,15 @@ exports.getScheduleEntry = async (dateOrId) => {
 exports.isDateUnavailable = async (date) => {
   const day = new Date(date);
   const dateKey = appointmentDateKey(day);
-  if (new Date(`${dateKey}T00:00:00Z`).getUTCDay() === 0) return true;
   const result = await pool.query(
     `SELECT id, is_open_override FROM unavailable_dates WHERE date = $1::date`,
     [dateKey]
   );
   if (result.rows.some(row => !row.is_open_override)) return true;
-  return isHoliday(day) && !result.rows.some(row => row.is_open_override);
+  const hasOpenOverride = result.rows.some(row => row.is_open_override);
+  const isSunday = new Date(`${dateKey}T00:00:00Z`).getUTCDay() === 0;
+  if (isSunday) return !hasOpenOverride;
+  return isHoliday(day) && !hasOpenOverride;
 };
 
 // ─── PAYMENT STATUS ──────────────────────────────────────────────────────────
@@ -1406,10 +1418,7 @@ exports.updatePaymentStatus = async (appointmentId, paymentStatus, paymentMethod
 // ─── AVAILABLE SLOTS ─────────────────────────────────────────────────────────
 
 exports.getAvailableSlots = async (serviceId, date, slotDuration = 30) => {
-  const dayOfWeek = new Date(date).getDay();
-  if (dayOfWeek === 0) return []; // Sunday closed
-
-  // Check if date is unavailable
+  // Check if date is unavailable (Sundays stay closed unless opened via an override)
   const isUnavailable = await this.isDateUnavailable(date);
   if (isUnavailable) return [];
 
@@ -1472,9 +1481,6 @@ exports.getAvailableSlots = async (serviceId, date, slotDuration = 30) => {
 
 exports.checkAvailability = async (serviceId, scheduledAt, durationMinutes) => {
   const date = new Date(scheduledAt);
-  const dayOfWeek = date.getDay();
-  if (dayOfWeek === 0) return false;
-
   const dateStr = appointmentDateKey(date);
   const isUnavailable = await this.isDateUnavailable(dateStr);
   if (isUnavailable) return false;

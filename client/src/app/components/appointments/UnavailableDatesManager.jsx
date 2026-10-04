@@ -110,11 +110,13 @@ export default function UnavailableDatesManager({
     const isUnavailableDay = unavailableSet.has(key)
     const isOpenOverride = openOverrideSet.has(key)
 
-    // Priority: Past > Sunday > Holiday (unless open override) > Admin-Unavailable > Available
+    // Priority: Past > Sunday/Holiday (unless open override) > Admin-Unavailable > Available
     if (isPastDate) return { type: 'past', disabled: true }
-    if (isSundayDay) return { type: 'sunday', label: 'Closed — Sunday', disabled: true }
-    if (isHolidayDay && isOpenOverride) return { type: 'open-holiday', label: `Open on ${holidayMap[key]}`, disabled: false }
+    if ((isSundayDay || isHolidayDay) && isOpenOverride) {
+      return { type: 'open-holiday', label: isSundayDay ? 'Open — Sunday' : `Open on ${holidayMap[key]}`, disabled: false }
+    }
     if (isHolidayDay) return { type: 'holiday', label: holidayMap[key], disabled: false } // clickable!
+    if (isSundayDay) return { type: 'sunday', label: 'Closed — Sunday', disabled: false } // clickable to open
     if (isUnavailableDay) return { type: 'unavailable', label: 'Marked Unavailable', disabled: false }
     return { type: 'available', label: 'Available', disabled: false }
   }, [holidayMap, unavailableSet, openOverrideSet, today])
@@ -128,8 +130,8 @@ export default function UnavailableDatesManager({
     setSelectedDate(date)
     if (status.type === 'unavailable') {
       setModal('remove-confirm')
-    } else if (status.type === 'holiday') {
-      setModal('open-override')       // offer to mark holiday as open
+    } else if (status.type === 'holiday' || status.type === 'sunday') {
+      setModal('open-override')       // offer to mark day as open
     } else if (status.type === 'open-holiday') {
       setModal('revert-holiday')      // offer to revert back to closed
     } else {
@@ -215,7 +217,7 @@ export default function UnavailableDatesManager({
       case 'open-holiday':
         return `${base} border-emerald-500/40 bg-emerald-500/10 text-emerald-400 cursor-pointer hover:bg-emerald-500/20`
       case 'sunday':
-        return `${base} border-slate-600/30 bg-slate-700/20 text-[var(--text-muted)]/50 cursor-not-allowed`
+        return `${base} border-slate-600/30 bg-slate-700/20 text-slate-200 cursor-pointer hover:bg-slate-600/30 hover:border-slate-400/50`
       case 'past':
         return `${base} border-transparent bg-transparent text-[var(--text-muted)]/30 cursor-not-allowed`
       case 'unavailable':
@@ -334,6 +336,10 @@ export default function UnavailableDatesManager({
                       {status.type === 'holiday' && (
                         <span className="absolute top-1 right-1 w-1 h-1 rounded-full bg-amber-400" />
                       )}
+                      {/* Sunday (click to open) dot */}
+                      {status.type === 'sunday' && (
+                        <span className="absolute top-1 right-1 w-1 h-1 rounded-full bg-slate-400" />
+                      )}
                       {/* Open holiday dot */}
                       {status.type === 'open-holiday' && !isSelected && (
                         <span className="absolute top-1 right-1 w-1 h-1 rounded-full bg-emerald-400" />
@@ -352,9 +358,9 @@ export default function UnavailableDatesManager({
                 {[
                   { color: 'bg-emerald-400', label: 'Available' },
                   { color: 'bg-red-400', label: 'Unavailable' },
-                  { color: 'bg-amber-400', label: 'Holiday (click to open)' },
-                  { color: 'bg-emerald-400/60', label: 'Holiday (open)' },
-                  { color: 'bg-[var(--text-muted)]/30', label: 'Sunday / Past' },
+                  { color: 'bg-amber-400', label: 'Holiday' },
+                  // { color: 'bg-emerald-400/60', label: 'Holiday / Sunday (open)' },
+                  { color: 'bg-slate-400/70', label: 'Sunday / Past' },
                 ].map(item => (
                   <div key={item.label} className="flex items-center gap-1.5">
                     <span className={`w-2 h-2 rounded-full ${item.color}`} />
@@ -592,7 +598,7 @@ export default function UnavailableDatesManager({
                   <Calendar className="w-5 h-5 text-amber-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-[var(--text-light)]">Open Holiday for Bookings</h3>
+                  <h3 className="text-lg font-semibold text-[var(--text-light)]">{(isSunday(selectedDate) ? 'Open Sunday for Bookings' : 'Open Holiday for Bookings')}</h3>
                   <p className="text-sm text-[var(--text-muted)] mt-0.5">
                     {format(selectedDate, 'EEEE, MMMM d, yyyy')}
                   </p>
@@ -600,7 +606,7 @@ export default function UnavailableDatesManager({
               </div>
 
               <p className="text-sm text-[var(--text-muted)] mb-6 pl-[52px]">
-                {(() => { const k = normalizeDateKey(selectedDate); return holidayMap[k] ? <><strong className="text-amber-400">{holidayMap[k]}</strong> is normally closed. </> : null })()}
+                {(() => { const k = normalizeDateKey(selectedDate); const h = holidayMap[k]; if (h) return <><strong className="text-amber-400">{h}</strong> is normally closed. </>; if (isSunday(selectedDate)) return <>Sundays are normally closed. </>; return null })()}
                 Clients will be able to book appointments on this day.
               </p>
 
@@ -650,7 +656,7 @@ export default function UnavailableDatesManager({
                   <AlertTriangle className="w-5 h-5 text-amber-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-[var(--text-light)]">Revert to Holiday (Closed)</h3>
+                  <h3 className="text-lg font-semibold text-[var(--text-light)]">{(isSunday(selectedDate) ? 'Revert Sunday to Closed' : 'Revert to Holiday (Closed)')}</h3>
                   <p className="text-sm text-[var(--text-muted)] mt-0.5">
                     {format(selectedDate, 'EEEE, MMMM d, yyyy')}
                   </p>
@@ -658,7 +664,7 @@ export default function UnavailableDatesManager({
               </div>
 
               <p className="text-sm text-[var(--text-muted)] mb-6 pl-[52px]">
-                {(() => { const k = normalizeDateKey(selectedDate); return holidayMap[k] ? <><strong className="text-amber-400">{holidayMap[k]}</strong> — </> : null })()}
+                {(() => { const k = normalizeDateKey(selectedDate); const h = holidayMap[k]; if (h) return <><strong className="text-amber-400">{h}</strong> — </>; if (isSunday(selectedDate)) return <><strong className="text-amber-400">Sunday</strong> — </>; return null })()}
                 This day will be closed again. Clients will not be able to book appointments.
               </p>
 
@@ -677,7 +683,7 @@ export default function UnavailableDatesManager({
                   {actionLoading
                     ? <Loader2 className="w-4 h-4 animate-spin" />
                     : <CalendarOff className="w-4 h-4" />}
-                  Close Holiday
+                  {isSunday(selectedDate) ? 'Close Sunday' : 'Close Holiday'}
                 </button>
               </div>
             </motion.div>
