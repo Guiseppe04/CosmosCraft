@@ -9,9 +9,18 @@ function escapeReceiptHtml(value) {
     .replaceAll("'", '&#39;')
 }
 
-function getOrderCustomerName(order) {
-  if (order.first_name && order.last_name) return `${order.first_name} ${order.last_name}`
-  return order.customer_name || order.user_name || order.name || 'N/A'
+export function getOrderCustomerName(order, fallback = 'N/A') {
+  const clean = value => {
+    if (typeof value !== 'string') return ''
+    const name = value.trim().replace(/\s+/g, ' ')
+    return ['null', 'none', 'n/a'].includes(name.toLowerCase()) ? '' : name
+  }
+  const name = [
+    clean(order?.first_name) || clean(order?.firstName),
+    clean(order?.middle_name) || clean(order?.middleName),
+    clean(order?.last_name) || clean(order?.lastName),
+  ].filter(Boolean).join(' ')
+  return name || clean(order?.customer_name) || clean(order?.user_name) || clean(order?.name) || fallback
 }
 
 function getOrderAddress(order) {

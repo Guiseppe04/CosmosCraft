@@ -13,7 +13,7 @@ exports.assignWalkInCustomization = async (req, res, next) => {
     const payload = req.validatedData;
     const data = await guitarService.assignWalkInCustomization(req.user.id || req.user.user_id, payload);
     if (!data.alreadyAssigned) {
-      require('../services/socketService').emitToUser(payload.customer_id, 'cart:updated', {
+      require('../services/socketService').emitToUser(payload.customer_id, 'customization:created', {
         customization_id: data.customization.customization_id,
       });
     }

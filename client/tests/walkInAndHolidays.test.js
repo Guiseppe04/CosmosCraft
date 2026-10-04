@@ -3,10 +3,53 @@ import { test } from 'node:test'
 import { createRequire } from 'node:module'
 import { getCalendarHolidays, getHolidaysForYear } from '../src/app/utils/philippineHolidays.js'
 import { mapDbCartItem } from '../src/app/utils/cartItemMapping.js'
-import { mergeWalkInSavedBuilds } from '../src/app/utils/walkInSavedBuilds.js'
+import { mergeWalkInSavedBuilds, readSavedBuilds } from '../src/app/utils/walkInSavedBuilds.js'
+import { getBuildCreatedAt, formatBuildCreatedAt } from '../src/app/utils/buildCreatedAt.js'
+import { getCustomBuildDetailGroups } from '../src/app/utils/customBuildSummary.js'
 
 const require = createRequire(import.meta.url)
 const serverHolidays = require('../../server/utils/philippineHolidays.js')
+
+test('creation dates use the database creation time rather than later edits', () => {
+  const saved = {savedAt:'2026-10-05T01:00:00Z',created_at:'2026-10-04T12:30:00Z'}
+  assert.equal(formatBuildCreatedAt(saved),'Oct 4, 2026 • 8:30 PM')
+  assert.equal(getBuildCreatedAt(saved,{created_at:'2026-10-03T12:30:00Z'}),'2026-10-03T12:30:00Z')
+  assert.equal(getBuildCreatedAt({savedAt:saved.savedAt}),saved.savedAt)
+  for (const value of [undefined,'invalid']) assert.equal(formatBuildCreatedAt({savedAt:value}),'Date unavailable')
+})
+
+test('grouped details preserve every component and its price without changing the build', () => {
+  const lineItems = [
+    {id:'base',category:'Base',name:'Starting Price',subtotal:12000},
+    {id:'bodyWood',category:'Body Wood',name:'Mahogany',subtotal:1500},
+    {id:'frets',category:'Frets',name:'24 Stainless Steel',subtotal:500},
+    {id:'pickups',category:'Pickups',name:'Humbucker',subtotal:1000},
+    {id:'bridge',category:'Bridge',name:'Fixed Bridge',subtotal:500},
+    {id:'finishColor',category:'Finish Color',name:'Midnight Blue',subtotal:300},
+    {id:'other',category:'Special Component',name:'Custom Selection',subtotal:700},
+  ]
+  const build = {lineItems,price:16500,additionalParts:[{name:'Legacy Strap',price:500,quantity:2}],stickers:[{src:'/design.png'}]}
+  const original = structuredClone(build)
+  const groups = getCustomBuildDetailGroups(build)
+  assert.deepEqual(groups.map(group=>group.label),['Guitar Build','Body','Neck','Electronics','Hardware','Finish / Design','Other Components','Additional Parts'])
+  for (const line of lineItems) {
+    const displayed = groups.flatMap(group=>group.items).find(item=>item.id===line.id)
+    assert.equal(displayed.name,line.name)
+    assert.equal(displayed.subtotal,line.subtotal)
+  }
+  assert.equal(groups.find(group=>group.label==='Additional Parts').items[0].subtotal,1000)
+  assert.deepEqual(build,original)
+  const legacy = getCustomBuildDetailGroups({config:{bassType:'jazz',frets:24,multiscale:false},summary:{body:'Jazz Bass'}})
+  assert.equal(legacy.find(group=>group.label==='Body').items[0].name,'Jazz Bass')
+  assert.equal(legacy.find(group=>group.label==='Neck').items.find(item=>item.id==='frets').name,'24')
+  assert.equal(legacy.find(group=>group.label==='Guitar Build').items.find(item=>item.id==='multiscale').name,'No')
+})
+
+test('saved build cache reads tolerate missing, malformed and restricted browser storage', () => {
+  for (const value of [null, '{invalid', '{}']) assert.deepEqual(readSavedBuilds({getItem:()=>value},'builds'),[])
+  assert.deepEqual(readSavedBuilds({getItem:()=>{throw new Error('Storage unavailable')}},'builds'),[])
+  assert.deepEqual(readSavedBuilds({getItem:()=>JSON.stringify([{id:'build'}])},'builds'),[{id:'build'}])
+})
 
 test('received walk-in builds sync on a clean browser with customer ownership and stable identities', () => {
   const config = { body: 'strat', _walkIn: { customerId: 'customer', summary: { body: 'Strat' }, pricingBreakdown: { base: 12000 }, lineItems: [] } }

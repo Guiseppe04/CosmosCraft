@@ -7,7 +7,9 @@ import {
   Check, CheckCircle,
   Sparkles, Layers, Palette, Cog, Zap, Image, ZoomIn, ZoomOut, Trash2
 } from 'lucide-react'
-import { exportMaskedPreview } from '../utils/exportMaskedPreview.js'
+import { downloadPreviewImages } from '../utils/exportMaskedPreview.js'
+import { captureBuildViews } from '../utils/captureBuildViews.jsx'
+import { useBuildSnapshot } from '../hooks/useBuildSnapshot.js'
 import { adminApi } from '../utils/adminApi.js'
 import { API, getAuthHeaders } from '../utils/apiConfig'
 import { optimizeCloudinaryImage } from '../utils/cloudinary.js'
@@ -326,14 +328,8 @@ export function CustomizePage() {
   const { isAuthenticated, openLogin, user } = useAuth()
   const isWalkInMode = searchParams.get('mode') === 'walk-in' && ['staff', 'admin', 'super_admin'].includes(user?.role)
   const [walkInBuild, setWalkInBuild] = useState(null)
-  const [savedSnapshot, setSavedSnapshot] = useState(() => {
-    if (editBuildId) return JSON.stringify({ config: null, stickers: null })
-    try {
-      return window.sessionStorage.getItem('cosmoscraft.electricBuild.savedSnapshot')
-    } catch {
-      return null
-    }
-  })
+  const savingBuildRef = useRef(false)
+
   const [dbCustomizationId, setDbCustomizationId] = useState(null)
   const [isLockedCustomization, setIsLockedCustomization] = useState(false)
   const bypassNavigationBlockRef = useRef(false)
@@ -348,23 +344,14 @@ export function CustomizePage() {
   })
   const [showLoadModal, setShowLoadModal] = useState(false)
 
-  // Derived: is there anything to save?
-  const hasUnsavedChanges = useMemo(() => {
-    if (savedSnapshot === null) return true
-    try {
-      const current = JSON.stringify({ config, stickers })
-      return current !== savedSnapshot
-    } catch {
-      return true
-    }
-  }, [savedSnapshot, config, stickers])
+  const { savedSnapshot, setSavedSnapshot, hasUnsavedChanges, beginLoadedBuild, markDesignChanged } = useBuildSnapshot(config, stickers, 'cosmoscraft.electricBuild', editBuildId)
 
   // Derived: has this build ever been saved?
   const hasBeenSaved = savedSnapshot !== null
 
-  const updateConfig = (patch) => baseUpdateConfig(patch)
-  const resetConfig = () => baseResetConfig()
-  const loadConfig = (raw) => baseLoadConfig(raw)
+  const updateConfig = (patch) => { markDesignChanged(); baseUpdateConfig(patch) }
+  const resetConfig = () => { markDesignChanged(); baseResetConfig() }
+  const loadConfig = (raw) => { beginLoadedBuild(); baseLoadConfig(raw) }
 
   const handleZoomIn = () => setZoomLevel(prev => Math.min(2, Number((prev + 0.1).toFixed(2))))
   const handleZoomOut = () => setZoomLevel(prev => Math.max(0.7, Number((prev - 0.1).toFixed(2))))
@@ -393,6 +380,13 @@ export function CustomizePage() {
     [options.bodyOptions, config.body]
   )
   const currentBodyMaskSrc = selectedBodyModel?.bodySrc || null
+  const capturePreviewImages = (designConfig = config, designStickers = stickers, captureOptions) => captureBuildViews(GuitarPreview, designConfig, designStickers, {
+    modelImageSrc: selectedBodyModel?.previewImageUrl || selectedBodyModel?.bodySrc || null,
+    bodyWoodImageSrc: options.bodyWoodOptions?.find(option => option.value === designConfig.bodyWood)?.preview || null,
+    topWoodImageSrc: options.topWoodOptions?.find(option => option.value === designConfig.topWood)?.preview || null,
+    stickerMaskSrc: currentBodyMaskSrc,
+  }, captureOptions)
+
   const stickerTotal = useMemo(
     () => stickerLineItems.reduce((total, item) => total + (Number(item.subtotal) || 0), 0),
     [stickerLineItems],
@@ -426,6 +420,7 @@ export function CustomizePage() {
           aspectRatio: getStickerAspectRatioFromMeta(meta),
           price: DEFAULT_STICKER_PRICE,
         }, previewStageRef.current, stickerPlacementContextRef.current)
+        markDesignChanged()
         setStickers(prev => [...prev, newSticker])
         setSelectedStickerId(newSticker.id)
       })().catch((error) => {
@@ -490,6 +485,7 @@ export function CustomizePage() {
 
   const updateSelectedSticker = (patchOrUpdater, options = {}) => {
     if (!selectedStickerId) return
+    markDesignChanged()
     setStickers(prev =>
       prev.map(stickerItem => {
         if (stickerItem.id !== selectedStickerId) return stickerItem
@@ -503,6 +499,7 @@ export function CustomizePage() {
 
   const updateStickerById = (id, patchOrUpdater, options = {}) => {
     if (!id) return
+    markDesignChanged()
     setStickers(prev =>
       prev.map(stickerItem => {
         if (stickerItem.id !== id) return stickerItem
@@ -515,6 +512,7 @@ export function CustomizePage() {
   }
 
   const removeStickerById = (id) => {
+    markDesignChanged()
     setStickers(prev => {
       const target = prev.find(s => s.id === id)
       if (target?.src?.startsWith('blob:')) {
@@ -533,12 +531,14 @@ export function CustomizePage() {
       x: Math.min(95, selectedSticker.x + 4),
       y: Math.min(95, selectedSticker.y + 4),
     }, previewStageRef.current, stickerPlacementContextRef.current)
+    markDesignChanged()
     setStickers(prev => [...prev, duplicate])
     setSelectedStickerId(duplicate.id)
   }
 
   const moveLayer = (direction) => {
     if (!selectedStickerId) return
+    markDesignChanged()
     setStickers(prev => {
       const current = prev.filter(s => (s.side || 'front') === view)
       const other = prev.filter(s => (s.side || 'front') !== view)
@@ -737,7 +737,7 @@ export function CustomizePage() {
   // Sync config with URL parameter on mount
   useEffect(() => {
     if (config.guitarType !== urlGuitarType) {
-      updateConfig({ guitarType: urlGuitarType })
+      baseUpdateConfig({ guitarType: urlGuitarType })
     }
   }, [urlGuitarType])
 
@@ -806,14 +806,12 @@ export function CustomizePage() {
 
         try {
           if (cancelled) return
+          beginLoadedBuild()
           baseLoadConfig(target.config)
           const loadedStickers = Array.isArray(target.stickers) ? target.stickers : []
           setStickers(loadedStickers)
           setDbCustomizationId(targetCustomizationId)
           setIsLockedCustomization(false)
-          try {
-            setSavedSnapshot(JSON.stringify({ config: target.config, stickers: loadedStickers }))
-          } catch { }
         } catch (e) {
           console.error('Failed to load build config for editing:', e)
         }
@@ -884,182 +882,199 @@ export function CustomizePage() {
   useEffect(() => {
     if (config.finishColor === 'rainbow' && config.topCoat === 'satinMatte') {
       setToastMessage('Incompatible Option: Cannot pair rainbow sparkle with satin matte top coat.')
-      updateConfig({ topCoat: 'clearGloss' })
+      baseUpdateConfig({ topCoat: 'clearGloss' })
     }
     if (config.neckRearFinish === 'clearGloss' && config.topCoat === 'satinMatte') {
       setToastMessage('Incompatible Option: Cannot pair clear gloss neck finish with satin matte top coat.')
-      updateConfig({ neckRearFinish: 'tungOil' })
+      baseUpdateConfig({ neckRearFinish: 'tungOil' })
     }
     if (config.topCoat === 'tungOil' && config.neckRearFinish !== 'tungOil') {
       setToastMessage('Disabled: You Choose Tung oil choose different topcoat to enable this.')
-      updateConfig({ neckRearFinish: 'tungOil' })
+      baseUpdateConfig({ neckRearFinish: 'tungOil' })
     }
   }, [config.finishColor, config.topCoat, config.neckRearFinish, updateConfig])
 
   const saveBuild = async ({ shouldNavigate = true, continueBlockedNavigation = false } = {}) => {
-    if (isLockedCustomization) {
-      setToastMessage('This build is already in an active order and can no longer be edited.')
-      return
-    }
-
-    const buildId = activeBuildId || `build-${Date.now()}`
-    if (isWalkInMode) {
-      setActiveBuildId(buildId)
-      setWalkInBuild({ buildId, config, summary, pricingBreakdown, lineItems: configurationLineItems, stickers, price: totalPrice, continueBlockedNavigation })
-      setShowUnsavedModal(false)
-      return
-    }
-
-    const baseBuild = {
-      id: buildId,
-      name: `${summary.body} build`,
-      price: totalPrice,
-      config,
-      stickers,
-      pricingBreakdown,
-      summary,
-      savedAt: new Date().toISOString(),
-      dbCustomizationId,
-    }
-
-    let storedKey = 'cosmoscraft_saved_builds'
-    let stored = JSON.parse(window.localStorage.getItem(storedKey) || '[]')
-
-    // Look in bass builds if not found in normal builds (for safety)
-    let existingIndex = stored.findIndex(b => b.id === buildId)
-    if (existingIndex === -1 && window.localStorage.getItem('cosmoscraft_saved_bass_builds')) {
-      const bassStored = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_bass_builds'))
-      const bassIndex = bassStored.findIndex(b => b.id === buildId)
-      if (bassIndex !== -1) {
-        storedKey = 'cosmoscraft_saved_bass_builds'
-        stored = bassStored
-        existingIndex = bassIndex
-      }
-    }
-
-    const totalSavedBuildCount = ['cosmoscraft_saved_builds', 'cosmoscraft_saved_bass_builds']
-      .map((key) => JSON.parse(window.localStorage.getItem(key) || '[]'))
-      .reduce((total, entries) => total + (Array.isArray(entries) ? entries.length : 0), 0)
-
-    if (existingIndex === -1 && totalSavedBuildCount >= 10) {
-      setToastMessage('You can only save up to 10 guitar builds. Please delete an existing build before creating a new one.')
-      return
-    }
-
-    if (existingIndex !== -1) {
-      // Preserve existing properties like additionalParts
-      stored[existingIndex] = { ...stored[existingIndex], ...baseBuild }
-    } else {
-      stored.unshift(baseBuild)
-    }
-
-    if (stored.length > 10) stored = stored.slice(0, 10)
-    const persistLocalBuild = (extraPatch = {}) => {
-      const nextBuild = { ...baseBuild, ...extraPatch }
-      let nextStored = JSON.parse(window.localStorage.getItem(storedKey) || '[]')
-      const nextIndex = nextStored.findIndex(b => b.id === buildId)
-      if (nextIndex !== -1) {
-        nextStored[nextIndex] = { ...nextStored[nextIndex], ...nextBuild }
-      } else {
-        nextStored.unshift(nextBuild)
-      }
-      if (nextStored.length > 10) nextStored = nextStored.slice(0, 10)
-      window.localStorage.setItem(storedKey, JSON.stringify(nextStored))
-      if (storedKey === 'cosmoscraft_saved_builds') setSavedBuilds(nextStored)
-      return nextBuild
-    }
-
-    persistLocalBuild()
-    setActiveBuildId(buildId)
-
+    if (savingBuildRef.current) return
+    savingBuildRef.current = true
     try {
-      const snap = JSON.stringify({ config, stickers })
-      setSavedSnapshot(snap)
-      window.sessionStorage.setItem('cosmoscraft.electricBuild.savedSnapshot', snap)
-    } catch { }
-
-    try {
-      const payload = {
-        name: `${summary.body} build`,
-        guitar_type: config.guitarType || 'electric',
-        total_price: totalPrice,
-        is_saved: true,
-        body_wood: summary.bodyWood || null,
-        neck_wood: summary.neck || null,
-        fingerboard_wood: summary.fretboard || null,
-        bridge_type: summary.bridge || config.bridge || null,
-        pickups: summary.pickups || config.pickups || null,
-        color: summary.bodyFinish || config.bodyFinish || null,
-        finish_type: summary.bodyFinish || config.bodyFinish || null,
-        config_json: config,
-        stickers,
-      }
-
-      const endpoint = dbCustomizationId
-        ? `${API}/api/guitars/my-customizations/${dbCustomizationId}`
-        : `${API}/api/guitars/my-customizations`
-      const method = dbCustomizationId ? 'PUT' : 'POST'
-
-      const response = await fetch(endpoint, {
-        method,
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        credentials: 'include',
-        body: JSON.stringify(payload),
-      })
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}))
-        throw new Error(errData.message || 'Failed to save customization in database')
-      }
-
-      const data = await response.json().catch(() => ({}))
-      const savedId = data?.data?.customization_id || dbCustomizationId || null
-      if (savedId) {
-        setDbCustomizationId(savedId)
-        persistLocalBuild({ dbCustomizationId: savedId, customization_id: savedId })
-      }
-    } catch (error) {
-      console.error('Database save failed (local backup retained):', error)
-      if (String(error?.message || '').toLowerCase().includes('active order')) {
-        setIsLockedCustomization(true)
-        navigate('/dashboard', {
-          replace: true,
-          state: {
-            section: 'my-guitar',
-            message: 'This build is already in an active order. You can track it in My Guitar, but it can no longer be edited.',
-          },
-        })
+      if (isLockedCustomization) {
+        setToastMessage('This build is already in an active order and can no longer be edited.')
         return
       }
-      if (String(error?.message || '').toLowerCase().includes('up to 10 guitar builds')) {
+
+      const buildId = activeBuildId || `build-${Date.now()}`
+      if (isWalkInMode) {
+        setActiveBuildId(buildId)
+        setWalkInBuild({ buildId, config, summary, pricingBreakdown, lineItems: configurationLineItems, stickers, price: totalPrice, continueBlockedNavigation })
+        setShowUnsavedModal(false)
+        return
+      }
+
+      let previewImages
+      try { previewImages = await capturePreviewImages() }
+      catch (error) {
+        console.error('Failed to capture build previews:', error)
+        setToastMessage('Unable to save the build previews. Please try again.')
+        return
+      }
+
+      const baseBuild = {
+        id: buildId,
+        name: `${summary.body} build`,
+        price: totalPrice,
+        config,
+        stickers,
+        preview_image: previewImages.front,
+        preview_images: previewImages,
+        pricingBreakdown,
+        summary,
+        savedAt: new Date().toISOString(),
+        dbCustomizationId,
+      }
+
+      let storedKey = 'cosmoscraft_saved_builds'
+      let stored = JSON.parse(window.localStorage.getItem(storedKey) || '[]')
+
+      // Look in bass builds if not found in normal builds (for safety)
+      let existingIndex = stored.findIndex(b => b.id === buildId)
+      if (existingIndex === -1 && window.localStorage.getItem('cosmoscraft_saved_bass_builds')) {
+        const bassStored = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_bass_builds'))
+        const bassIndex = bassStored.findIndex(b => b.id === buildId)
+        if (bassIndex !== -1) {
+          storedKey = 'cosmoscraft_saved_bass_builds'
+          stored = bassStored
+          existingIndex = bassIndex
+        }
+      }
+
+      const totalSavedBuildCount = ['cosmoscraft_saved_builds', 'cosmoscraft_saved_bass_builds']
+        .map((key) => JSON.parse(window.localStorage.getItem(key) || '[]'))
+        .reduce((total, entries) => total + (Array.isArray(entries) ? entries.length : 0), 0)
+
+      if (existingIndex === -1 && totalSavedBuildCount >= 10) {
         setToastMessage('You can only save up to 10 guitar builds. Please delete an existing build before creating a new one.')
         return
       }
-      setToastMessage('Saved locally. Database sync failed.')
-    }
 
-    if (continueBlockedNavigation && blocker.state === 'blocked') {
-      setShowUnsavedModal(false)
-      bypassNavigationBlockRef.current = true
-      blocker.proceed()
-      setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
-      return
-    }
+      if (existingIndex !== -1) {
+        // Preserve existing properties like additionalParts
+        stored[existingIndex] = { ...stored[existingIndex], ...baseBuild }
+      } else {
+        stored.unshift(baseBuild)
+      }
 
-    if (shouldNavigate) {
-      bypassNavigationBlockRef.current = true
-      navigate('/dashboard', {
-        state: {
-          section: 'my-guitar',
-          message: 'Build saved to My Guitar!',
-          openBuildId: buildId,
-        },
-      })
-      setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
-    } else {
-      setJustSaved(true)
-      setToastMessage('Your Build is saved to My Guitar!')
-      setTimeout(() => setJustSaved(false), 500)
+      if (stored.length > 10) stored = stored.slice(0, 10)
+      const persistLocalBuild = (extraPatch = {}) => {
+        const nextBuild = { ...baseBuild, ...extraPatch }
+        let nextStored = JSON.parse(window.localStorage.getItem(storedKey) || '[]')
+        const nextIndex = nextStored.findIndex(b => b.id === buildId)
+        if (nextIndex !== -1) {
+          nextStored[nextIndex] = { ...nextStored[nextIndex], ...nextBuild }
+        } else {
+          nextStored.unshift(nextBuild)
+        }
+        if (nextStored.length > 10) nextStored = nextStored.slice(0, 10)
+        window.localStorage.setItem(storedKey, JSON.stringify(nextStored))
+        if (storedKey === 'cosmoscraft_saved_builds') setSavedBuilds(nextStored)
+        return nextBuild
+      }
+
+      persistLocalBuild()
+      setActiveBuildId(buildId)
+
+      try {
+        const snap = JSON.stringify({ config, stickers })
+        setSavedSnapshot(snap)
+        window.sessionStorage.setItem('cosmoscraft.electricBuild.savedSnapshot', snap)
+      } catch { }
+
+      try {
+        const payload = {
+          name: `${summary.body} build`,
+          guitar_type: config.guitarType || 'electric',
+          total_price: totalPrice,
+          is_saved: true,
+          body_wood: summary.bodyWood || null,
+          neck_wood: summary.neck || null,
+          fingerboard_wood: summary.fretboard || null,
+          bridge_type: summary.bridge || config.bridge || null,
+          pickups: summary.pickups || config.pickups || null,
+          color: summary.bodyFinish || config.bodyFinish || null,
+          finish_type: summary.bodyFinish || config.bodyFinish || null,
+          config_json: { ...config, _previewImages: previewImages },
+          preview_image: previewImages.front,
+          stickers,
+        }
+
+        const endpoint = dbCustomizationId
+          ? `${API}/api/guitars/my-customizations/${dbCustomizationId}`
+          : `${API}/api/guitars/my-customizations`
+        const method = dbCustomizationId ? 'PUT' : 'POST'
+
+        const response = await fetch(endpoint, {
+          method,
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        })
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}))
+          throw new Error(errData.message || 'Failed to save customization in database')
+        }
+
+        const data = await response.json().catch(() => ({}))
+        const savedId = data?.data?.customization_id || dbCustomizationId || null
+        if (savedId) {
+          setDbCustomizationId(savedId)
+          persistLocalBuild({ dbCustomizationId: savedId, customization_id: savedId })
+        }
+      } catch (error) {
+        console.error('Database save failed (local backup retained):', error)
+        if (String(error?.message || '').toLowerCase().includes('active order')) {
+          setIsLockedCustomization(true)
+          navigate('/dashboard', {
+            replace: true,
+            state: {
+              section: 'my-guitar',
+              message: 'This build is already in an active order. You can track it in My Guitar, but it can no longer be edited.',
+            },
+          })
+          return
+        }
+        if (String(error?.message || '').toLowerCase().includes('up to 10 guitar builds')) {
+          setToastMessage('You can only save up to 10 guitar builds. Please delete an existing build before creating a new one.')
+          return
+        }
+        setToastMessage('Saved locally. Database sync failed.')
+      }
+
+      if (continueBlockedNavigation && blocker.state === 'blocked') {
+        setShowUnsavedModal(false)
+        bypassNavigationBlockRef.current = true
+        blocker.proceed()
+        setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
+        return
+      }
+
+      if (shouldNavigate) {
+        bypassNavigationBlockRef.current = true
+        navigate('/dashboard', {
+          state: {
+            section: 'my-guitar',
+            message: 'Build saved to My Guitar!',
+            openBuildId: buildId,
+          },
+        })
+        setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
+      } else {
+        setJustSaved(true)
+        setToastMessage('Your Build is saved to My Guitar!')
+        setTimeout(() => setJustSaved(false), 500)
+      }
+    } finally {
+      savingBuildRef.current = false
     }
   }
 
@@ -1112,11 +1127,8 @@ export function CustomizePage() {
     }
 
     try {
-      await exportMaskedPreview(previewRef.current, {
-        background: '#141414',
-        scale: 2,
-        fileName: `custom-guitar-${config.guitarType}-${Date.now()}.png`,
-      })
+      const images = await capturePreviewImages()
+      downloadPreviewImages(images, 'guitar-design')
     } catch (error) {
       console.error('Failed to save image:', error)
       window.alert('Failed to save image. Please try again.')
@@ -1130,14 +1142,16 @@ export function CustomizePage() {
     const loadedStickers = Array.isArray(build.stickers) ? build.stickers : []
     loadConfig(build.config)
     setStickers(loadedStickers)
-    setSavedSnapshot(JSON.stringify({ config: build.config, stickers: loadedStickers }))
+    beginLoadedBuild()
     setActiveBuildId(build.id)
     setDbCustomizationId(build.dbCustomizationId || build.customization_id || null)
     setIsLockedCustomization(false)
+    bypassNavigationBlockRef.current = true
     setSearchParams((params) => {
       params.set('edit', build.id)
       return params
     }, { replace: true })
+    setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
     setShowLoadModal(false)
   }
 
@@ -2490,7 +2504,7 @@ export function CustomizePage() {
           key={walkInBuild.buildId}
           {...walkInBuild}
           storageScope={walkInBuild.buildId}
-          guitarType="electric" previewRef={previewRef} loadingPrices={loadingPrices}
+          guitarType="electric" previewRef={previewRef} capturePreviewImages={capturePreviewImages} loadingPrices={loadingPrices}
           onClose={() => {
             if (walkInBuild.continueBlockedNavigation && blocker.state === 'blocked') setShowUnsavedModal(true)
             setWalkInBuild(null)

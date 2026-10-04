@@ -1,5 +1,14 @@
 // The builders and Saved Builds actions use the browser's build format. Import
 // customer-owned walk-in designs from the API so delivery works on any device.
+export function readSavedBuilds(storage, key) {
+  try {
+    const builds = JSON.parse(storage.getItem(key) || '[]')
+    return Array.isArray(builds) ? builds : []
+  } catch {
+    return []
+  }
+}
+
 export function mergeWalkInSavedBuilds(localBuilds, customizations, userId, guitarType) {
   const received = customizations.filter(build =>
     String(build.user_id) === String(userId) && build.is_saved !== false &&
@@ -30,10 +39,13 @@ export function mergeWalkInSavedBuilds(localBuilds, customizations, userId, guit
       config,
       stickers: Array.isArray(build.stickers) ? build.stickers : [],
       preview_image: build.preview_image,
+      preview_images: config._previewImages,
       summary: config._walkIn.summary || {},
       pricingBreakdown: config._walkIn.pricingBreakdown || {},
       lineItems: config._walkIn.lineItems || [],
-      savedAt: build.updated_at || build.created_at,
+      created_at: build.created_at,
+      updated_at: build.updated_at,
+      savedAt: build.created_at || build.updated_at,
       isBass: build.guitar_type === 'bass',
     }
     if (index >= 0) result[index] = entry

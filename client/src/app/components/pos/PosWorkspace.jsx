@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
-import PhoneInput from '../PhoneInput'
+import { ConfirmModal } from '../ui/ConfirmModal'
+import { PaginationBar } from '../../pages/admin/components/shared/PaginationBar'
 import { isValidPhoneNumber, PHONE_ERROR_MESSAGE } from '../../utils/phone'
-import { Package, Search, X, Printer, Download, ArrowUpDown, Grid3X3, List, Plus, RotateCcw, AlertTriangle } from 'lucide-react'
+import { Package, Search, X, Printer, Download, ArrowUpDown, Grid3X3, List, Plus, RotateCcw, AlertTriangle, Trash2, Banknote, CreditCard } from 'lucide-react'
 import { posApi } from '../../utils/posApi'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { useSocketEvent } from '../../context/SocketContext'
@@ -512,14 +513,18 @@ export function PosWorkspace({
   const [loadingRecent, setLoadingRecent] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [selectedSale, setSelectedSale] = useState(null)
+  const [receiptPrompt, setReceiptPrompt] = useState(null)
+  const [saleConfirmation, setSaleConfirmation] = useState('')
   const [loadingSaleDetails, setLoadingSaleDetails] = useState(false)
-  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [showOrdersTable, setShowOrdersTable] = useState(false)
   const [historySales, setHistorySales] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
-  const [historyLoadingMore, setHistoryLoadingMore] = useState(false)
-  const [historyOffset, setHistoryOffset] = useState(0)
+  const [historyPage, setHistoryPage] = useState(1)
+  const [historyPageSize, setHistoryPageSize] = useState(10)
   const [historyTotal, setHistoryTotal] = useState(0)
-  const [historyHasMore, setHistoryHasMore] = useState(false)
+  const [historyFilters, setHistoryFilters] = useState({ search: '', status: '', paymentStatus: '', startDate: '', endDate: '' })
+  const [historyError, setHistoryError] = useState('')
+  const [historyRefresh, setHistoryRefresh] = useState(0)
 
   const prevSalesRef = useRef(null)
   const prevSummaryRef = useRef(null)
@@ -651,35 +656,44 @@ export function PosWorkspace({
     }
   }, [showToast])
 
-  const loadHistorySales = useCallback(async (options = {}) => {
-    const { reset = false } = options
-    if (reset) {
-      setHistoryLoading(true)
-    } else {
-      setHistoryLoadingMore(true)
-    }
-    try {
-      const nextOffset = reset ? 0 : historyOffset
-      const res = await posApi.listSales({ limit: 20, offset: nextOffset })
-      const nextSales = normalizeSales(res)
-      const total = Number(res?.pagination?.total || 0)
-      const loadedCount = reset ? nextSales.length : historySales.length + nextSales.length
-      setHistorySales((prev) => (reset ? nextSales : [...prev, ...nextSales]))
-      setHistoryOffset(nextOffset + nextSales.length)
-      setHistoryTotal(total)
-      setHistoryHasMore(loadedCount < total)
-    } catch (error) {
-      showToast?.(error.message, 'error')
-    } finally {
+  useEffect(() => {
+    if (!showOrdersTable) return
+    let active = true
+    setHistoryLoading(true)
+    setHistoryError('')
+    const params = { limit: historyPageSize, offset: (historyPage - 1) * historyPageSize }
+    if (historyFilters.search.trim()) params.search = historyFilters.search.trim()
+    if (historyFilters.status) params.status = historyFilters.status
+    if (historyFilters.paymentStatus) params.paymentStatus = historyFilters.paymentStatus
+    if (historyFilters.startDate) params.startDate = `${historyFilters.startDate}T00:00:00+08:00`
+    if (historyFilters.endDate) params.endDate = new Date(new Date(`${historyFilters.endDate}T00:00:00+08:00`).getTime() + 86400000).toISOString()
+    if (historyFilters.startDate && historyFilters.endDate && historyFilters.startDate > historyFilters.endDate) {
+      setHistoryError('The end date must be on or after the start date.')
       setHistoryLoading(false)
-      setHistoryLoadingMore(false)
+      return
     }
-  }, [historyOffset, historySales.length, showToast])
+    posApi.listSales(params).then(res => {
+      if (!active) return
+      const total = Number(res?.pagination?.total || 0)
+      const lastPage = Math.max(1, Math.ceil(total / historyPageSize))
+      if (historyPage > lastPage) { setHistoryPage(lastPage); return }
+      setHistorySales(normalizeSales(res))
+      setHistoryTotal(total)
+    }).catch(error => { if (active) setHistoryError(error.message) })
+      .finally(() => { if (active) setHistoryLoading(false) })
+    return () => { active = false }
+  }, [showOrdersTable, historyPage, historyPageSize, historyFilters, historyRefresh])
 
-  const openHistoryModal = useCallback(() => {
-    setShowHistoryModal(true)
-    loadHistorySales({ reset: true })
-  }, [loadHistorySales])
+  const openOrdersTable = useCallback(() => {
+    setHistoryPage(1)
+    setHistoryRefresh(value => value + 1)
+    setShowOrdersTable(true)
+  }, [])
+
+  const updateHistoryFilter = (field, value) => {
+    setHistoryPage(1)
+    setHistoryFilters(prev => ({ ...prev, [field]: value }))
+  }
 
   // Real-time sale updates via WebSockets (replaces polling)
   useEffect(() => {
@@ -764,8 +778,15 @@ export function PosWorkspace({
       }
 
       const result = await posApi.createSale(payload)
+      const savedSale = result?.data || {}
+      setReceiptPrompt({
+        ...savedSale,
+        items: payload.items.map(item => ({ ...item, item_name: item.name, unit_price: item.price })),
+        cash_received: payload.cashReceived,
+      })
       resetSaleForm()
-      await loadRecentSales()
+      // A refresh failure must not make a recorded sale appear to have failed.
+      await loadRecentSales().catch(() => {})
       showToast?.(`POS sale ${result?.data?.sale_number || 'saved'} recorded`, 'success')
     } catch (error) {
       showToast?.(error.message, 'error')
@@ -782,7 +803,7 @@ export function PosWorkspace({
     const printWindow = window.open('', '_blank', 'width=980,height=780')
     if (!printWindow) {
       showToast?.('Please allow popups to print the receipt.', 'error')
-      return
+      return false
     }
     printWindow.document.open()
     printWindow.document.write(buildPosReceiptHtml(sale))
@@ -791,6 +812,7 @@ export function PosWorkspace({
     setTimeout(() => {
       printWindow.print()
     }, 150)
+    return true
   }, [showToast])
 
   const openVoidReturnModal = useCallback((sale, mode) => {
@@ -874,79 +896,38 @@ export function PosWorkspace({
 
   return (
     <div className="space-y-6">
+      <ConfirmModal open={Boolean(receiptPrompt)} title="Do you want to print receipt?" description="Your order was saved successfully. You can also print its receipt later from All POS Orders." confirmLabel="Yes, print receipt" cancelLabel="No" variant="info"
+        onConfirm={() => { if (handlePrintSaleReceipt(receiptPrompt)) { setReceiptPrompt(null); } }}
+        onCancel={() => { setReceiptPrompt(null); }} />
+      {saleConfirmation && <p role="status" className="rounded-xl border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-400">{saleConfirmation}</p>}
       <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-[var(--text-light)]">{heading}</h3>
             <p className="text-sm text-[var(--text-muted)]">{description}</p>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:w-auto">
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 px-4 py-2.5">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Today</p>
-              <p className="text-sm font-semibold text-[var(--text-light)]">{formatCurrency(Number(dailySummary?.total_sales || 0))}</p>
-            </div>
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 px-4 py-2.5">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Sales</p>
-              <p className="text-sm font-semibold text-[var(--text-light)]">{Number(dailySummary?.total_transactions || 0)} today</p>
-            </div>
-          </div>
+          <button type="button" onClick={() => showOrdersTable ? setShowOrdersTable(false) : openOrdersTable()} className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--gold-primary)]/40 bg-[var(--gold-primary)]/15 px-4 py-2.5 text-sm font-semibold text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/25">
+            <List className="h-4 w-4" /> {showOrdersTable ? 'Back to POS' : 'View All Orders'}
+          </button>
         </div>
       </div>
 
-        <div className="grid gap-6 xl:grid-cols-[1.35fr,0.95fr]">
-          <div className="space-y-5">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-muted)]">Total Products</p>
-                <p className="mt-2 text-2xl font-bold text-[var(--text-light)]">{visibleInventory.length}</p>
-              </div>
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-muted)]">Categories</p>
-                <p className="mt-2 text-2xl font-bold text-[var(--text-light)]">{categoryOptions.length}</p>
-              </div>
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-muted)]">Transactions</p>
-                <p className="mt-2 text-2xl font-bold text-[var(--text-light)]">{Number(dailySummary?.total_transactions || 0)}</p>
-              </div>
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-muted)]">Cart Items</p>
-                <p className="mt-2 text-2xl font-bold text-[var(--text-light)]">{cart.reduce((acc, item) => acc + Number(item.quantity || 0), 0)}</p>
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
-              <div className="mb-3 flex items-center justify-between">
-                <h4 className="text-lg font-semibold text-[var(--text-light)]">All Products</h4>
-                {/* <button
-                  type="button"
-                  onClick={() => { setCategoryFilter('all'); setSearchQuery('') }}
-                  className="text-xs font-semibold text-[var(--gold-primary)] hover:text-[var(--gold-secondary)]"
-                >
-                  See all
-                </button> */}
+      {!showOrdersTable && (
+        <div className="grid overflow-hidden rounded-2xl border border-[var(--border)] xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+          <div className="min-w-0 bg-[var(--bg-primary)] p-4 sm:p-5">
+            <div>
+              <div className="mb-5 grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                  <p className="text-xs text-[var(--text-muted)]">Today's Sales</p>
+                  <p className="mt-1 text-xl font-bold text-[var(--text-light)]">{formatCurrency(Number(dailySummary?.total_sales || 0))}</p>
+                </div>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                  <p className="text-xs text-[var(--text-muted)]">POS Orders Today</p>
+                  <p className="mt-1 text-xl font-bold text-[var(--text-light)]">{Number(dailySummary?.total_transactions || 0)}</p>
+                </div>
               </div>
 
-              <div className="mb-4 flex flex-wrap items-center gap-2 overflow-x-auto">
-                <button
-                  type="button"
-                  onClick={() => setCategoryFilter('all')}
-                  className={`rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${categoryFilter === 'all' ? 'bg-[var(--gold-primary)] text-[var(--text-dark)]' : 'border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-light)]'}`}
-                >
-                  All
-                </button>
-                {categoryOptions.map((cat) => (
-                  <button
-                    key={cat.value}
-                    type="button"
-                    onClick={() => setCategoryFilter(cat.value)}
-                    className={`whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${categoryFilter === cat.value ? 'bg-[var(--gold-primary)] text-[var(--text-dark)]' : 'border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-light)]'}`}
-                  >
-                    {cat.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="mb-4 grid gap-3 lg:grid-cols-[150px_minmax(0,1fr)_auto_auto]">
+              <div className="mb-4 grid gap-3 lg:grid-cols-[150px_minmax(0,1fr)_auto]">
                 <div className="relative">
                   <ArrowUpDown className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
                   <select
@@ -967,7 +948,7 @@ export function PosWorkspace({
                     type="text"
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Search products"
+                    placeholder="Search products or SKU"
                     className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] py-2.5 pl-9 pr-4 text-sm text-[var(--text-light)]"
                   />
                 </div>
@@ -991,41 +972,59 @@ export function PosWorkspace({
                   </button>
                 </div>
 
-                <div className="rounded-xl border border-[var(--gold-primary)]/40 bg-[var(--gold-primary)]/15 px-3 py-2 text-xs font-semibold text-[var(--gold-primary)]">
-                  {catalog.length} Items
-                </div>
+
+              </div>
+
+              <div className="mb-4 flex flex-wrap items-center gap-2 overflow-x-auto border-b border-[var(--border)] pb-3">
+                <button
+                  type="button"
+                  onClick={() => setCategoryFilter('all')}
+                  className={`rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${categoryFilter === 'all' ? 'bg-[var(--gold-primary)] text-[var(--text-dark)]' : 'border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-light)]'}`}
+                >
+                  All
+                </button>
+                {categoryOptions.map((cat) => (
+                  <button
+                    key={cat.value}
+                    type="button"
+                    onClick={() => setCategoryFilter(cat.value)}
+                    className={`whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${categoryFilter === cat.value ? 'bg-[var(--gold-primary)] text-[var(--text-dark)]' : 'border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-light)]'}`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
               </div>
 
               {catalog.length === 0 ? (
                 <EmptyState icon={Package} label="No sellable products found" description="Try another search term." />
               ) : (
                 <div className="max-h-[560px] overflow-y-auto pr-1">
-                  <div className={`grid gap-3 ${catalogView === 'list' ? 'grid-cols-1' : 'sm:grid-cols-2 xl:grid-cols-3'}`}>
+                  <div className={`grid gap-3 ${catalogView === 'list' ? 'grid-cols-1' : 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'}`}>
                   {catalog.map((item) => (
                     <div
                       key={item.product_id}
-                      className={`rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/70 p-3 ${catalogView === 'list' ? 'flex items-center justify-between gap-3' : ''}`}
+                      className={`rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-2 ${catalogView === 'list' ? 'flex items-center justify-between gap-3' : ''}`}
                     >
                       <div className={`min-w-0 ${catalogView === 'list' ? 'flex-1' : ''}`}>
-                        <div className={`mb-2 ${catalogView === 'list' ? 'hidden' : 'flex h-20 items-center justify-center rounded-xl bg-[var(--surface-dark)]'}`}>
+                        <div className={`mb-2 ${catalogView === 'list' ? 'hidden' : 'relative flex h-36 items-center justify-center overflow-hidden rounded-lg bg-[var(--surface-dark)]'}`}>
                           {resolveCatalogImage(item) ? (
-                            <img src={resolveCatalogImage(item)} alt={item.name} className="h-16 w-16 rounded-lg object-cover" loading="lazy" />
+                            <img src={resolveCatalogImage(item)} alt={item.name} className="h-full w-full object-cover" loading="lazy" />
                           ) : (
                             <Package className="h-7 w-7 text-[var(--text-muted)]" />
                           )}
+                          <span className="absolute right-2 top-2 rounded-md bg-[var(--surface-dark)] px-2 py-1 text-[10px] text-[var(--text-light)]">{item.stock} in stock</span>
                         </div>
-                        <p className="truncate text-sm font-semibold text-[var(--text-light)]">{item.name}</p>
-                        <p className="mt-1 text-xs text-[var(--text-muted)]">{item.sku || 'No SKU'} - {item.stock} in stock</p>
+                        <p className="min-h-10 text-sm font-semibold leading-5 text-[var(--text-light)] line-clamp-2">{item.name}</p>
                         <p className="mt-2 text-sm font-bold text-[var(--gold-primary)]">{formatCurrency(Number(item.price || 0))}</p>
                       </div>
                       <button
                         type="button"
                         onClick={() => addToCart(item)}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--gold-primary)] text-[var(--text-dark)] hover:bg-[var(--gold-secondary)]"
+                        className={`inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--gold-primary)] px-3 py-2 text-xs font-semibold text-[var(--text-dark)] hover:bg-[var(--gold-secondary)] ${catalogView === 'list' ? 'shrink-0' : 'mt-3 w-full'}`}
                         title={`Add ${item.name}`}
                         aria-label={`Add ${item.name}`}
                       >
-                        <Plus className="h-4 w-4" />
+                        <Plus className="h-4 w-4" /> Add to cart
                       </button>
                     </div>
                   ))}
@@ -1035,19 +1034,25 @@ export function PosWorkspace({
             </div>
           </div>
 
-          <div className="space-y-5">
-            <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
-              <h4 className="text-lg font-semibold text-[var(--text-light)]">Order Summary</h4>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">Transaction preview and checkout controls.</p>
+          <div className="min-w-0 border-t border-[var(--border)] bg-[var(--surface-dark)] xl:border-l xl:border-t-0">
+            <div className="p-4 sm:p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h4 className="text-lg font-semibold text-[var(--text-light)]">Order details</h4>
+                <button type="button" onClick={resetSaleForm} disabled={submitting || !cart.length} className="text-xs text-[var(--text-muted)] hover:text-[var(--gold-primary)] disabled:opacity-40"><span style={{ color: '#ef4444' }}>Clear</span></button>
+              </div>
 
-              <div className="mt-4 max-h-[280px] space-y-2 overflow-y-auto pr-1">
+              <div className="mt-4 max-h-[320px] divide-y divide-[var(--border)] overflow-y-auto pr-1">
                 {cart.length === 0 ? (
                   <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/50 p-4 text-sm text-[var(--text-muted)]">
                     Add products from the left panel.
                   </div>
                 ) : (
                   cart.map((item) => (
-                    <div key={item.product_id} className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/70 p-3">
+                    <div key={item.product_id} className="flex items-start gap-3 py-3">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[var(--bg-primary)]">
+                        {resolveCatalogImage(item) ? <img src={resolveCatalogImage(item)} alt={item.name} className="h-full w-full object-cover" /> : <Package className="h-5 w-5 text-[var(--text-muted)]" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-[var(--text-light)]">{item.name}</p>
@@ -1055,10 +1060,11 @@ export function PosWorkspace({
                         </div>
                         <button
                           type="button"
+                          aria-label={`Remove ${item.name}`}
                           onClick={() => updateQuantity(item.product_id, 0, item.stock)}
                           className="rounded-md p-1 text-red-300 hover:bg-red-500/10"
                         >
-                          <X className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
                       <div className="mt-2 flex items-center justify-between">
@@ -1081,6 +1087,7 @@ export function PosWorkspace({
                         </div>
                         <span className="text-sm font-semibold text-[var(--text-light)]">{formatCurrency(Number(item.price || 0) * item.quantity)}</span>
                       </div>
+                      </div>
                     </div>
                   ))
                 )}
@@ -1091,7 +1098,8 @@ export function PosWorkspace({
                 <div className="flex justify-between text-base font-bold text-[var(--text-light)]"><span>Total</span><span className="text-[var(--gold-primary)]">{formatCurrency(total)}</span></div>
               </div>
 
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              <p className="mt-5 text-xs font-semibold text-[var(--text-light)]">Payment method</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
                 {[
                   ['cash', 'Cash'],
                   ['gcash', 'GCash'],
@@ -1100,32 +1108,19 @@ export function PosWorkspace({
                     key={method}
                     type="button"
                     onClick={() => setPaymentMethod(method)}
-                    className={`rounded-lg px-3 py-2 text-xs font-semibold ${paymentMethod === method ? 'bg-[var(--gold-primary)] text-[var(--text-dark)]' : 'border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-light)]'}`}
+                    className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${paymentMethod === method ? 'bg-[var(--gold-primary)] text-[var(--text-dark)]' : 'border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-light)]'}`}
                   >
+                    {method === 'cash' ? <Banknote className="h-4 w-4" /> : <CreditCard className="h-4 w-4" />}
                     {label}
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-xs text-[var(--text-muted)]">Cash and GCash only.</p>
-
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                <input
-                  type="text"
-                  value={customerName}
-                  onChange={(event) => setCustomerName(event.target.value)}
-                  placeholder="Customer name"
-                  className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-light)]"
-                />
-                <PhoneInput
-                  value={customerPhone}
-                  onChange={(event) => setCustomerPhone(event.target.value)}
-                  className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-light)]"
-                />
-              </div>
 
               {paymentMethod === 'cash' ? (
                 <div className="mt-3">
+                  <label htmlFor="pos-cash-received" className="mb-1 block text-xs text-[var(--text-muted)]">Cash received</label>
                   <input
+                    id="pos-cash-received"
                     type="number"
                     min="0"
                     value={cashReceived}
@@ -1170,138 +1165,54 @@ export function PosWorkspace({
               </div>
             </div>
 
-            <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <h4 className="font-semibold text-[var(--text-light)]">Recent Orders</h4>
-                  <p className="text-xs text-[var(--text-muted)]">Latest POS transactions</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={openHistoryModal}
-                    className="rounded-lg border border-[var(--gold-primary)]/40 bg-[var(--gold-primary)]/15 px-3 py-1.5 text-xs font-semibold text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/25"
-                  >
-                    View All History
-                  </button>
-                  <button
-                    type="button"
-                    onClick={loadRecentSales}
-                    className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-light)]"
-                  >
-                    Refresh
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                {loadingRecent ? (
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/50 px-4 py-5 text-center text-sm text-[var(--text-muted)]">
-                    Loading recent sales...
-                  </div>
-                ) : recentSales.length === 0 ? (
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/50 px-4 py-5 text-center text-sm text-[var(--text-muted)]">
-                    No POS sales recorded yet.
-                  </div>
-                ) : (
-                  recentSales.slice(0, 4).map((entry) => (
-                    <div
-                      key={entry.sale_id}
-                      onClick={() => loadSaleDetails(entry.sale_id)}
-                      className="cursor-pointer rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-3 hover:border-[var(--gold-primary)]/50"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-[var(--text-light)]">{entry.sale_number}</p>
-                           <p className="text-xs text-[var(--text-muted)]">{entry.customer_name || 'N/A'} - {new Date(entry.created_at).toLocaleString()}</p>
-                        </div>
-                        <StatusBadge
-                          label={formatStatusLabel(entry.status || 'pending')}
-                          variant={getStatusVariant(entry.status)}
-                        />
-                      </div>
-                      <div className="mt-2 flex items-center justify-between text-xs">
-                         <span className="text-[var(--text-muted)]">{entry.item_count} items - {String(entry.payment_method || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</span>
-                        <span className="font-semibold text-[var(--gold-primary)]">{formatCurrency(Number(entry.total_amount || 0))}</span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+
           </div>
         </div>
 
-      {showHistoryModal && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setShowHistoryModal(false)}
-        >
-          <div 
-            className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-[var(--border)] p-5">
-              <div>
-                <h3 className="text-lg font-semibold text-[var(--text-light)]">Receipt History</h3>
-                <p className="text-xs text-[var(--text-muted)]">
-                  {historyTotal > 0 ? `${historyTotal} total transaction${historyTotal === 1 ? '' : 's'}` : 'All POS transactions'}
-                </p>
-              </div>
-              <button 
-                onClick={() => setShowHistoryModal(false)}
-                className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-primary)]"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+      )}
 
-            <div className="flex-1 overflow-y-auto p-5">
-              {historyLoading ? (
-                <div className="py-10 text-center text-[var(--text-muted)]">Loading receipt history...</div>
-              ) : historySales.length === 0 ? (
-                <div className="py-10 text-center text-[var(--text-muted)]">No POS sales recorded yet.</div>
-              ) : (
-                <div className="space-y-2">
-                  {historySales.map((entry) => (
-                    <div
-                      key={entry.sale_id}
-                      onClick={() => loadSaleDetails(entry.sale_id)}
-                      className="cursor-pointer rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-3 hover:border-[var(--gold-primary)]/50"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-[var(--text-light)]">{entry.sale_number}</p>
-                          <p className="text-xs text-[var(--text-muted)]">{entry.customer_name || 'N/A'} - {new Date(entry.created_at).toLocaleString()}</p>
-                        </div>
-                        <StatusBadge
-                          label={formatStatusLabel(entry.status || 'pending')}
-                          variant={getStatusVariant(entry.status)}
-                        />
-                      </div>
-                      <div className="mt-2 flex items-center justify-between text-xs">
-                        <span className="text-[var(--text-muted)]">{entry.item_count} items - {String(entry.payment_method || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</span>
-                        <span className="font-semibold text-[var(--gold-primary)]">{formatCurrency(Number(entry.total_amount || 0))}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+      {showOrdersTable && (
+        <section aria-labelledby="pos-orders-title" className="min-w-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]">
+            <div className="flex items-center justify-between border-b border-[var(--border)] p-5">
+              <h3 id="pos-orders-title" className="text-lg font-semibold text-[var(--text-light)]">All POS Orders</h3>
+            </div>
+            <div className="border-b border-[var(--border)] p-4">
+              <label className="relative block">
+                <span className="sr-only">Search POS orders</span>
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+                <input type="search" value={historyFilters.search} onChange={event => updateHistoryFilter('search', event.target.value)} placeholder="Search order number, customer or staff" className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] py-2.5 pl-9 pr-4 text-sm text-[var(--text-light)]" />
+              </label>
+            </div>
+            <div className="grid gap-3 border-b border-[var(--border)] p-4 sm:grid-cols-2 lg:grid-cols-5">
+              <label className="text-xs text-[var(--text-muted)]">Status<select aria-label="Status" value={historyFilters.status} onChange={event => updateHistoryFilter('status', event.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-2 text-[var(--text-light)]"><option value="">All statuses</option>{['pending','completed','cancelled','voided','returned'].map(value => <option key={value} value={value}>{formatStatusLabel(value)}</option>)}</select></label>
+              <label className="text-xs text-[var(--text-muted)]">Payment status<select aria-label="Payment status" value={historyFilters.paymentStatus} onChange={event => updateHistoryFilter('paymentStatus', event.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-2 text-[var(--text-light)]"><option value="">All payments</option>{['pending','verified','refunded'].map(value => <option key={value} value={value}>{formatStatusLabel(value)}</option>)}</select></label>
+              <label className="text-xs text-[var(--text-muted)]">From<input type="date" value={historyFilters.startDate} onChange={event => updateHistoryFilter('startDate', event.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-2 text-[var(--text-light)]" /></label>
+              <label className="text-xs text-[var(--text-muted)]">To<input type="date" value={historyFilters.endDate} onChange={event => updateHistoryFilter('endDate', event.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-2 text-[var(--text-light)]" /></label>
+              <div className="flex items-end gap-2"><button type="button" onClick={() => { setHistoryFilters({ search: '', status: '', paymentStatus: '', startDate: '', endDate: '' }); setHistoryPage(1) }} className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)]">Reset</button><button type="button" onClick={() => setHistoryRefresh(value => value + 1)} className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--gold-primary)]">Refresh</button></div>
+            </div>
+            <div className="overflow-x-auto">
+              {historyError ? <p role="alert" className="p-6 text-center text-red-400">{historyError}</p> : historyLoading ? <p className="p-10 text-center text-[var(--text-muted)]">Loading orders...</p> : (
+                <table className="w-full min-w-[800px] text-left text-xs">
+                  <thead className="bg-[var(--bg-primary)] uppercase tracking-wider text-[var(--text-muted)]"><tr>{['Order #','Date','Staff','Items','Payment method','Status','Payment','Total','Actions'].map(label => <th key={label} className="px-4 py-3">{label}</th>)}</tr></thead>
+                  <tbody className="divide-y divide-[var(--border)]">
+                    {!historySales.length && <tr><td colSpan={9} className="p-10 text-center text-[var(--text-muted)]">No orders match your filters.</td></tr>}
+                    {historySales.map(entry => <tr key={entry.sale_id} className="text-[var(--text-light)] hover:bg-[var(--bg-primary)]/50">
+                      <td className="px-4 py-3 font-semibold">{entry.sale_number}</td>
+                      <td className="whitespace-nowrap px-4 py-3">{formatDateTime(entry.created_at)}</td>
+                      <td className="px-4 py-3">{[entry.first_name, entry.last_name].filter(Boolean).join(' ') || '-'}</td>
+                      <td className="px-4 py-3">{entry.item_count}</td>
+                      <td className="px-4 py-3">{formatStatusLabel(entry.payment_method)}</td>
+                      <td className="whitespace-nowrap px-4 py-3"><StatusBadge label={formatStatusLabel(entry.status)} variant={getStatusVariant(entry.status)} /></td>
+                      <td className="px-4 py-3">{formatStatusLabel(entry.payment_status)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 font-semibold">{formatCurrency(Number(entry.total_amount || 0))}</td>
+                      <td className="px-4 py-3"><button type="button" disabled={loadingSaleDetails} onClick={() => loadSaleDetails(entry.sale_id)} className="text-[var(--gold-primary)] hover:underline">View receipt</button></td>
+                    </tr>)}
+                  </tbody>
+                </table>
               )}
             </div>
-
-            {historyHasMore && (
-              <div className="border-t border-[var(--border)] p-4">
-                <button
-                  type="button"
-                  onClick={() => loadHistorySales()}
-                  disabled={historyLoadingMore}
-                  className="w-full rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-muted)] hover:text-[var(--text-light)] disabled:opacity-60"
-                >
-                  {historyLoadingMore ? 'Loading more...' : 'Load More'}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+            <PaginationBar attached page={historyPage} totalPages={Math.max(1, Math.ceil(historyTotal / historyPageSize))} total={historyTotal} loading={historyLoading || Boolean(historyError)} onPageChange={setHistoryPage} pageSize={historyPageSize} onPageSizeChange={value => { setHistoryPageSize(value); setHistoryPage(1) }} />
+        </section>
       )}
 
       {selectedSale && (

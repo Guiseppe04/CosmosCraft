@@ -13,7 +13,10 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import useBassConfig from '../hooks/useBassConfig.js'
 import BassPreview from '../components/bass/BassPreview.jsx'
-import { exportMaskedPreview } from '../utils/exportMaskedPreview.js'
+import { downloadPreviewImages } from '../utils/exportMaskedPreview.js'
+import { captureBuildViews } from '../utils/captureBuildViews.jsx'
+import { useBuildSnapshot } from '../hooks/useBuildSnapshot.js'
+import { API, getAuthHeaders } from '../utils/apiConfig'
 import { RGBColorPicker } from '../components/options/RGBColorPicker.jsx'
 import { optimizeCloudinaryImage } from '../utils/cloudinary.js'
 import {
@@ -746,28 +749,12 @@ export function BassCustomizePage() {
   const { isAuthenticated, openLogin, user } = useAuth()
   const isWalkInMode = searchParams.get('mode') === 'walk-in' && ['staff', 'admin', 'super_admin'].includes(user?.role)
   const [walkInBuild, setWalkInBuild] = useState(null)
+  const savingBuildRef = useRef(false)
   const { addToCart, setIsOpen: setCartOpen } = useCart()
-  const [savedSnapshot, setSavedSnapshot] = useState(() => {
-    // If editing an existing build, consider it already saved
-    if (editBuildId) return JSON.stringify({ config: null, stickers: null })
-    try {
-      return window.sessionStorage.getItem('cosmoscraft.bassBuild.savedSnapshot')
-    } catch {
-      return null
-    }
-  })
+
   const { stickers, setStickers, selectedStickerId, setSelectedStickerId } = useStickerDraft('bassBuild')
 
-  // Derived: is there anything to save?
-  const hasUnsavedChanges = useMemo(() => {
-    if (savedSnapshot === null) return true // never saved → unsaved
-    try {
-      const current = JSON.stringify({ config, stickers })
-      return current !== savedSnapshot
-    } catch {
-      return true
-    }
-  }, [savedSnapshot, config, stickers])
+  const { savedSnapshot, setSavedSnapshot, hasUnsavedChanges, beginLoadedBuild, markDesignChanged } = useBuildSnapshot(config, stickers, 'cosmoscraft.bassBuild', editBuildId)
 
   // Derived: has this build ever been saved?
   const hasBeenSaved = savedSnapshot !== null
@@ -782,9 +769,9 @@ export function BassCustomizePage() {
   const previewViewportRef = useRef(null)
   const previewStageRef = useRef(null)
 
-  const updateConfig = (patch) => baseUpdateConfig(patch)
-  const resetConfig = () => baseResetConfig()
-  const loadConfig = (raw) => baseLoadConfig(raw)
+  const updateConfig = (patch) => { markDesignChanged(); baseUpdateConfig(patch) }
+  const resetConfig = () => { markDesignChanged(); baseResetConfig() }
+  const loadConfig = (raw) => { beginLoadedBuild(); baseLoadConfig(raw) }
 
   const handleZoomIn = () => setZoomLevel((prev) => Math.min(2, Number((prev + 0.1).toFixed(2))))
   const handleZoomOut = () => setZoomLevel((prev) => Math.max(0.7, Number((prev - 0.1).toFixed(2))))
@@ -809,6 +796,13 @@ export function BassCustomizePage() {
     [options.bodyOptions, config.bassType]
   )
   const currentBodyMaskSrc = selectedBassModel?.bodySrc || null
+  const capturePreviewImages = (designConfig = config, designStickers = stickers, captureOptions) => captureBuildViews(BassPreview, designConfig, designStickers, {
+    modelImageSrc: selectedBassModel?.previewImageUrl || selectedBassModel?.bodySrc || null,
+    bodyWoodImageSrc: options.bodyWoodOptions?.find(option => option.value === designConfig.bodyWood)?.preview || null,
+    topWoodImageSrc: options.topWoodOptions?.find(option => option.value === designConfig.topWood)?.preview || null,
+    stickerMaskSrc: currentBodyMaskSrc,
+  }, captureOptions)
+
 
   const currentViewStickers = useMemo(
     () => stickers.filter((s) => (s.side || 'front') === view),
@@ -908,6 +902,7 @@ export function BassCustomizePage() {
           aspectRatio: getStickerAspectRatioFromMeta(meta),
           price: DEFAULT_STICKER_PRICE,
         }, previewStageRef.current, stickerPlacementContextRef.current)
+        markDesignChanged()
         setStickers((prev) => [...prev, newSticker])
         setSelectedStickerId(newSticker.id)
       })().catch((error) => {
@@ -920,6 +915,7 @@ export function BassCustomizePage() {
 
   const updateSelectedSticker = (patchOrUpdater, options = {}) => {
     if (!selectedStickerId) return
+    markDesignChanged()
     setStickers((prev) =>
       prev.map((stickerItem) => {
         if (stickerItem.id !== selectedStickerId) return stickerItem
@@ -933,6 +929,7 @@ export function BassCustomizePage() {
 
   const updateStickerById = (id, patchOrUpdater, options = {}) => {
     if (!id) return
+    markDesignChanged()
     setStickers((prev) =>
       prev.map((stickerItem) => {
         if (stickerItem.id !== id) return stickerItem
@@ -945,6 +942,7 @@ export function BassCustomizePage() {
   }
 
   const removeStickerById = (id) => {
+    markDesignChanged()
     setStickers((prev) => {
       const target = prev.find((s) => s.id === id)
       if (target?.src?.startsWith('blob:')) {
@@ -963,12 +961,14 @@ export function BassCustomizePage() {
       x: Math.min(95, selectedSticker.x + 4),
       y: Math.min(95, selectedSticker.y + 4),
     }, previewStageRef.current, stickerPlacementContextRef.current)
+    markDesignChanged()
     setStickers((prev) => [...prev, duplicate])
     setSelectedStickerId(duplicate.id)
   }
 
   const moveLayer = (direction) => {
     if (!selectedStickerId) return
+    markDesignChanged()
     setStickers((prev) => {
       const current = prev.filter((s) => (s.side || 'front') === view)
       const other = prev.filter((s) => (s.side || 'front') !== view)
@@ -1236,10 +1236,10 @@ export function BassCustomizePage() {
         const target = builds.find(b => b.id === editBuildId)
         if (target) {
           try {
+            beginLoadedBuild()
             baseLoadConfig(target.config)
             const loadedStickers = Array.isArray(target.stickers) ? target.stickers : []
             setStickers(loadedStickers)
-            setSavedSnapshot(JSON.stringify({ config: target.config, stickers: loadedStickers }))
             setActiveBuildId(target.id)
           } catch (e) {
             console.error('Failed to load build config for editing:', e)
@@ -1288,84 +1288,118 @@ export function BassCustomizePage() {
     }
   }, [toastMessage])
 
-  const saveBuild = ({ shouldNavigate = true, continueBlockedNavigation = false } = {}) => {
-    const buildId = activeBuildId || `build-${Date.now()}`
-    if (isWalkInMode) {
-      setActiveBuildId(buildId)
-      setWalkInBuild({ buildId, config, summary, pricingBreakdown, lineItems: configurationLineItems, stickers, price: totalPrice, continueBlockedNavigation })
-      setShowUnsavedModal(false)
-      return
-    }
-
-    const build = {
-      id: buildId,
-      name: `${summary.body} build`,
-      price,
-      config,
-      stickers,
-      summary,
-      savedAt: new Date().toISOString(),
-    }
-
-    let storedKey = 'cosmoscraft_saved_bass_builds'
-    let stored = JSON.parse(window.localStorage.getItem(storedKey) || '[]')
-
-    let existingIndex = stored.findIndex(b => b.id === buildId)
-    if (existingIndex === -1 && window.localStorage.getItem('cosmoscraft_saved_builds')) {
-      const normStored = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_builds'))
-      const normIndex = normStored.findIndex(b => b.id === buildId)
-      if (normIndex !== -1) {
-        storedKey = 'cosmoscraft_saved_builds'
-        stored = normStored
-        existingIndex = normIndex
-      }
-    }
-
-    const totalSavedBuildCount = ['cosmoscraft_saved_builds', 'cosmoscraft_saved_bass_builds']
-      .map((key) => JSON.parse(window.localStorage.getItem(key) || '[]'))
-      .reduce((total, entries) => total + (Array.isArray(entries) ? entries.length : 0), 0)
-
-    if (existingIndex === -1 && totalSavedBuildCount >= 10) {
-      setToastMessage('You can only save up to 10 bass builds. Please delete an existing build before creating a new one.')
-      return
-    }
-
-    if (existingIndex !== -1) {
-      stored[existingIndex] = { ...stored[existingIndex], ...build }
-    } else {
-      stored.unshift(build)
-    }
-
-    if (stored.length > 10) stored = stored.slice(0, 10)
-    window.localStorage.setItem(storedKey, JSON.stringify(stored))
-    setActiveBuildId(buildId)
-    if (storedKey === 'cosmoscraft_saved_bass_builds') setSavedBuilds(stored)
+  const saveBuild = async ({ shouldNavigate = true, continueBlockedNavigation = false } = {}) => {
+    if (savingBuildRef.current) return
+    savingBuildRef.current = true
     try {
-      const snap = JSON.stringify({ config, stickers })
-      setSavedSnapshot(snap)
-      window.sessionStorage.setItem('cosmoscraft.bassBuild.savedSnapshot', snap)
-    } catch { }
+      const buildId = activeBuildId || `build-${Date.now()}`
+      if (isWalkInMode) {
+        setActiveBuildId(buildId)
+        setWalkInBuild({ buildId, config, summary, pricingBreakdown, lineItems: configurationLineItems, stickers, price: totalPrice, continueBlockedNavigation })
+        setShowUnsavedModal(false)
+        return
+      }
 
-    if (continueBlockedNavigation && blocker.state === 'blocked') {
-      setShowUnsavedModal(false)
-      bypassNavigationBlockRef.current = true
-      blocker.proceed()
-      setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
-      return
-    }
+      let previewImages
+      try { previewImages = await capturePreviewImages() }
+      catch (error) {
+        console.error('Failed to capture build previews:', error)
+        setToastMessage('Unable to save the build previews. Please try again.')
+        return
+      }
 
-    if (shouldNavigate) {
-      bypassNavigationBlockRef.current = true
-      navigate('/dashboard', {
-        state: {
-          section: 'my-guitar',
-          message: 'Build saved to My Bass!',
-          openBuildId: buildId,
-        },
-      })
-      setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
-    } else {
-      setToastMessage('Your Build is saved to My Bass!')
+      const build = {
+        id: buildId,
+        name: `${summary.body} build`,
+        price,
+        config,
+        stickers,
+        preview_image: previewImages.front,
+        preview_images: previewImages,
+        summary,
+        savedAt: new Date().toISOString(),
+      }
+
+      let storedKey = 'cosmoscraft_saved_bass_builds'
+      let stored = JSON.parse(window.localStorage.getItem(storedKey) || '[]')
+
+      let existingIndex = stored.findIndex(b => b.id === buildId)
+      if (existingIndex === -1 && window.localStorage.getItem('cosmoscraft_saved_builds')) {
+        const normStored = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_builds'))
+        const normIndex = normStored.findIndex(b => b.id === buildId)
+        if (normIndex !== -1) {
+          storedKey = 'cosmoscraft_saved_builds'
+          stored = normStored
+          existingIndex = normIndex
+        }
+      }
+
+      const totalSavedBuildCount = ['cosmoscraft_saved_builds', 'cosmoscraft_saved_bass_builds']
+        .map((key) => JSON.parse(window.localStorage.getItem(key) || '[]'))
+        .reduce((total, entries) => total + (Array.isArray(entries) ? entries.length : 0), 0)
+
+      if (existingIndex === -1 && totalSavedBuildCount >= 10) {
+        setToastMessage('You can only save up to 10 bass builds. Please delete an existing build before creating a new one.')
+        return
+      }
+
+      const savedCustomizationId = stored[existingIndex]?.dbCustomizationId || stored[existingIndex]?.customization_id
+      if (savedCustomizationId && isAuthenticated) {
+        try {
+          const response = await fetch(`${API}/api/guitars/my-customizations/${savedCustomizationId}`, {
+            method:'PUT', credentials:'include', headers:getAuthHeaders({'Content-Type':'application/json'}),
+            body:JSON.stringify({name:build.name,guitar_type:'bass',total_price:build.price,is_saved:true,
+              config_json:{...config,_previewImages:previewImages},stickers,preview_image:previewImages.front}),
+          })
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({}))
+            throw new Error(error.message || 'Unable to save your bass design')
+          }
+        } catch (error) {
+          setToastMessage(error.message)
+          return
+        }
+      }
+
+      if (existingIndex !== -1) {
+        stored[existingIndex] = { ...stored[existingIndex], ...build }
+      } else {
+        stored.unshift(build)
+      }
+
+      if (stored.length > 10) stored = stored.slice(0, 10)
+      window.localStorage.setItem(storedKey, JSON.stringify(stored))
+      setActiveBuildId(buildId)
+      if (storedKey === 'cosmoscraft_saved_bass_builds') setSavedBuilds(stored)
+      try {
+        const snap = JSON.stringify({ config, stickers })
+        setSavedSnapshot(snap)
+        window.sessionStorage.setItem('cosmoscraft.bassBuild.savedSnapshot', snap)
+      } catch { }
+
+      if (continueBlockedNavigation && blocker.state === 'blocked') {
+        setShowUnsavedModal(false)
+        bypassNavigationBlockRef.current = true
+        blocker.proceed()
+        setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
+        return
+      }
+
+      if (shouldNavigate) {
+        bypassNavigationBlockRef.current = true
+        navigate('/dashboard', {
+          state: {
+            section: 'my-guitar',
+            message: 'Build saved to My Bass!',
+            openBuildId: buildId,
+          },
+        })
+        setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
+      } else {
+        setToastMessage('Your Build is saved to My Bass!')
+      }
+    } finally {
+      savingBuildRef.current = false
     }
   }
 
@@ -1425,11 +1459,8 @@ export function BassCustomizePage() {
     }
 
     try {
-      await exportMaskedPreview(previewRef.current, {
-        background: '#141414',
-        scale: 2,
-        fileName: `custom-bass-${config.bassType}-${Date.now()}.png`,
-      })
+      const images = await capturePreviewImages()
+      downloadPreviewImages(images, 'bass-design')
     } catch (error) {
       console.error('Failed to save image:', error)
       window.alert('Failed to save image. Please try again.')
@@ -1443,12 +1474,14 @@ export function BassCustomizePage() {
     const loadedStickers = Array.isArray(build.stickers) ? build.stickers : []
     loadConfig(build.config)
     setStickers(loadedStickers)
-    setSavedSnapshot(JSON.stringify({ config: build.config, stickers: loadedStickers }))
+    beginLoadedBuild()
     setActiveBuildId(build.id)
+    bypassNavigationBlockRef.current = true
     setSearchParams((params) => {
       params.set('edit', build.id)
       return params
     }, { replace: true })
+    setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
     setShowLoadModal(false)
   }
 
@@ -2632,7 +2665,7 @@ export function BassCustomizePage() {
           key={walkInBuild.buildId}
           {...walkInBuild}
           storageScope={walkInBuild.buildId}
-          guitarType="bass" previewRef={previewRef} loadingPrices={loadingPrices}
+          guitarType="bass" previewRef={previewRef} capturePreviewImages={capturePreviewImages} loadingPrices={loadingPrices}
           onClose={() => {
             if (walkInBuild.continueBlockedNavigation && blocker.state === 'blocked') setShowUnsavedModal(true)
             setWalkInBuild(null)

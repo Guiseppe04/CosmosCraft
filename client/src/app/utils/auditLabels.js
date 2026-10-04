@@ -80,6 +80,7 @@ const STATUS_LABELS = {
 }
 
 const ACTION_LABELS = {
+  BUILD_SENT_TO_CUSTOMER: 'Build Sent to Customer',
   INSERT: 'Created',
   UPDATE: 'Updated',
   DELETE: 'Deleted',

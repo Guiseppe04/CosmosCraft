@@ -550,7 +550,7 @@ export default function AppointmentCard({
           )}
 
           {apt.status === 'rescheduled_by_customer' && <p className="mt-3 text-amber-300">Rescheduled by Customer ? historical schedule</p>}
-          {apt.status === 'no_show' && <AppointmentRefund apt={apt} />}
+          {['no_show', 'cancelled'].includes(String(apt.status || '').toLowerCase()) && <AppointmentRefund apt={apt} />}
           {/* Past-Due Reschedule Notice */}
           {needsReschedule && (
             <div className="mt-3 flex items-center justify-between bg-orange-500/10 p-3.5 rounded-xl border border-orange-500/20 gap-3">

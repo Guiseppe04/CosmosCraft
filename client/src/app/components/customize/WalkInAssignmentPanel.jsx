@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { adminApi } from '../../utils/adminApi.js'
 import { exportMaskedPreview } from '../../utils/exportMaskedPreview.js'
 
-export function WalkInAssignmentPanel({ config, summary, pricingBreakdown, lineItems, stickers, price, guitarType, previewRef, loadingPrices, onNewBuild, storageScope = '', onBusyChange, onAssigned }) {
+export function WalkInAssignmentPanel({ config, summary, pricingBreakdown, lineItems, stickers, price, guitarType, previewRef, capturePreviewImages, loadingPrices, onNewBuild, storageScope = '', onBusyChange, onAssigned }) {
   const { user } = useAuth()
   const canAssign = ['staff', 'admin', 'super_admin'].includes(user?.role)
   const storageKey = `cosmoscraft.walkIn.${user?.user_id || user?.id}.${guitarType}.${storageScope}`
@@ -62,7 +62,8 @@ export function WalkInAssignmentPanel({ config, summary, pricingBreakdown, lineI
     setMessage('')
     try {
       if (!pending.current) {
-        const preview_image = await exportMaskedPreview(previewRef.current, { download: false, scale: 1, background: '#141414' })
+        const previews = capturePreviewImages ? await capturePreviewImages(config, stickers, {scale:1}) : null
+        const preview_image = previews?.front || await exportMaskedPreview(previewRef.current, { download: false, scale: 1, background: '#141414' })
         const payload = {
           customer_id: customer.user_id, customization_id: crypto.randomUUID(), quantity: 1,
           design: {
@@ -71,7 +72,7 @@ export function WalkInAssignmentPanel({ config, summary, pricingBreakdown, lineI
             neck_wood: summary.neck || null, fingerboard_wood: summary.fretboard || null,
             bridge_type: summary.bridge || null, pickups: summary.pickups || null,
             color: summary.bodyFinish || null, finish_type: summary.finishType || null,
-            config_json: config, stickers, preview_image, summary, pricingBreakdown,
+            config_json: previews ? { ...config, _previewImages: previews } : config, stickers, preview_image, summary, pricingBreakdown,
             lineItems: [
               { id: 'base', category: 'Base', name: 'Starting Price', unitPrice: pricingBreakdown.base || 0, quantity: 1, subtotal: pricingBreakdown.base || 0 },
               ...lineItems.filter(item => item.id !== 'base'),
@@ -89,7 +90,7 @@ export function WalkInAssignmentPanel({ config, summary, pricingBreakdown, lineI
       await adminApi.assignWalkInCustomization(pending.current)
       sessionStorage.setItem(storageKey, JSON.stringify({ payload: pending.current, customer, assigned: true }))
       setAssigned(true)
-      setMessage(`Sent to ${customer.first_name} ${customer.last_name} (${customer.email}). The design is ready in their Saved Builds and Cart.`)
+      setMessage(`Sent to ${customer.first_name} ${customer.last_name} (${customer.email}). The design is ready in their Saved Builds.`)
       onAssigned?.(customer, pending.current.design)
     } catch (error) {
       if (error.status === 400) {

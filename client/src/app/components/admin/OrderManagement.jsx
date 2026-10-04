@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { adminApi } from '../../utils/adminApi'
-import { buildInvoiceHtml } from '../../utils/invoiceBuilder.js'
+import { buildInvoiceHtml, getOrderCustomerName } from '../../utils/invoiceBuilder.js'
 import InstallmentTracking from './InstallmentTracking'
 import {
   PAYMENT_STATUS_MAP,
@@ -111,11 +111,6 @@ function getPaymentStatusConfig(status, order = null) {
   }
 
   return getOrderPaymentStatusConfig(status)
-}
-
-function getOrderCustomerName(order) {
-  if (order.first_name && order.last_name) return `${order.first_name} ${order.last_name}`
-  return order.customer_name || order.user_name || order.name || 'N/A'
 }
 
 function getOrderAddress(order) {

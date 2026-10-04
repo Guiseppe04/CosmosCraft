@@ -24,6 +24,7 @@ import {
   BASS_PICKUP_CONFIG_OPTIONS,
   BASS_STRING_OPTIONS,
 } from '../lib/bassBuilderData.js'
+import { GUITAR_CONFIGURATION_ITEMS, BASS_CONFIGURATION_ITEMS } from './buildConfigurationLineItems.js'
 
 const CONFIGURATION_FIELDS = [
   { label: 'Body', summaryKey: 'body', guitarKey: 'body', bassKey: 'bassType', guitarOptions: BODY_OPTIONS, bassOptions: BASS_BODY_OPTIONS },
@@ -56,7 +57,7 @@ const normalizeValue = (value) => {
   return trimmed || null
 }
 
-const humanize = (value) => String(value || '')
+const humanize = (value) => String(value ?? '')
   .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
   .replace(/[_-]+/g, ' ')
   .replace(/\b\w/g, (character) => character.toUpperCase())
@@ -64,7 +65,7 @@ const humanize = (value) => String(value || '')
 const getBuildData = (item = {}) => {
   const customSource = item.customization || item
   const config = parseObject(customSource.config || customSource.config_json)
-  const summary = parseObject(customSource.summary || customSource.build_summary)
+  const summary = parseObject(customSource.summary || customSource.build_summary || config._walkIn?.summary)
   const isBass = String(customSource.guitar_type || config.guitarType || '').toLowerCase().includes('bass') || Boolean(config.bassType)
   return { customSource, config, summary, isBass }
 }
@@ -119,4 +120,60 @@ export function getCustomBuildSummaryTree(item = {}) {
     configurationChildren.length > 0 ? { label: 'Configuration', children: configurationChildren } : null,
     additionalPartChildren.length > 0 ? { label: 'Added Parts', children: additionalPartChildren } : null,
   ].filter(Boolean)
+}
+
+const DETAIL_GROUPS = [
+  ['Guitar Build', ['base', 'dexterity', 'strings', 'multiscale', 'scaleLength', 'caseType']],
+  ['Body', ['body', 'bodyWood', 'bevel', 'topWood', 'threePieceBody']],
+  ['Neck', ['neck', 'fingerboardRadius', 'fretboard', 'headstock', 'headstockWood', 'headstockStyle', 'headstockShape', 'neckStyle', 'neckConstruction', 'inlays', 'inlay', 'inlayShape', 'inlayMaterial', 'frets', 'trussRodCover']],
+  ['Electronics', ['pickups', 'pickupConfig', 'pickupConfiguration', 'pickupTypeStyle', 'electronicsType', 'bridgePickupModel', 'middlePickupModel', 'neckPickupModel', 'pickupColor', 'pickupPoleColor', 'controls', 'knobs']],
+  ['Hardware', ['bridge', 'hardware', 'pickguard', 'backplate', 'pickupScrews', 'controlPlate', 'saddle', 'nut', 'tuning', 'stringBrand', 'outputJack', 'strapButtons', 'tunerButtons', 'electronicsCavityCover', 'tremoloCover']],
+  ['Finish / Design', ['bodyFinish', 'finishType', 'topCoat', 'burstFinish', 'finishColor', 'burstEdges', 'neckRearFinish', 'logo']],
+]
+
+// Keep every supplied price line while organizing it into a few readable groups.
+// Legacy builds without price lines use the existing summary/configuration data.
+export function getCustomBuildDetailGroups(item = {}) {
+  const { customSource, config, summary, isBass } = getBuildData(item)
+  const definitions = isBass ? BASS_CONFIGURATION_ITEMS : GUITAR_CONFIGURATION_ITEMS
+  const breakdown = parseObject(customSource.pricingBreakdown || config._walkIn?.pricingBreakdown)
+  const existingLines = customSource.lineItems || config._walkIn?.lineItems
+  let lines = Array.isArray(existingLines) ? existingLines : []
+  if (lines.length === 0) {
+    lines = definitions.map(definition => {
+      const key = definition.key === 'body' && isBass ? 'bassType' : definition.key === 'caseType' ? 'case' : definition.key
+      const field = CONFIGURATION_FIELDS.find(field => field.summaryKey === definition.summaryKey)
+      const fieldKey = field ? (isBass ? field.bassKey : field.guitarKey) : key
+      const value = config[fieldKey]
+      const options = field ? (isBass ? field.bassOptions : field.guitarOptions) : null
+      const option = options?.[value] || options?.[config.bassType]?.[value] || options?.[config.body]?.[value]
+      const label = summary[definition.summaryKey] || option?.label || (typeof option === 'string' ? option : null)
+      const name = label || (typeof value === 'boolean' ? value ? 'Yes' : 'No' : typeof value === 'string' || typeof value === 'number' ? humanize(value) : null)
+      if (!name) return null
+      return { id: definition.key, category: definition.category, name, subtotal: breakdown[definition.key] }
+    }).filter(Boolean)
+  }
+  const groups = new Map(DETAIL_GROUPS.map(([label]) => [label, []]))
+  const seen = new Set()
+  for (const [index, line] of lines.entries()) {
+    if (!line) continue
+    const id = line.id || `component-${index}`
+    if (seen.has(id)) continue
+    seen.add(id)
+    const group = DETAIL_GROUPS.find(([, keys]) => keys.includes(line.id))?.[0]
+      || (line.category === 'Stickers' ? 'Finish / Design' : 'Other Components')
+    if (!groups.has(group)) groups.set(group, [])
+    groups.get(group).push({ ...line, id, label: line.category || humanize(line.id) || 'Component', name: String(line.name || humanize(line.id)) })
+  }
+  // Preserve add-ons from older saved builds as read-only order information.
+  const parts = Array.isArray(customSource.additionalParts) ? customSource.additionalParts : []
+  if (parts.length) groups.set('Additional Parts', parts.map((part, index) => ({
+    id: `additional-${index}`, label: `Qty: ${Number(part.quantity) || 1}`, name: part.name,
+    subtotal: (Number(part.price) || 0) * (Number(part.quantity) || 1),
+  })))
+  const stickers = Array.isArray(customSource.stickers) ? customSource.stickers : []
+  if (stickers.length && !lines.some(line => line.category === 'Stickers')) {
+    groups.get('Finish / Design').push({id:'stickers',label:'Stickers',name:`${stickers.length} applied`})
+  }
+  return [...groups].filter(([, items]) => items.length).map(([label, items]) => ({ label, items }))
 }

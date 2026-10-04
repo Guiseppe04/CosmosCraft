@@ -1153,6 +1153,22 @@ function formatGenericAudit(log = {}) {
   const to = text(log.new_status)
   const action = String(log.action || '').toUpperCase()
 
+  if (action === 'BUILD_SENT_TO_CUSTOMER') {
+    const buildName = text(context.buildName) || 'Custom Build'
+    const buildId = text(context.buildId) || text(log.entity_id)
+    const customerName = text(context.customerName) || text(context.customerId)
+    result.title = 'Build Sent to Customer'
+    result.tone = 'success'
+    result.description = `Admin sent ${buildName}${buildId ? ` (${buildId})` : ''} to ${customerName || 'the customer'}.`
+    result.metadata = [
+      { label: 'Build', value: buildName },
+      { label: 'Build ID', value: buildId },
+      { label: 'Customer', value: customerName },
+      { label: 'Customer ID', value: text(context.customerId) },
+    ].filter(entry => entry.value)
+    return result
+  }
+
   if (action === 'INSERT') {
     result.title = 'Created'
     result.tone = 'success'

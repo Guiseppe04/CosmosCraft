@@ -4,6 +4,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Use the app's eye toggle without a duplicate browser password reveal button. */
+input[type="password"]::-ms-reveal {
+  display: none;
+}
+
 @keyframes scrollCustomizationMarquee {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }

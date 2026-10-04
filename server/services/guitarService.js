@@ -287,17 +287,17 @@ exports.createMyCustomization = async (userId, payload, db = pool, customization
   return res.rows[0];
 };
 
-// Assignment creates a customer-owned build and its cart entry in one transaction.
+// Sending creates only a customer-owned saved build. Checkout is the customer's choice.
 // The request's UUID is also the build ID, making retries safe without another table.
 exports.assignWalkInCustomization = async (adminId, payload) => {
   await ensureCustomizationColumns();
-  const { customer_id, customization_id, quantity = 1, design } = payload;
+  const { customer_id, customization_id, design } = payload;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [customization_id]);
     const customer = await client.query(
-      `SELECT user_id FROM users WHERE user_id = $1 AND role = 'customer'
+      `SELECT user_id, first_name, last_name, email FROM users WHERE user_id = $1 AND role = 'customer'
        AND is_active = TRUE AND is_verified = TRUE AND deleted_at IS NULL FOR UPDATE`,
       [customer_id]
     );
@@ -321,15 +321,17 @@ exports.assignWalkInCustomization = async (adminId, payload) => {
       } };
       customization = await exports.createMyCustomization(customer_id,
         { ...design, config_json: config, is_saved: true }, client, customization_id);
-      const { getOrCreateCart, recalculateCartTotals } = require('./cartService');
-      const cart = await getOrCreateCart(customer_id, client);
-      await client.query('SELECT cart_id FROM carts WHERE cart_id = $1 FOR UPDATE', [cart.cart_id]);
-      await client.query(
-        `INSERT INTO cart_items (cart_id, customization_id, quantity, unit_price)
-         VALUES ($1, $2, $3, $4)`,
-        [cart.cart_id, customization.customization_id, quantity, customization.total_price]
-      );
-      await recalculateCartTotals(cart.cart_id, client);
+      const recipient = customer.rows[0];
+      const customerName = [recipient.first_name, recipient.last_name].filter(Boolean).join(' ') || recipient.email || customer_id;
+      await require('./auditService').createAuditLog({
+        user_id: adminId,
+        action: 'BUILD_SENT_TO_CUSTOMER',
+        entity_type: 'customizations',
+        entity_id: customization_id,
+        context: { customerId: customer_id, customerName, buildId: customization_id, buildName: customization.name || design.name },
+        details: { description: `Admin sent ${customization.name || design.name || 'Custom Build'} (${customization_id}) to ${customerName}.` },
+        executor: client,
+      });
     }
     await client.query('COMMIT');
     return { customization, alreadyAssigned };

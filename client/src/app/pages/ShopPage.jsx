@@ -754,7 +754,7 @@ export function ShopPage() {
                                 </button>
                               </div>
                             )}
-                          <p className="product-card-stock">Quantity: <span>{product.stock || 0} pieces</span></p>
+                          <p className="product-card-stock">Quantity: <span>{product.stock || 0}</span></p>
                           </div>
 
                           <div className="product-card-actions flex items-stretch gap-3">
@@ -933,7 +933,7 @@ export function ShopPage() {
                     </button>
                   </div>
                 )}
-              <p className="product-card-stock">Quantity: <span>{product.stock || 0} pieces</span></p>
+              <p className="product-card-stock">Quantity: <span>{product.stock || 0}</span></p>
                           </div>
 
               <div className="product-card-actions flex items-stretch gap-3">

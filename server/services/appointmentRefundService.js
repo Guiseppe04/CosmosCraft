@@ -24,7 +24,7 @@ exports.create = async (data) => {
     const a = res.rows[0];
     if (!a) throw new AppError('Appointment not found',404);
     if (a.user_id !== data.user_id) throw new AppError('Only the appointment customer can request a refund',403);
-    if (a.status !== 'no_show') throw new AppError('Refunds require a No Show appointment',409);
+    if (!['no_show', 'cancelled'].includes(a.status)) throw new AppError('Refunds require a cancelled or No Show appointment',409);
     if (a.payment_status !== 'approved') throw new AppError('Payment must be reviewed and Approved before requesting a refund',409);
     if (!a.approved_payment_amount || Number(a.approved_payment_amount) <= 0) throw new AppError('Admin must confirm the original approved payment amount before a refund can be requested',409);
     if (![data.refund_method,data.account_holder,data.account_number].every(v => typeof v === 'string' && v.trim())) throw new AppError('Refund method, account holder and account number are required',400);

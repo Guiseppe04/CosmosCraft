@@ -583,7 +583,7 @@ export function SignupPage() {
                     onChange={e => updateField('firstName', e.target.value)}
                     className={getInputStyles(errors.firstName)}
                   />
-                  {errors.firstName && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.firstName}</span>}
+                  {errors.firstName && <span style={{ color: '#ef4444' }} className="text-xs text-red-500 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.firstName}</span>}
                 </motion.div>
 
                 <motion.div animate={errors.middleName ? shakeAnimation : {}}>
@@ -606,7 +606,7 @@ export function SignupPage() {
                     onChange={e => updateField('lastName', e.target.value)}
                     className={getInputStyles(errors.lastName)}
                   />
-                  {errors.lastName && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.lastName}</span>}
+                  {errors.lastName && <span style={{ color: '#ef4444' }} className="text-xs text-red-500 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.lastName}</span>}
                 </motion.div>
               </div>
 
@@ -662,7 +662,7 @@ export function SignupPage() {
                       className="w-full px-3 py-3 bg-transparent text-white placeholder-white/30 focus:outline-none text-sm"
                     />
                   </div>
-                  {errors.phone && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.phone}</span>}
+                  {errors.phone && <span style={{ color: '#ef4444' }} className="text-xs text-red-500 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.phone}</span>}
                 </motion.div>
               </div>
             </div>
