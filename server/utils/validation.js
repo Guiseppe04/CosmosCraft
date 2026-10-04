@@ -142,7 +142,7 @@ exports.oauthSignupSchema = Joi.object({
 }).unknown(true);
 
 // Reusable password rule — single source of truth shared by email signup
-// and password reset so the rules never drift apart.
+// and password reset/change so the rules never drift apart.
 const passwordField = Joi.string()
   .min(8)
   .max(64)
@@ -443,15 +443,7 @@ exports.changePasswordSchema = Joi.object({
   oldPassword: Joi.string()
     .optional()
     .allow(''),
-  newPassword: Joi.string()
-    .min(8)
-    .required()
-    .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/)
-    .messages({
-      'string.min': 'New password must be at least 8 characters',
-      'string.pattern.base': 'Password must contain uppercase, lowercase, number, and special character',
-      'any.required': 'New password is required',
-    }),
+  newPassword: passwordField,
   confirmPassword: Joi.string()
     .valid(Joi.ref('newPassword'))
     .required()

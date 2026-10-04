@@ -3748,18 +3748,8 @@ const filteredOrders = myOrders.filter(order => {
       setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' })
       updateUser({ hasLocalPassword: true })
     } catch (err) {
-      const errorMsg = err.message || 'Failed to process password change'
-      if (errorMsg.toLowerCase().includes('incorrect')) {
-        setPasswordError('Current password is incorrect')
-      } else if (errorMsg.toLowerCase().includes('different')) {
-        setPasswordError('New password must be different from current password')
-      } else if (errorMsg.toLowerCase().includes('match')) {
-        setPasswordError('Passwords do not match')
-      } else if (errorMsg.toLowerCase().includes('8') || errorMsg.toLowerCase().includes('uppercase') || errorMsg.toLowerCase().includes('special')) {
-        setPasswordError('Password must be at least 8 characters with uppercase, lowercase, and special character')
-      } else {
-        setPasswordError(errorMsg)
-      }
+      const validationMessage = err.fieldErrors?.map(error => error.message).filter(Boolean).join('; ')
+      setPasswordError(validationMessage || err.message || 'Failed to process password change')
     } finally {
       setIsPasswordLoading(false)
     }

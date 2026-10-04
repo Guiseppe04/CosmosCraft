@@ -1,5 +1,6 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+const { appointmentRefundDestinationSchema } = require('../utils/appointmentValidation');
 const transitions = { pending: ['processing', 'rejected'], processing: ['refunded', 'rejected'], refunded: [], rejected: [] };
 exports.recordEvent = async (db, appointment, actorId, status, previousStatus, details = {}) => {
   await require('./auditService').logAppointmentEvent({ userId: actorId, action: status,
@@ -25,9 +26,14 @@ exports.create = async (data) => {
     if (!a) throw new AppError('Appointment not found',404);
     if (a.user_id !== data.user_id) throw new AppError('Only the appointment customer can request a refund',403);
     if (!['no_show', 'cancelled'].includes(a.status)) throw new AppError('Refunds require a cancelled or No Show appointment',409);
+    if (!['e_wallet', 'e_bank', 'gcash', 'bank_transfer'].includes(String(a.payment_method || '').trim().toLowerCase())) throw new AppError('Refund requests are available only for e-wallet or bank payments',409);
     if (a.payment_status !== 'approved') throw new AppError('Payment must be reviewed and Approved before requesting a refund',409);
     if (!a.approved_payment_amount || Number(a.approved_payment_amount) <= 0) throw new AppError('Admin must confirm the original approved payment amount before a refund can be requested',409);
-    if (![data.refund_method,data.account_holder,data.account_number].every(v => typeof v === 'string' && v.trim())) throw new AppError('Refund method, account holder and account number are required',400);
+    const { error, value: destination } = appointmentRefundDestinationSchema.validate({
+      refund_method: data.refund_method, destination_type: data.destination_type,
+      account_holder: data.account_holder, account_number: data.account_number, qr_code_url: data.qr_code_url,
+    }, { abortEarly: false });
+    if (error) throw new AppError(error.details.map(detail => detail.message).join('; '),400);
     const exists = await db.query('SELECT 1 FROM appointment_refunds WHERE appointment_id = $1',[a.appointment_id]);
     if (exists.rows.length) throw new AppError('A refund has already been requested for this appointment',409);
     const amount = Number(a.approved_payment_amount);
@@ -35,9 +41,9 @@ exports.create = async (data) => {
     const payment = { payment_status: a.payment_status, payment_method: a.payment_method,
       payment_proof_url: a.payment_proof_url, amount, reference_code: a.reference_code };
     const result = await db.query(`INSERT INTO appointment_refunds
-      (appointment_id,user_id,amount_requested,original_payment,refund_method,account_holder,account_number,reason)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [a.appointment_id,a.user_id,amount,JSON.stringify(payment),data.refund_method.trim(),data.account_holder.trim(),data.account_number.trim(),data.reason || null]);
+      (appointment_id,user_id,amount_requested,original_payment,refund_method,account_holder,account_number,reason,destination_type,qr_code_url)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [a.appointment_id,a.user_id,amount,JSON.stringify(payment),destination.refund_method,destination.account_holder || null,destination.account_number || null,data.reason || null,destination.destination_type,destination.qr_code_url || null]);
     await exports.recordEvent(db,a,a.user_id,'refund_requested',a.status,{refund_request_id:result.rows[0].refund_request_id,amount});
     await exports.notify(db,a.user_id,'Refund requested','Your appointment refund is awaiting admin processing.',a.appointment_id,true);
     await db.query('COMMIT');

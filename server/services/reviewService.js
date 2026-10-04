@@ -535,7 +535,7 @@ class ReviewService {
   }
 
   /**
-   * Public: Get approved guitar customization feedback for Landing Page testimonials
+   * Public: Get a random sample of approved guitar customization testimonials
    */
   async getPublicTestimonials({ limit = 10 } = {}) {
     const safeLimit = Math.min(Math.max(Number(limit) || 10, 1), 50);
@@ -562,7 +562,8 @@ class ReviewService {
       LEFT JOIN projects proj ON proj.project_id = cf.project_id
       JOIN users u ON u.user_id = cf.user_id
       WHERE cf.status = 'approved' AND cf.deleted_at IS NULL
-      ORDER BY cf.created_at DESC
+        AND NULLIF(BTRIM(cf.comment), '') IS NOT NULL
+      ORDER BY RANDOM()
       LIMIT $1;
     `;
 

@@ -2,7 +2,74 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { pool } = require('../config/database');
 const service = require('../services/appointmentRefundService');
-test('refund creation rejects unapproved payments, wrong owners, wrong appointment status and invalid amounts', async () => {
+const { appointmentValidation } = require('../utils/appointmentValidation');
+
+test('refund destinations require either account details or an HTTPS QR image', () => {
+  const base = { appointment_id: '11111111-1111-4111-8111-111111111111', refund_method: 'GCash' };
+  const schema = appointmentValidation.createRefundRequestSchema;
+  const account = schema.validate({ ...base, account_holder: ' Customer ', account_number: '09123456789' });
+  assert.ifError(account.error);
+  assert.equal(account.value.destination_type, 'account');
+  assert.equal(account.value.account_holder, 'Customer');
+  const qr = schema.validate({ ...base, destination_type: 'qr', qr_code_url: 'https://example.test/qr.png', account_holder: 'Stale name', account_number: 'Stale number' });
+  assert.ifError(qr.error);
+  assert.equal(qr.value.account_holder, undefined);
+  assert.equal(qr.value.account_number, undefined);
+  for (const fields of [
+    {}, { account_holder: 'Customer' }, { account_holder: '', account_number: '123' },
+    { destination_type: 'qr' }, { destination_type: 'qr', qr_code_url: '' },
+    { destination_type: 'qr', qr_code_url: 'http://example.test/qr.png' },
+    { destination_type: 'qr', qr_code_url: 'javascript:alert(1)' },
+    { destination_type: 'other', account_holder: 'Customer', account_number: '123' },
+  ]) assert.ok(schema.validate({ ...base, ...fields }).error);
+});
+
+test('refund controller forwards QR destinations without requiring hidden account fields', async (t) => {
+  const appointments = require('../services/appointmentService');
+  const controller = require('../controllers/appointmentController');
+  const appointment_id = '11111111-1111-4111-8111-111111111111';
+  let submitted;
+  t.mock.method(appointments, 'getAppointmentById', async () => ({ appointment_id, user_id: 'u', payment_method: 'e_wallet' }));
+  t.mock.method(appointments, 'createRefundRequest', async data => { submitted = data; return { refund_request_id: 'r', ...data }; });
+  const response = { statusCode: 0, status(code) { this.statusCode = code; return this; }, json(payload) { this.payload = payload; } };
+  await controller.createRefundRequest({ user: { user_id: 'u', role: 'customer' }, body: {
+    appointment_id, refund_method: 'GCash', destination_type: 'qr', qr_code_url: 'https://example.test/qr.png',
+  } }, response, error => { throw error; });
+  assert.equal(response.statusCode, 201);
+  assert.equal(submitted.destination_type, 'qr');
+  assert.equal(submitted.qr_code_url, 'https://example.test/qr.png');
+  assert.equal(submitted.account_holder, undefined);
+  assert.equal(submitted.account_number, undefined);
+});
+
+test('QR refunds persist the image without account details and reject missing or invalid destinations', async (t) => {
+  let saved;
+  let rolledBack = false;
+  t.mock.method(service, 'recordEvent', async () => {});
+  t.mock.method(service, 'notify', async () => {});
+  t.mock.method(pool, 'connect', async () => ({ async query(sql, params) {
+    if (sql.startsWith('SELECT * FROM appointments')) return { rows: [{ appointment_id: 'a', user_id: 'u', status: 'cancelled', payment_method: 'e_wallet', payment_status: 'approved', approved_payment_amount: 500 }] };
+    if (sql.startsWith('INSERT INTO appointment_refunds')) {
+      saved = params;
+      return { rows: [{ refund_request_id: 'qr-refund', destination_type: params[8], qr_code_url: params[9] }] };
+    }
+    if (sql === 'ROLLBACK') rolledBack = true;
+    return { rows: [] };
+  }, release() {} }));
+  const data = { appointment_id: 'a', user_id: 'u', refund_method: 'GCash', destination_type: 'qr', qr_code_url: 'https://example.test/qr.png', account_holder: 'Stale name', account_number: 'Stale number' };
+  const result = await service.create(data);
+  assert.equal(result.qr_code_url, data.qr_code_url);
+  assert.deepEqual(saved.slice(5, 7), [null, null]);
+  assert.equal(saved[8], 'qr');
+  for (const qr_code_url of [undefined, '', 'http://example.test/qr.png']) {
+    saved = null;
+    rolledBack = false;
+    await assert.rejects(service.create({ ...data, qr_code_url }), error => error.statusCode === 400);
+    assert.equal(saved, null);
+    assert.equal(rolledBack, true);
+  }
+});
+test('refund creation rejects cash payments, unapproved payments, wrong owners, wrong appointment status and invalid amounts', async () => {
   const original = pool.connect;
   try {
     const cases = [
@@ -11,11 +78,15 @@ test('refund creation rejects unapproved payments, wrong owners, wrong appointme
       [{status:'cancelled',payment_status:'pending'}, /Approved/],
       [{user_id:'other'}, /Only the appointment customer/], [{status:'confirmed'}, /No Show/],
       [{approved_payment_amount:null}, /confirm/],
+      [{payment_method:'cash'}, /only for e-wallet or bank/],
+      [{status:'cancelled',payment_method:'cash'}, /only for e-wallet or bank/],
+      [{payment_method:null}, /only for e-wallet or bank/],
+      [{payment_method:'card'}, /only for e-wallet or bank/],
     ];
     for (const [override, message] of cases) {
       let rolledBack = false;
       pool.connect = async () => ({ query: async sql => {
-        if (sql.startsWith('SELECT * FROM appointments')) return { rows:[{appointment_id:'a',user_id:'u',status:'no_show',payment_status:'approved',approved_payment_amount:500,...override}] };
+        if (sql.startsWith('SELECT * FROM appointments')) return { rows:[{appointment_id:'a',user_id:'u',status:'no_show',payment_method:'e_wallet',payment_status:'approved',approved_payment_amount:500,...override}] };
         if (sql === 'ROLLBACK') rolledBack = true;
         assert.ok(!sql.startsWith('INSERT'));
         return {rows:[]};
@@ -34,7 +105,7 @@ test('cancelled appointments reuse the refund flow and prevent duplicate request
     service.notify = async () => {};
     pool.connect = async () => ({ query: async (sql, params) => {
       statements.push(sql);
-      if (sql.startsWith('SELECT * FROM appointments')) return { rows: [{ appointment_id: 'a', user_id: 'u', status: 'cancelled', payment_status: 'approved', approved_payment_amount: 500 }] };
+      if (sql.startsWith('SELECT * FROM appointments')) return { rows: [{ appointment_id: 'a', user_id: 'u', status: 'cancelled', payment_method: 'e_bank', payment_status: 'approved', approved_payment_amount: 500 }] };
       if (sql.startsWith('SELECT 1 FROM appointment_refunds')) return { rows: existing ? [{}] : [] };
       if (sql.startsWith('INSERT INTO appointment_refunds')) {
         assert.equal(params[2], 500);
@@ -53,6 +124,28 @@ test('cancelled appointments reuse the refund flow and prevent duplicate request
     pool.connect = original.connect;
     service.recordEvent = original.recordEvent;
     service.notify = original.notify;
+  }
+});
+
+test('approved e-wallet and bank payments can request refunds for cancelled and no-show appointments', async (t) => {
+  t.mock.method(service, 'recordEvent', async () => {});
+  t.mock.method(service, 'notify', async () => {});
+  for (const status of ['cancelled', 'no_show']) {
+    for (const payment_method of ['e_wallet', 'e_bank', 'gcash', 'bank_transfer']) {
+      let committed = false;
+      t.mock.method(pool, 'connect', async () => ({ async query(sql, params) {
+        if (sql.startsWith('SELECT * FROM appointments')) return { rows: [{ appointment_id: 'a', user_id: 'u', status, payment_method, payment_status: 'approved', approved_payment_amount: 500 }] };
+        if (sql.startsWith('INSERT INTO appointment_refunds')) {
+          assert.equal(JSON.parse(params[3]).payment_method, payment_method);
+          assert.equal(params[2], 500);
+          return { rows: [{ refund_request_id: 'r', amount_requested: 500 }] };
+        }
+        if (sql === 'COMMIT') committed = true;
+        return { rows: [] };
+      }, release() {} }));
+      assert.equal((await service.create({ appointment_id: 'a', user_id: 'u', refund_method: 'GCash', account_holder: 'Customer', account_number: '09123456789' })).refund_request_id, 'r');
+      assert.equal(committed, true);
+    }
   }
 });
 test('refund completion requires processing and a transaction reference', async () => {

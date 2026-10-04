@@ -1,4 +1,5 @@
 import AppointmentPaymentReview from '../../../../components/appointments/AppointmentPaymentReview'
+import { AppointmentRefundAdmin } from '../../../../components/appointments/AppointmentRefund'
 import { ModalHeader } from '../shared/ModalHeader'
 import { CreditCard } from 'lucide-react'
 import { formatPaymentMethod } from '../../../../utils/paymentMethodUtils'
@@ -160,6 +161,7 @@ export function ViewAppointmentModal({ modal, closeModal, onPaymentStatusUpdate 
         </div>
 
         <AppointmentPaymentReview appointment={apt} onUpdate={onPaymentStatusUpdate} />
+        <AppointmentRefundAdmin key={apt.appointment_id || apt.id} appointment={apt} />
 
         <div className="bg-[var(--bg-primary)] p-5 rounded-xl border border-[var(--border)]">
           <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-3">Requested Services</p>

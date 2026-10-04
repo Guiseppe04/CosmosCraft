@@ -11,6 +11,8 @@ const SPEED = 50 // px per second
 export function TestimonialCarousel() {
   const [testimonials, setTestimonials] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
     let isMounted = true
@@ -18,7 +20,8 @@ export function TestimonialCarousel() {
     async function loadTestimonials() {
       try {
         setLoading(true)
-        const response = await feedbackService.getPublicTestimonials(12)
+        setLoadError(false)
+        const response = await feedbackService.getPublicTestimonials(10)
         const items = Array.isArray(response?.data)
           ? response.data
           : Array.isArray(response)
@@ -27,13 +30,17 @@ export function TestimonialCarousel() {
 
         // Only guitar customization feedback
         const customizationOnly = items.filter(
-          (item) => item.feedback_type === 'customization' || !item.feedback_type
-        )
+          (item) => item && (item.feedback_type === 'customization' || !item.feedback_type)
+            && typeof item.comment === 'string' && item.comment.trim()
+        ).slice(0, 10)
 
         if (isMounted) setTestimonials(customizationOnly)
       } catch (err) {
         console.error('Failed to fetch public customization testimonials:', err)
-        if (isMounted) setTestimonials([])
+        if (isMounted) {
+          setTestimonials([])
+          setLoadError(true)
+        }
       } finally {
         if (isMounted) setLoading(false)
       }
@@ -43,7 +50,7 @@ export function TestimonialCarousel() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [retryCount])
 
   // Repeat real items until one "set" is wide enough to fill the screen,
   // then render that set twice so translateX(-50%) loops seamlessly.
@@ -88,8 +95,22 @@ export function TestimonialCarousel() {
     )
   }
 
-  // No real testimonials -> render nothing
-  if (singleSet.length === 0) return null
+  if (singleSet.length === 0) {
+    return (
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)]/40 px-6 py-10 text-center">
+        <Guitar className="mx-auto mb-3 h-8 w-8 text-[var(--gold-primary)]" />
+        <p role="status" className="text-sm text-[var(--text-muted)]">
+          {loadError ? 'Customer testimonials are temporarily unavailable.' : 'Customer testimonials are coming soon.'}
+        </p>
+        {loadError && (
+          <button type="button" onClick={() => setRetryCount(count => count + 1)}
+            className="mt-4 rounded-xl border border-[var(--gold-primary)]/30 px-4 py-2 text-sm font-semibold text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10">
+            Try Again
+          </button>
+        )}
+      </div>
+    )
+  }
 
   const renderCard = (item, index, setKey) => {
     const initial = item.customer_name ? item.customer_name.charAt(0).toUpperCase() : 'C'
@@ -100,7 +121,7 @@ export function TestimonialCarousel() {
       >
         <div>
           <div className="flex items-center justify-between gap-2 mb-3">
-            <StarRating rating={item.rating || 5} size="w-4 h-4" />
+            <StarRating rating={item.rating ?? 0} size="w-4 h-4" />
             <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[var(--gold-primary)] bg-[var(--gold-primary)]/10 px-2.5 py-1 rounded-md border border-[var(--gold-primary)]/20 truncate max-w-[200px]">
               <Guitar className="w-3 h-3 flex-shrink-0 text-[var(--gold-primary)]" />
               <span className="truncate">{item.target_name || 'Custom Guitar Build'}</span>
@@ -113,18 +134,17 @@ export function TestimonialCarousel() {
         </div>
 
         <div className="flex items-center gap-3 pt-3 border-t border-white/5">
-          <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-[var(--surface-elevated)] to-[var(--surface-dark)] border border-white/10 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">
-            {item.user_avatar ? (
+          <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-[var(--surface-elevated)] to-[var(--surface-dark)] border border-white/10 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">
+            <span className="text-[var(--gold-primary)]">{initial}</span>
+            {item.user_avatar && (
               <img
                 src={item.user_avatar}
-                alt={item.customer_name}
-                className="w-full h-full object-cover"
+                alt={item.customer_name || 'Verified Customer'}
+                className="absolute inset-0 w-full h-full object-cover"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none'
                 }}
               />
-            ) : (
-              <span className="text-[var(--gold-primary)]">{initial}</span>
             )}
           </div>
           <div className="truncate">
