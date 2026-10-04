@@ -19,6 +19,8 @@ import {
   normalizePaymentStatus,
 } from '../../utils/orderPaymentStatus'
 import { useDebounce } from '../../hooks/useDebounce'
+import { normalizeRiderContact } from '../../utils/phone'
+import PhoneInput from '../PhoneInput'
 
 const ORDER_STATUS_LIFECYCLE = [
   { value: 'pending', label: 'Pending', color: '#f59e0b', bgColor: 'bg-amber-500/20', textColor: 'text-amber-400', borderColor: 'border-amber-500/30' },
@@ -1383,9 +1385,13 @@ function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
   const requiresTrackingNumber = selectedStatus === 'shipped'
   const requiresRiderDetails = selectedStatus === 'out_for_delivery'
   const canSubmit =
-    allowedStatuses.includes(selectedStatus) &&
+    selectedStatus !== currentStatus && allowedStatuses.includes(selectedStatus) &&
     (!requiresTrackingNumber || Boolean(trackingInfo.trim())) &&
     (!requiresRiderDetails || Boolean(riderName.trim() && riderContact.trim()))
+
+  useEffect(() => {
+    setSelectedStatus(currentStatus)
+  }, [order.order_id, currentStatus])
 
   useEffect(() => {
     setTrackingInfo('')
@@ -1414,14 +1420,24 @@ function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
       setTrackingError('Rider name and contact are required')
       return
     }
+    if (requiresRiderDetails && !normalizeRiderContact(riderContact)) {
+      setTrackingError('Please enter a valid mobile number.')
+      return
+    }
+    if (selectedStatus === currentStatus || !allowedStatuses.includes(selectedStatus)) {
+      setTrackingError('Please select a valid next order status.')
+      return
+    }
     setTrackingError('')
     setIsUpdating(true)
     try {
       await onUpdate(order.order_id, selectedStatus, {
         trackingInfo: trackingInfo.trim(),
         riderName: riderName.trim(),
-        riderContact: riderContact.trim(),
+        riderContact: requiresRiderDetails ? normalizeRiderContact(riderContact) : riderContact.trim(),
       })
+    } catch (error) {
+      setTrackingError(error.message || 'Unable to update order status.')
     } finally {
       setIsUpdating(false)
       setShowConfirm(false)
@@ -1441,7 +1457,7 @@ function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
           <div className="grid grid-cols-3 gap-2">
             {ORDER_STATUS_LIFECYCLE.map((status) => {
               const isActive = selectedStatus === status.value
-              const isAllowed = allowedStatuses.includes(status.value)
+              const isAllowed = status.value !== currentStatus && allowedStatuses.includes(status.value)
               return (
                 <button
                   key={status.value}
@@ -1505,11 +1521,10 @@ function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
                 Rider Contact
                 <span className="text-red-400 ml-1">*</span>
               </p>
-              <input
-                type="text"
+              <PhoneInput
                 value={riderContact}
                 onChange={(e) => { setRiderContact(e.target.value); setTrackingError('') }}
-                placeholder="Enter rider contact number"
+                placeholder="9XXXXXXXXX"
                 className={`w-full px-4 py-3 bg-[var(--surface-dark)] border rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] ${trackingError ? 'border-red-500' : 'border-[var(--border)]'}`}
               />
             </div>
@@ -1767,7 +1782,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
     const { trackingInfo = '', riderName = '', riderContact = '' } = details
     setIsUpdatingOrder(true)
     try {
-      const order = orders.find(o => o.order_id === orderId)
+      const order = selectedOrder?.order_id === orderId ? selectedOrder : orders.find(o => o.order_id === orderId)
       const currentStatus = order?.status || 'pending'
       const allowedStatuses = ORDER_STATUS_TRANSITIONS[currentStatus] || []
       if (!allowedStatuses.includes(newStatus)) {
@@ -1796,6 +1811,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
       } : null)
     } catch (error) {
       console.error('Failed to update order status:', error)
+      throw error
     } finally {
       setIsUpdatingOrder(false)
     }

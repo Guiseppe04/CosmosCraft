@@ -1,3 +1,4 @@
+const { normalizeTaskProgress, taskAverageProgress } = require('../utils/projectTaskProgress');
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const defaultWorkflowService = require('./defaultWorkflowService');
@@ -794,7 +795,8 @@ const getProjectTaskStats = async (db, projectId) => {
   const result = await db.query(
     `SELECT
        COUNT(*)::int AS total,
-       COUNT(CASE WHEN ps.status = 'completed' THEN 1 END)::int AS completed
+       COUNT(CASE WHEN ps.status = 'completed' THEN 1 END)::int AS completed,
+       COALESCE(SUM(CASE WHEN ps.status = 'completed' THEN 100 ELSE ps.progress END), 0)::int AS progress_total
      FROM project_subtasks ps
      JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
      WHERE pm.project_id = $1`,
@@ -804,11 +806,12 @@ const getProjectTaskStats = async (db, projectId) => {
   return {
     total: result.rows[0]?.total || 0,
     completed: result.rows[0]?.completed || 0,
+    progress_total: result.rows[0]?.progress_total,
   };
 };
 
-const buildProjectTaskTracking = ({ total, completed }, currentStatus) => {
-  const progress = total === 0 ? 0 : Math.round((completed / total) * 100);
+const buildProjectTaskTracking = ({ total, completed, progress_total }, currentStatus) => {
+  const progress = taskAverageProgress({ total, completed, progress_total });
   const normalizedCurrentStatus = normalizeProjectStatus(currentStatus);
 
   if (normalizedCurrentStatus === 'cancelled' || normalizedCurrentStatus === 'on_hold') {
@@ -826,7 +829,7 @@ const buildProjectTaskTracking = ({ total, completed }, currentStatus) => {
   let status = normalizedCurrentStatus || 'not_started';
   if (total > 0) {
     if (completed === total) status = 'completed';
-    else if (completed > 0) status = 'in_progress';
+    else if (progress > 0 || normalizedCurrentStatus === 'in_progress') status = 'in_progress';
     else status = 'not_started';
   }
 
@@ -880,7 +883,7 @@ const getLastCompletedBuildStage = async (db, projectId) => {
      GROUP BY m.milestone_id, m.title, m.order_index
      HAVING COUNT(s.subtask_id) > 0
         AND COUNT(CASE WHEN s.status = 'completed' THEN 1 END) = COUNT(s.subtask_id)
-     ORDER BY m.order_index ASC, MAX(s.completed_at) ASC
+     ORDER BY m.order_index DESC, MAX(s.completed_at) DESC
      LIMIT 1`,
     [projectId]
   );
@@ -993,6 +996,7 @@ const attachRefundStateToProjects = async (projects) => {
 };
 
 exports.getAllProjects = async (params = {}) => {
+  await require('./projectTaskSchemaService').ensureTaskSchema();
   await ensureProjectArchiveColumns();
 
   const {
@@ -1024,13 +1028,13 @@ exports.getAllProjects = async (params = {}) => {
   const taskDerivedProgress = `(
     SELECT CASE
       WHEN COUNT(*) = 0 THEN 0
-      ELSE ROUND(COUNT(CASE WHEN ps.status = 'completed' THEN 1 END)::numeric * 100 / COUNT(*))::int
+      ELSE LEAST(CASE WHEN COUNT(*) = COUNT(CASE WHEN ps.status = 'completed' THEN 1 END) THEN 100 ELSE 99 END, ROUND(AVG(CASE WHEN ps.status = 'completed' THEN 100 ELSE ps.progress END))::int)
     END
     FROM project_subtasks ps
     JOIN project_milestones pm ON pm.milestone_id = ps.milestone_id
     WHERE pm.project_id = p.project_id
   )`;
-  const effectiveProgress = `COALESCE(NULLIF(${taskDerivedProgress}, 0), p.progress, 0)`;
+  const effectiveProgress = `COALESCE(${taskDerivedProgress}, 0)`;
   const allowedSortColumns = [
     'updated_at',
     'created_at',
@@ -1276,7 +1280,8 @@ exports.getAllProjects = async (params = {}) => {
       `SELECT
         pm.project_id,
         COUNT(*)::int AS total,
-        COUNT(CASE WHEN ps.status = 'completed' THEN 1 END)::int AS completed
+        COUNT(CASE WHEN ps.status = 'completed' THEN 1 END)::int AS completed,
+       COALESCE(SUM(CASE WHEN ps.status = 'completed' THEN 100 ELSE ps.progress END), 0)::int AS progress_total
       FROM project_subtasks ps
       JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
       WHERE pm.project_id = ANY($1)
@@ -1284,7 +1289,7 @@ exports.getAllProjects = async (params = {}) => {
       [projectIds]
     );
     taskStatsByProject = taskStatsRes.rows.reduce((acc, row) => {
-      acc[row.project_id] = { total: row.total, completed: row.completed };
+      acc[row.project_id] = { total: row.total, completed: row.completed, progress_total: row.progress_total };
       return acc;
     }, {});
   }
@@ -1321,7 +1326,7 @@ exports.getAllProjects = async (params = {}) => {
 
     return {
       ...project,
-      progress: tracking.progress || progress,
+      progress: (include_tasks === true || include_tasks === 'true') ? tracking.progress : progress,
       status: tracking.status || project.status,
       task_summary: tracking.task_summary,
       customization_ids: orderCustomizations.map((c) => c.customization_id),
@@ -1348,6 +1353,7 @@ exports.getAllProjects = async (params = {}) => {
 };
 
 exports.getAllArchivedProjects = async (params = {}) => {
+  await require('./projectTaskSchemaService').ensureTaskSchema();
   await ensureProjectArchiveColumns();
 
   const {
@@ -1544,7 +1550,8 @@ exports.getAllArchivedProjects = async (params = {}) => {
       `SELECT
         pm.project_id,
         COUNT(*)::int AS total,
-        COUNT(CASE WHEN ps.status = 'completed' THEN 1 END)::int AS completed
+        COUNT(CASE WHEN ps.status = 'completed' THEN 1 END)::int AS completed,
+       COALESCE(SUM(CASE WHEN ps.status = 'completed' THEN 100 ELSE ps.progress END), 0)::int AS progress_total
       FROM project_subtasks ps
       JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
       WHERE pm.project_id = ANY($1)
@@ -1552,7 +1559,7 @@ exports.getAllArchivedProjects = async (params = {}) => {
       [projectIds]
     );
     taskStatsByProject = taskStatsRes.rows.reduce((acc, row) => {
-      acc[row.project_id] = { total: row.total, completed: row.completed };
+      acc[row.project_id] = { total: row.total, completed: row.completed, progress_total: row.progress_total };
       return acc;
     }, {});
   }
@@ -1588,7 +1595,7 @@ exports.getAllArchivedProjects = async (params = {}) => {
 
     return {
       ...project,
-      progress: tracking.progress || progress,
+      progress: (include_tasks === true || include_tasks === 'true') ? tracking.progress : progress,
       status: tracking.status || project.status,
       task_summary: tracking.task_summary,
       customization_ids: orderCustomizations.map((c) => c.customization_id),
@@ -1624,6 +1631,7 @@ exports.getProjects = async (params = {}) => {
 };
 
 exports.getProjectById = async (projectId) => {
+  await require('./projectTaskSchemaService').ensureTaskSchema();
   await ensureProjectArchiveColumns();
   await ensureCustomizationBuildColumns();
   const result = await pool.query(
@@ -1633,7 +1641,7 @@ exports.getProjectById = async (projectId) => {
     [projectId]
   );
   if (result.rows.length === 0) return null;
-  const trackedProject = await applyProjectTaskTracking(pool, result.rows[0], { persist: true });
+  const trackedProject = await applyProjectTaskTracking(pool, result.rows[0], { persist: false });
   const withFulfillment = attachFulfillmentDetails(trackedProject);
   const customizationRes = await pool.query(
     `SELECT DISTINCT
@@ -1744,6 +1752,7 @@ exports.createProject = async (projectData) => {
 };
 
 exports.updateProject = async (projectId, projectData) => {
+  await require('./projectTaskSchemaService').ensureTaskSchema();
   await ensureProjectArchiveColumns();
   const { title, name, status, description, notes, estimated_completion_date } = projectData;
   const normalizedStatus = normalizeProjectStatus(status)
@@ -1809,6 +1818,7 @@ exports.updateProject = async (projectId, projectData) => {
 };
 
 exports.cancelProject = async (projectId, userId, userRole) => {
+  await require('./projectTaskSchemaService').ensureTaskSchema();
   await ensureProjectArchiveColumns();
   const client = await pool.connect();
 
@@ -2073,14 +2083,26 @@ const readProjectAuditContext = async (client, projectId) => {
   if (cached && Date.now() - cached.at < PROJECT_CONTEXT_TTL_MS) return cached.value;
 
   let value = {};
+  const savepoint = 'project_audit_context_savepoint';
+  const inTransaction = typeof client.release === 'function';
+  let savepointCreated = false;
   try {
+    if (inTransaction) {
+      await client.query(`SAVEPOINT ${savepoint}`);
+      savepointCreated = true;
+    }
     const { rows } = await client.query(
-      `SELECT p.project_id, p.order_id, p.order_number, p.title, p.body_model,
-              p.customer_id,
+      `SELECT p.project_id, p.order_id, o.order_number, p.title,
+              (SELECT MAX(c_model.body_model)
+               FROM order_items oi_model
+               JOIN customizations c_model ON c_model.customization_id = oi_model.customization_id
+               WHERE oi_model.order_id = p.order_id) AS body_model,
+              p.custom_build_id,
               COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '') AS customer_name,
               c.email AS customer_email
        FROM projects p
-       LEFT JOIN users c ON c.user_id = p.customer_id
+       LEFT JOIN orders o ON o.order_id = p.order_id
+       LEFT JOIN users c ON c.user_id = o.user_id
        WHERE p.project_id = $1`,
       [projectId]
     );
@@ -2088,6 +2110,7 @@ const readProjectAuditContext = async (client, projectId) => {
     if (row) {
       value = {
         projectId: row.project_id,
+        customBuildId: row.custom_build_id,
         orderId: row.order_id,
         orderNumber: row.order_number,
         projectTitle: row.title,
@@ -2098,8 +2121,13 @@ const readProjectAuditContext = async (client, projectId) => {
     }
   } catch (err) {
     // A failed lookup must never break the surrounding transaction.
+    if (savepointCreated) {
+      await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+    }
     console.warn('Could not resolve project audit context:', err.message);
     return {};
+  } finally {
+    if (savepointCreated) await client.query(`RELEASE SAVEPOINT ${savepoint}`);
   }
 
   projectAuditContextCache.set(projectId, { at: Date.now(), value });
@@ -2655,16 +2683,19 @@ exports.toggleProjectRequiredPart = async (projectId, partKey, received, userId)
 };
 
 exports.getProjectHierarchy = async (projectId) => {
+  await require('./projectTaskSchemaService').ensureTaskSchema();
   await ensureProjectArchiveColumns();
   const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+    await client.query('SELECT project_id FROM projects WHERE project_id=$1 FOR UPDATE', [projectId]);
     const pResult = await client.query(
       `${PROJECT_BASE_SELECT}
        WHERE p.project_id = $1
          AND p.deleted_at IS NULL`,
       [projectId]
     );
-    if (pResult.rows.length === 0) return null;
+    if (pResult.rows.length === 0) { await client.query('COMMIT'); return null; }
     const project = pResult.rows[0];
 
     // Fetch team members
@@ -2812,7 +2843,7 @@ exports.getProjectHierarchy = async (projectId) => {
       client,
       project,
       {
-        stats: { total: totalSubtasks, completed: completedSubtasks },
+        stats: await getProjectTaskStats(client, projectId),
         persist: true,
       }
     );
@@ -2833,7 +2864,11 @@ exports.getProjectHierarchy = async (projectId) => {
       withClaim.customization_status = 'fulfilled';
     }
 
+    await client.query('COMMIT');
     return withClaim;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
   } finally {
     client.release();
   }
@@ -3048,16 +3083,47 @@ exports.submitFulfillmentChoice = async (projectId, userId, userRole, data = {})
   }
 };
 
+const lockTaskProject = async (db, projectId) => {
+  const result = await db.query('SELECT * FROM projects WHERE project_id = $1 FOR UPDATE', [projectId]);
+  if (!result.rows[0]) throw new AppError('Project not found', 404);
+  const project = result.rows[0];
+  if (['cancelled', 'on_hold'].includes(normalizeProjectStatus(project.status))) throw new AppError('Tasks cannot be changed while the project is cancelled or on hold', 409);
+  return project;
+};
+const validateTaskAssignee = async (db, id) => {
+  if (!id) return;
+  const result = await db.query(`SELECT u.user_id FROM users u WHERE u.user_id = $1 AND u.is_active = true AND u.deleted_at IS NULL
+    AND (u.role::text IN ('staff','admin','super_admin') OR EXISTS (SELECT 1 FROM user_roles ur JOIN roles r USING(role_id)
+      WHERE ur.user_id=u.user_id AND ur.is_active=true AND r.name IN ('staff','admin','super_admin')))`, [id]);
+  if (!result.rows.length) throw new AppError('Assigned staff must be an active staff member or admin', 400);
+};
+const synchronizeTaskProgress = async (db, projectId) => {
+  await db.query(`UPDATE project_milestones m SET status = CASE
+    WHEN NOT EXISTS (SELECT 1 FROM project_subtasks s WHERE s.milestone_id=m.milestone_id) THEN 'pending'
+    WHEN NOT EXISTS (SELECT 1 FROM project_subtasks s WHERE s.milestone_id=m.milestone_id AND s.status <> 'completed') THEN 'completed'
+    WHEN EXISTS (SELECT 1 FROM project_subtasks s WHERE s.milestone_id=m.milestone_id AND (s.status='in_progress' OR s.status='completed' OR s.progress > 0)) THEN 'in_progress'
+    ELSE 'pending' END, updated_at=now() WHERE project_id=$1`, [projectId]);
+  const project = await db.query('SELECT * FROM projects WHERE project_id = $1 FOR UPDATE', [projectId]);
+  const tracking = await applyProjectTaskTracking(db, project.rows[0], { persist: true });
+  await syncLastCompletedStage(db, projectId);
+  return tracking;
+};
+exports.__testOnlyBuildProjectTaskTracking = buildProjectTaskTracking;
+
 exports.addMilestone = async (projectId, data, userId) => {
+  await require('./projectTaskSchemaService').ensureTaskSchema();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await lockTaskProject(client, projectId);
     const { title, description, order_index } = data;
+    const last = await client.query('SELECT COALESCE(MAX(order_index), -1) + 1 AS next_index FROM project_milestones WHERE project_id=$1', [projectId]);
     const res = await client.query(
       'INSERT INTO project_milestones (project_id, title, description, order_index) VALUES ($1, $2, $3, $4) RETURNING *',
-      [projectId, title, description, order_index || 0]
+      [projectId, title, description || null, order_index ?? last.rows[0].next_index]
     );
     await logActivity(client, projectId, userId, 'milestone_created', { title });
+    await synchronizeTaskProgress(client, projectId);
     await client.query('COMMIT');
     return res.rows[0];
   } catch (err) {
@@ -3069,9 +3135,13 @@ exports.addMilestone = async (projectId, data, userId) => {
 };
 
 exports.updateMilestone = async (milestoneId, data, userId) => {
+  await require('./projectTaskSchemaService').ensureTaskSchema();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const parent = await client.query('SELECT project_id FROM project_milestones WHERE milestone_id=$1', [milestoneId]);
+    if (!parent.rows[0]) throw new AppError('Milestone not found', 404);
+    await lockTaskProject(client, parent.rows[0].project_id);
     const { title, description, order_index, status } = data;
     const res = await client.query(
       `UPDATE project_milestones 
@@ -3083,6 +3153,7 @@ exports.updateMilestone = async (milestoneId, data, userId) => {
     );
     if (res.rows.length === 0) throw new Error('Milestone not found');
     await logActivity(client, res.rows[0].project_id, userId, 'milestone_updated', { title: res.rows[0].title });
+    await synchronizeTaskProgress(client, res.rows[0].project_id);
     await client.query('COMMIT');
     return res.rows[0];
   } catch (err) {
@@ -3094,12 +3165,17 @@ exports.updateMilestone = async (milestoneId, data, userId) => {
 };
 
 exports.deleteMilestone = async (milestoneId, userId) => {
+  await require('./projectTaskSchemaService').ensureTaskSchema();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const parent = await client.query('SELECT project_id FROM project_milestones WHERE milestone_id=$1', [milestoneId]);
+    if (!parent.rows[0]) throw new AppError('Milestone not found', 404);
+    await lockTaskProject(client, parent.rows[0].project_id);
     const res = await client.query('DELETE FROM project_milestones WHERE milestone_id = $1 RETURNING *', [milestoneId]);
     if (res.rows.length === 0) throw new Error('Milestone not found');
     await logActivity(client, res.rows[0].project_id, userId, 'milestone_deleted', { title: res.rows[0].title });
+    await synchronizeTaskProgress(client, res.rows[0].project_id);
     await client.query('COMMIT');
     return res.rows[0];
   } catch (err) {
@@ -3111,25 +3187,29 @@ exports.deleteMilestone = async (milestoneId, userId) => {
 };
 
 exports.addSubtask = async (milestoneId, data, userId) => {
+  await require('./projectTaskSchemaService').ensureTaskSchema();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const mRes = await client.query('SELECT project_id FROM project_milestones WHERE milestone_id = $1', [milestoneId]);
-    if (mRes.rows.length === 0) throw new Error('Milestone not found');
+    if (mRes.rows.length === 0) throw new AppError('Milestone not found', 404);
     const projectId = mRes.rows[0].project_id;
 
-    const { title, is_customer_updatable, assigned_user_id } = data;
+    await lockTaskProject(client, projectId);
+    const { title, is_customer_updatable, assigned_user_id, due_date, notes } = data;
+    await validateTaskAssignee(client, assigned_user_id);
     const res = await client.query(
-      'INSERT INTO project_subtasks (milestone_id, title, is_customer_updatable, assigned_user_id) VALUES ($1, $2, $3, $4) RETURNING *',
-      [milestoneId, title, is_customer_updatable || false, assigned_user_id || null]
+      'INSERT INTO project_subtasks (milestone_id, title, is_customer_updatable, assigned_user_id, due_date, notes) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [milestoneId, title, is_customer_updatable || false, assigned_user_id || null, due_date || null, notes || null]
     );
 
     // If milestone was completed, revert to in_progress because a new pending subtask was added
     await client.query("UPDATE project_milestones SET status = 'in_progress' WHERE milestone_id = $1 AND status = 'completed'", [milestoneId]);
 
     await logActivity(client, projectId, userId, 'subtask_created', { title });
+    await synchronizeTaskProgress(client, projectId);
     await client.query('COMMIT');
-    return res.rows[0];
+    return { ...res.rows[0], project_id: projectId };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -3177,15 +3257,13 @@ const ensureSubtaskStatusConstraint = async () => {
 let subtaskConstraintEnsured = false;
 
 exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
+  await require('./projectTaskSchemaService').ensureTaskSchema();
+  if (!subtaskConstraintEnsured) { await ensureSubtaskStatusConstraint(); subtaskConstraintEnsured = true; }
+  if (!holdCancelColumnsEnsured) { await ensureProjectHoldCancelColumns(); holdCancelColumnsEnsured = true; }
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     
-    // Ensure the subtask status constraint allows 'in_progress'
-    if (!subtaskConstraintEnsured) {
-      await ensureSubtaskStatusConstraint();
-      subtaskConstraintEnsured = true;
-    }
     const sRes = await client.query(`
       SELECT s.*, m.project_id, m.order_index AS milestone_order, m.title AS milestone_title
       FROM project_subtasks s
@@ -3193,22 +3271,36 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
       WHERE s.subtask_id = $1
     `, [subtaskId]);
     
-    if (sRes.rows.length === 0) throw new Error('Subtask not found');
-    const subtask = sRes.rows[0];
+    if (sRes.rows.length === 0) throw new AppError('Subtask not found', 404);
+    let subtask = sRes.rows[0];
+    const lockedProject = await lockTaskProject(client, subtask.project_id);
+    const refreshed = await client.query('SELECT * FROM project_subtasks WHERE subtask_id=$1 FOR UPDATE', [subtaskId]);
+    if (!refreshed.rows[0]) throw new AppError('Task not found', 404);
+    subtask = { ...subtask, ...refreshed.rows[0] };
 
     // Authorization check
     if (!['super_admin', 'admin', 'staff'].includes(userRole)) {
-      if (!subtask.is_customer_updatable) {
-        throw new Error('Not authorized to update this subtask');
+      const owner = await client.query('SELECT user_id FROM orders WHERE order_id=$1', [lockedProject.order_id]);
+      if (owner.rows[0]?.user_id !== userId || !subtask.is_customer_updatable || Object.keys(data).some(key => key !== 'status')) {
+        throw new AppError('Not authorized to update this subtask', 403);
       }
     }
 
-    const { status, title, assigned_user_id, is_customer_updatable } = data;
+    const { title, assigned_user_id, is_customer_updatable, due_date, notes } = data;
+    const { status, progress: taskProgress } = normalizeTaskProgress(subtask, data);
+    if (assigned_user_id !== subtask.assigned_user_id) await validateTaskAssignee(client, assigned_user_id);
+    if (subtask.status === 'completed' && status !== 'completed') {
+      const laterTasks = await client.query(`SELECT 1 FROM project_subtasks s
+        JOIN project_milestones m USING(milestone_id)
+        WHERE m.project_id=$1 AND m.order_index > $2 AND s.status='completed' LIMIT 1`,
+      [subtask.project_id, subtask.milestone_order]);
+      if (laterTasks.rows.length) throw new AppError('Reopen completed tasks in later milestones before reopening this task', 409);
+    }
     let completedAt = subtask.completed_at;
     let completedBy = subtask.completed_by;
 
     // --- SEQUENTIAL PROGRESSION CHECK ---
-    if (status === 'completed' && subtask.status !== 'completed') {
+    if ((status === 'completed' && subtask.status !== 'completed') || taskProgress > Number(subtask.progress || 0)) {
       // Ensure hold/cancel columns exist before querying them
       if (!holdCancelColumnsEnsured) {
         await ensureProjectHoldCancelColumns();
@@ -3225,14 +3317,14 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
       if (projectRes.rows.length > 0) {
         const projectStatus = normalizeProjectStatus(projectRes.rows[0].status);
         if (projectRes.rows[0].customization_status === 'on_hold') {
-          throw new Error('Cannot update tasks while the customization order is on hold');
+          throw new AppError('Cannot update tasks while the customization order is on hold', 409);
         }
         if (projectStatus === 'cancelled') {
-          throw new Error('Project is cancelled. No further updates allowed');
+          throw new AppError('Project is cancelled. No further updates allowed', 409);
         }
         if (await hasBlockingInstallment(client, subtask.project_id)) {
           await updateCustomizationOrderStatus(client, projectRes.rows[0].order_id, 'payment_required');
-          throw new Error('The required installment for the current period must be approved before production can continue');
+          throw new AppError('The required installment for the current period must be approved before production can continue', 409);
         }
       }
 
@@ -3249,17 +3341,17 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
       for (const prevMilestone of prevMilestones.rows) {
         const pendingCount = parseInt(prevMilestone.pending_subtasks);
         if (pendingCount > 0) {
-          throw new Error(
+          throw new AppError(
             `Cannot proceed to "${subtask.milestone_title}" yet. ` +
             `All tasks in "${prevMilestone.title}" must be completed first. ` +
-            `(${pendingCount} task${pendingCount > 1 ? 's' : ''} remaining)`
+            `(${pendingCount} task${pendingCount > 1 ? 's' : ''} remaining)`, 409
           );
         }
       }
 
-      completedAt = new Date();
-      completedBy = userId;
-    } else if (status === 'pending' || status === 'in_progress') {
+      if (status === 'completed' && subtask.status !== 'completed') { completedAt = new Date(); completedBy = userId; }
+    }
+    if (status === 'pending' || status === 'in_progress') {
       completedAt = null;
       completedBy = null;
     }
@@ -3268,38 +3360,22 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
       `UPDATE project_subtasks 
        SET status = COALESCE($1, status),
            title = COALESCE($2, title),
-           assigned_user_id = COALESCE($3, assigned_user_id),
+           assigned_user_id = CASE WHEN $8 THEN $3::uuid ELSE assigned_user_id END,
            is_customer_updatable = COALESCE($4, is_customer_updatable),
            completed_at = $5,
            completed_by = $6,
+           progress = $9,
+           due_date = CASE WHEN $10 THEN $11::date ELSE due_date END,
+           notes = CASE WHEN $12 THEN $13::text ELSE notes END,
            updated_at = CURRENT_TIMESTAMP
        WHERE subtask_id = $7 RETURNING *`,
-      [status || subtask.status, title, assigned_user_id, is_customer_updatable, completedAt, completedBy, subtaskId]
+      [status || subtask.status, title, assigned_user_id, is_customer_updatable, completedAt, completedBy, subtaskId, assigned_user_id !== undefined, taskProgress, due_date !== undefined, due_date || null, notes !== undefined, notes || null]
     );
 
-    const mId = subtask.milestone_id;
-    // Auto-complete milestone logic
-    const pendingCount = await client.query(`SELECT COUNT(*) FROM project_subtasks WHERE milestone_id = $1 AND status != 'completed'`, [mId]);
-    if (parseInt(pendingCount.rows[0].count) === 0) {
-      await client.query(`UPDATE project_milestones SET status = 'completed' WHERE milestone_id = $1`, [mId]);
-    } else {
-      await client.query(`UPDATE project_milestones SET status = 'in_progress' WHERE milestone_id = $1`, [mId]);
-    }
-
-    // Update project progress tracking
-    const projectData = await client.query(`SELECT * FROM projects WHERE project_id = $1`, [subtask.project_id]);
-    let taskSummary = null;
-    let progress = null;
-    if (projectData.rows.length > 0) {
-      const stats = await getProjectTaskStats(client, subtask.project_id);
-      const tracking = await applyProjectTaskTracking(client, projectData.rows[0], { stats, persist: true });
-      taskSummary = tracking.task_summary;
-      progress = tracking.progress;
-    }
-
-    // Sync the latest fully-completed build stage so the snapshot survives
-    // status changes (including cancellation).
-    await syncLastCompletedStage(client, subtask.project_id);
+    const tracking = await synchronizeTaskProgress(client, subtask.project_id);
+    const taskSummary = tracking.task_summary;
+    const progress = tracking.progress;
+    await logActivity(client, subtask.project_id, userId, 'subtask_updated', { title: title ?? subtask.title, progress: taskProgress, status });
 
     if (status && status !== subtask.status) {
       await logActivity(client, subtask.project_id, userId, 'subtask_status_changed', { title: subtask.title, status });
@@ -3309,7 +3385,7 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
     // When "Ready for Release" subtask is completed, automatically transition the
     // associated order from Build Projects to My Purchases with "To Ship" status
     // (or "Ready for Pickup" if the project has a pickup appointment).
-    if (taskSummary?.total > 0 && taskSummary.completed === taskSummary.total) {
+    if (status === 'completed' && subtask.status !== 'completed' && taskSummary?.total > 0 && taskSummary.completed === taskSummary.total) {
       // Fetch the project to determine fulfillment method
       const projectData = await client.query(
         `SELECT p.*, o.status AS order_status, o.order_type, o.user_id AS customer_id, o.order_number
@@ -3411,9 +3487,13 @@ exports.getSubtaskById = async (subtaskId) => {
 };
 
 exports.deleteSubtask = async (subtaskId, userId) => {
+  await require('./projectTaskSchemaService').ensureTaskSchema();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const parent = await client.query('SELECT m.project_id FROM project_subtasks s JOIN project_milestones m USING(milestone_id) WHERE s.subtask_id=$1', [subtaskId]);
+    if (!parent.rows[0]) throw new AppError('Subtask not found', 404);
+    await lockTaskProject(client, parent.rows[0].project_id);
     const res = await client.query(`
       DELETE FROM project_subtasks 
       WHERE subtask_id = $1 
@@ -3422,6 +3502,7 @@ exports.deleteSubtask = async (subtaskId, userId) => {
     
     if (res.rows.length === 0) throw new Error('Subtask not found');
     await logActivity(client, res.rows[0].project_id, userId, 'subtask_deleted', { title: res.rows[0].title });
+    await synchronizeTaskProgress(client, res.rows[0].project_id);
     await client.query('COMMIT');
     return res.rows[0];
   } catch (err) {
@@ -3900,6 +3981,7 @@ exports.approveProjectHold = async (projectId, userId, data = {}) => {
  * Resume a held project (admin or customer who owns the project).
  */
 exports.resumeProject = async (projectId, userId, userRole) => {
+  await require('./projectTaskSchemaService').ensureTaskSchema();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -4174,6 +4256,7 @@ exports.requestProjectCancel = async (projectId, userId, userRole, data = {}) =>
  * Admin approves (or rejects) a cancellation request.
  */
 exports.approveProjectCancel = async (projectId, userId, data = {}) => {
+  await require('./projectTaskSchemaService').ensureTaskSchema();
   await ensureProjectArchiveColumns();
   await ensureProjectHoldCancelColumns();
   const client = await pool.connect();

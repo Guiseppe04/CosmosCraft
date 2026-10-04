@@ -9,14 +9,14 @@ const booking = {
   payment_method: 'cash',
 }
 
-for (const contact_number of ['09123456789', '+639123456789', ' 09123456789 ', '', undefined]) {
+for (const contact_number of ['9123456789', '09123456789', '+639123456789', ' 09123456789 ', '', undefined]) {
   const result = appointmentValidation.createAppointmentSchema.validate({ ...booking, contact_number })
   assert.ifError(result.error)
-  assert.equal(result.value.contact_number, contact_number?.trim())
+  assert.equal(result.value.contact_number, contact_number ? '+639123456789' : contact_number)
 
   const update = appointmentValidation.updateAppointmentSchema.validate({ contact_number, notes: 'Updated contact' })
   assert.ifError(update.error)
-  assert.equal(update.value.contact_number, contact_number?.trim())
+  assert.equal(update.value.contact_number, contact_number ? '+639123456789' : contact_number)
 }
 
 const invalid = appointmentValidation.createAppointmentSchema.validate({ ...booking, contact_number: '123' })

@@ -9,10 +9,10 @@
  * contact numbers always match this shape.
  */
 
-export const PHONE_REGEX = /^(09\d{9}|\+639\d{9})$/
+export const PHONE_REGEX = /^(9\d{9}|09\d{9}|\+639\d{9})$/
 
 export const PHONE_ERROR_MESSAGE =
-  'Phone number must be 11 digits starting with 09 or in +63 format (e.g. +639123456789)'
+  'Please enter 10 digits starting with 9 after +63 (e.g. 9661341242).'
 
 /**
  * Keeps digits only. A single leading "+" is preserved so the +63 international
@@ -32,5 +32,20 @@ export function isValidPhoneNumber(value) {
 /** Sanitized value when valid, otherwise undefined so it is omitted from payloads. */
 export function normalizePhoneForSubmit(value) {
   const sanitized = sanitizePhoneInput(value).trim()
-  return isValidPhoneNumber(sanitized) ? sanitized : undefined
+  return isValidPhoneNumber(sanitized) ? `+63${getPhoneSubscriber(sanitized)}` : undefined
+}
+
+export function getPhoneSubscriber(value) {
+  const digits = String(value ?? '').replace(/\D/g, '')
+  if (digits.startsWith('63')) return digits.slice(2)
+  if (digits.startsWith('0')) return digits.slice(1)
+  return digits
+}
+
+// Delivery rider input accepts PH local/international numbers and stores +63.
+export function normalizeRiderContact(value) {
+  const input = String(value ?? '').trim().replace(/\s+/g, '')
+  if (/^9\d{9}$/.test(input)) return `+63${input}`
+  if (/^09\d{9}$/.test(input)) return `+63${input.slice(1)}`
+  return /^\+639\d{9}$/.test(input) ? input : null
 }

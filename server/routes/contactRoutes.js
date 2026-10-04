@@ -3,6 +3,8 @@ const rateLimit = require('express-rate-limit');
 const { pool } = require('../config/database');
 const { authenticateToken, authorize } = require('../middleware/auth');
 const mailService = require('../services/mailService');
+const { normalizePhMobile } = require('../utils/phone');
+const { emitBroadcast } = require('../services/socketService');
 
 const router = express.Router();
 const DEFAULT_EMAIL = process.env.CONTACT_EMAIL || 'cosmosguitars@gmail.com';
@@ -53,9 +55,12 @@ router.get('/settings', async (req, res) => {
 
 router.put('/settings', authenticateToken, authorize('admin', 'super_admin'), async (req, res) => {
   const email = typeof req.body.email === 'string' ? req.body.email.trim() : '';
-  const phone = typeof req.body.phone === 'string' ? req.body.phone.trim() : '';
-  if (!isValidEmail(email) || email.length > 254 || !phone || phone.length > 64) {
-    return res.status(400).json({ success: false, message: 'Enter a valid email and phone number.' });
+  const phone = normalizePhMobile(req.body.phone);
+  if (!isValidEmail(email) || email.length > 254) {
+    return res.status(400).json({ success: false, message: 'Enter a valid email address.' });
+  }
+  if (!phone) {
+    return res.status(400).json({ success: false, message: 'Please enter 10 digits starting with 9 after +63.' });
   }
 
   try {
@@ -65,6 +70,7 @@ router.put('/settings', authenticateToken, authorize('admin', 'super_admin'), as
        WHERE id = 1 RETURNING email, phone`,
       [email, phone]
     );
+    emitBroadcast('site-contact:updated', result.rows[0]);
     res.json({ success: true, data: result.rows[0] });
   } catch (error) {
     console.error('Error saving contact settings:', error);

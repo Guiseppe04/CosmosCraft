@@ -10,12 +10,13 @@ const GUITAR_TYPE_VALUES = ['electric', 'bass', 'acoustic', 'ukulele'];
 const APPOINTMENT_STATUS_VALUES = ['pending', 'confirmed', 'in_progress', 'ready_for_pickup', 'completed', 'cancelled', 'no_show'];
 
 // Philippine mobile: 11 digits starting with 09, or +63 followed by 9 and 9 more digits.
-const PH_MOBILE_REGEX = /^(09\d{9}|\+639\d{9})$/;
-const PH_MOBILE_MESSAGE = 'Phone number must be 11 digits starting with 09 or in +63 format (e.g. +639123456789)';
+const PH_MOBILE_REGEX = /^(9\d{9}|09\d{9}|\+639\d{9})$/;
+const PH_MOBILE_MESSAGE = 'Please enter 10 digits starting with 9 after +63 (e.g. 9661341242).';
 
 const phMobileSchema = Joi.string()
   .trim()
   .pattern(PH_MOBILE_REGEX)
+  .custom(value => require('./phone').normalizePhMobile(value))
   .messages({
     'string.pattern.base': PH_MOBILE_MESSAGE,
   });

@@ -176,6 +176,9 @@ export default function AppointmentCard({
     String(apt.status || '').toLowerCase()
   )
   const needsReschedule = isPast && !isTerminalStatus
+  const cancellationBlocked = String(apt.status || '').toLowerCase() === 'ready_for_pickup'
+    || Boolean(apt.related_pickup_ready)
+    || ['approved', 'paid', 'verified', 'confirmed', 'refunded'].includes(String(apt.payment_status || '').toLowerCase())
 
   const selectedGuitar = getSelectedGuitarLabel(apt)
   const addressLabel = apt.customer_address || apt.address || ''
@@ -588,7 +591,7 @@ export default function AppointmentCard({
               )}
 
               {/* A past-due appointment can only be rescheduled, never cancelled. */}
-              {!isTerminalStatus && !needsReschedule && (
+              {!isTerminalStatus && !needsReschedule && !cancellationBlocked && (
                 <button
                   type="button"
                   onClick={() => onCancel(apt)}

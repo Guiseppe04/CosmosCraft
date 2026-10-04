@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
+import PhoneInput from '../PhoneInput'
+import { isValidPhoneNumber, PHONE_ERROR_MESSAGE } from '../../utils/phone'
 import { Package, Search, X, Printer, Download, ArrowUpDown, Grid3X3, List, Plus, RotateCcw, AlertTriangle } from 'lucide-react'
 import { posApi } from '../../utils/posApi'
 import { formatCurrency } from '../../utils/formatCurrency'
@@ -717,6 +719,10 @@ export function PosWorkspace({
   }, [])
 
   const completeSale = useCallback(async () => {
+    if (customerPhone.trim() && !isValidPhoneNumber(customerPhone)) {
+      showToast?.(PHONE_ERROR_MESSAGE, 'error')
+      return
+    }
     if (cart.length === 0) {
       showToast?.('Add items to the cart', 'error')
       return
@@ -1110,11 +1116,9 @@ export function PosWorkspace({
                   placeholder="Customer name"
                   className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-light)]"
                 />
-                <input
-                  type="text"
+                <PhoneInput
                   value={customerPhone}
                   onChange={(event) => setCustomerPhone(event.target.value)}
-                  placeholder="Phone"
                   className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-light)]"
                 />
               </div>

@@ -18,6 +18,7 @@ import { BODY_OPTIONS, DEFAULT_CONFIG } from '../lib/guitarBuilderData.js'
 import { BASS_BODY_OPTIONS, BASS_DEFAULT_CONFIG } from '../lib/bassBuilderData.js'
 import { API, getAuthHeaders } from '../utils/apiConfig'
 import api from '../services/api.js'
+import { adminApi } from '../utils/adminApi'
 import { getCustomBuildSummaryTree } from '../utils/customBuildSummary.js'
 import { Country, State } from 'country-state-city'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
@@ -950,6 +951,18 @@ export function CheckoutPage() {
   const isCustomBuild = location.state?.isCustomBuild || false
   const isBuyNow = location.state?.isBuyNow || false
   const customBuildItem = location.state?.checkoutItem || null
+  const customBuildId = customBuildItem?.dbCustomizationId || customBuildItem?.customization_id || null
+  const [savedCheckoutBuild, setSavedCheckoutBuild] = useState(null)
+  useEffect(() => {
+    setSavedCheckoutBuild(null)
+    if (!isCustomBuild || !isAuthenticated || !customBuildId) return
+    let live = true
+    adminApi.getMyCustomizations().then((result) => {
+      const saved = (Array.isArray(result.data) ? result.data : []).find(build => build.customization_id === customBuildId)
+      if (live && saved) setSavedCheckoutBuild(saved)
+    }).catch(error => console.warn('Could not refresh saved checkout preview:', error.message))
+    return () => { live = false }
+  }, [isCustomBuild, isAuthenticated, customBuildId])
   const buyNowItem = isBuyNow ? location.state?.checkoutItem : null
   
   const [isProcessing, setIsProcessing] = useState(false)
@@ -1047,7 +1060,7 @@ export function CheckoutPage() {
         cart_item_id: item.cart_item_id,
         name: item.product?.name || item.customization?.name || 'Custom Build',
         price: Number(item.unit_price) || 0,
-        image: item.product?.image || '/assets/placeholder.jpg',
+        image: item.product?.image || item.customization?.preview_image || '/assets/placeholder.jpg',
         stock: item.product?.stock,
         quantity: Number(item.quantity) || 1,
         type: item.customization ? 'customization' : 'product',
@@ -1080,6 +1093,9 @@ export function CheckoutPage() {
 
     baseCheckoutItems = [{
       ...customBuildItem,
+      config: customBuildItem.config || savedCheckoutBuild?.config_json || {},
+      stickers: customBuildItem.stickers || parseArrayValue(savedCheckoutBuild?.stickers),
+      preview_image: customBuildItem.preview_image || savedCheckoutBuild?.preview_image || null,
       category: 'Custom Build',
       isCustomBuild: true,
       price: customBuildPrice + customAdditionalPartsTotal,

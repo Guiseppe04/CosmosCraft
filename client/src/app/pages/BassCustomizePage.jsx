@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
+import { useStickerDraft } from '../hooks/useStickerDraft'
 import { motion, AnimatePresence } from 'motion/react'
 import { useSearchParams, useNavigate, useBlocker } from 'react-router'
 import {
@@ -752,7 +753,7 @@ export function BassCustomizePage() {
       return null
     }
   })
-  const [stickers, setStickers] = useState([])
+  const { stickers, setStickers, selectedStickerId, setSelectedStickerId } = useStickerDraft('bassBuild')
 
   // Derived: is there anything to save?
   const hasUnsavedChanges = useMemo(() => {
@@ -770,7 +771,6 @@ export function BassCustomizePage() {
 
   const bypassNavigationBlockRef = useRef(false)
   const [showUnsavedModal, setShowUnsavedModal] = useState(false)
-  const [selectedStickerId, setSelectedStickerId] = useState(null)
   const [isDraggingSticker, setIsDraggingSticker] = useState(false)
   const stickerFileInputRef = useRef(null)
   const stickersRef = useRef([])

@@ -1,5 +1,7 @@
 import { motion } from 'motion/react'
 import { X, Save, Loader2 } from 'lucide-react'
+import { normalizeRiderContact } from '../../../../utils/phone'
+import PhoneInput from '../../../../components/PhoneInput'
 
 export function OrderStatusModal({
   modal,
@@ -19,8 +21,16 @@ export function OrderStatusModal({
     if (!form.order_status) return
     const currentOrderStatus = modal.data.status || 'pending'
     const allowedTransitions = ORDER_STATUS_TRANSITIONS[currentOrderStatus] || []
-    if (!allowedTransitions.includes(form.order_status)) {
+    if (form.order_status === currentOrderStatus || !allowedTransitions.includes(form.order_status)) {
       showToast(`Invalid status transition from ${currentOrderStatus} to ${form.order_status}.`, 'error')
+      return
+    }
+    if (form.order_status === 'out_for_delivery' && !normalizeRiderContact(form.rider_contact)) {
+      showToast('Please enter a valid mobile number.', 'error')
+      return
+    }
+    if (form.order_status === 'out_for_delivery' && !form.rider_name?.trim()) {
+      showToast('Rider name is required.', 'error')
       return
     }
 
@@ -29,7 +39,10 @@ export function OrderStatusModal({
       const updateData = { status: form.order_status }
       if (form.tracking_info) {
         if (form.order_status === 'shipped') updateData.tracking_number = form.tracking_info
-        if (form.order_status === 'out_for_delivery') updateData.rider_name = form.tracking_info
+      }
+      if (form.order_status === 'out_for_delivery') {
+        updateData.rider_name = form.rider_name.trim()
+        updateData.rider_contact = normalizeRiderContact(form.rider_contact)
       }
       await adminApi.updateOrder(modal.data.order_id, updateData)
       showToast(`Order status updated to ${form.order_status}!`)
@@ -79,7 +92,7 @@ export function OrderStatusModal({
                 const currentOrderStatus = modal.data.status || 'pending'
                 const allowedTransitions = ORDER_STATUS_TRANSITIONS[currentOrderStatus] || []
                 const isActive = (form.order_status || modal.data.status || 'pending') === status.value
-                const isAllowed = allowedTransitions.includes(status.value)
+                const isAllowed = status.value !== currentOrderStatus && allowedTransitions.includes(status.value)
                 return (
                   <button
                     key={status.value}
@@ -104,7 +117,7 @@ export function OrderStatusModal({
             </div>
           </div>
 
-          {form.order_status && (form.order_status === 'shipped' || form.order_status === 'out_for_delivery') && (
+          {form.order_status === 'shipped' && (
             <div>
               <p className="text-[var(--text-muted)] text-sm mb-2">
                 {form.order_status === 'shipped' ? 'Tracking Number' : 'Rider Details'}
@@ -116,6 +129,16 @@ export function OrderStatusModal({
                 onChange={(e) => setForm((f) => ({ ...f, tracking_info: e.target.value }))}
                 className="w-full px-4 py-3 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
               />
+            </div>
+          )}
+          {form.order_status === 'out_for_delivery' && (
+            <div className="space-y-3">
+              <label className="block text-sm text-[var(--text-muted)]">Rider Name
+                <input type="text" value={form.rider_name || ''} onChange={(e) => setForm((f) => ({ ...f, rider_name: e.target.value }))} className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white" />
+              </label>
+              <label className="block text-sm text-[var(--text-muted)]">Rider Contact
+                <PhoneInput value={form.rider_contact || ''} onChange={(e) => setForm((f) => ({ ...f, rider_contact: e.target.value }))} className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white" />
+              </label>
             </div>
           )}
 

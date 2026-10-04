@@ -153,32 +153,36 @@ exports.confirmDelivery = asyncHandler(async (req, res, next) => {
 
 // --- MILESTONES ---
 exports.createMilestone = asyncHandler(async (req, res, next) => {
-  const milestone = await projectService.addMilestone(req.params.id, req.body, req.user.id);
+  const milestone = await projectService.addMilestone(req.params.id, (req.validatedData || req.body), (req.user.user_id || req.user.id));
+  socketService.emitBroadcast('project:milestone_updated', { milestone, projectId: milestone.project_id });
+  socketService.emitToStaff('project:updated', { projectId: milestone.project_id });
   res.status(201).json({ status: 'success', data: milestone });
 });
 
 exports.updateMilestone = asyncHandler(async (req, res, next) => {
-  const milestone = await projectService.updateMilestone(req.params.milestoneId, req.body, req.user.id);
+  const milestone = await projectService.updateMilestone(req.params.milestoneId, (req.validatedData || req.body), (req.user.user_id || req.user.id));
   socketService.emitBroadcast('project:milestone_updated', { milestone, milestoneId: req.params.milestoneId });
   socketService.emitToStaff('project:updated', { milestone });
   res.json({ status: 'success', data: milestone });
 });
 
 exports.deleteMilestone = asyncHandler(async (req, res, next) => {
-  await projectService.deleteMilestone(req.params.milestoneId, req.user.id);
+  const deleted = await projectService.deleteMilestone(req.params.milestoneId, (req.user.user_id || req.user.id));
   socketService.emitBroadcast('project:milestone_updated', { milestoneId: req.params.milestoneId, deleted: true });
-  res.json({ status: 'success', data: null });
+  socketService.emitToStaff('project:updated', { projectId: deleted.project_id });
+  res.json({ status: 'success', data: deleted });
 });
 
 // --- SUBTASKS ---
 exports.createSubtask = asyncHandler(async (req, res, next) => {
-  const subtask = await projectService.addSubtask(req.params.milestoneId, req.body, req.user.id);
+  const subtask = await projectService.addSubtask(req.params.milestoneId, (req.validatedData || req.body), (req.user.user_id || req.user.id));
   socketService.emitBroadcast('project:subtask_updated', { subtask, milestoneId: req.params.milestoneId });
+  socketService.emitToStaff('project:updated', { projectId: subtask.project_id });
   res.status(201).json({ status: 'success', data: subtask });
 });
 
 exports.updateSubtask = asyncHandler(async (req, res, next) => {
-  const subtask = await projectService.updateSubtaskStatus(req.params.subtaskId, req.body, req.user.id, req.user.role);
+  const subtask = await projectService.updateSubtaskStatus(req.params.subtaskId, (req.validatedData || req.body), (req.user.user_id || req.user.id), req.user.role);
   socketService.emitBroadcast('project:subtask_updated', { subtask, subtaskId: req.params.subtaskId });
   socketService.emitToStaff('project:updated', { subtask });
   res.json({ status: 'success', data: subtask });
@@ -191,8 +195,10 @@ exports.getSubtask = asyncHandler(async (req, res, next) => {
 });
 
 exports.deleteSubtask = asyncHandler(async (req, res, next) => {
-  await projectService.deleteSubtask(req.params.subtaskId, req.user.id);
-  res.json({ status: 'success', data: null });
+  const deleted = await projectService.deleteSubtask(req.params.subtaskId, (req.user.user_id || req.user.id));
+  socketService.emitBroadcast('project:subtask_updated', { projectId: deleted.project_id, subtaskId: req.params.subtaskId, deleted: true });
+  socketService.emitToStaff('project:updated', { projectId: deleted.project_id });
+  res.json({ status: 'success', data: deleted });
 });
 
 // --- ACTIVITY LOGS ---

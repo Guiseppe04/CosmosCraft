@@ -169,6 +169,7 @@ export default function DefaultWorkflowEditor({ isOpen, onClose }) {
   }
 
   const handleSave = async () => {
+    if (saving) return;
     const validationErrors = validate()
     if (validationErrors.length > 0) {
       setError(validationErrors.join('\n'))
@@ -218,7 +219,7 @@ export default function DefaultWorkflowEditor({ isOpen, onClose }) {
           <div>
             <h2 className="text-xl font-bold text-white">Edit Default Tasks</h2>
             <p className="text-sm text-[var(--text-muted)] mt-1">
-              Changes only affect future projects. Existing projects keep their current tasks.
+              Changes apply to future projects only. Use Manage Tasks to edit an existing project.
             </p>
           </div>
           <button

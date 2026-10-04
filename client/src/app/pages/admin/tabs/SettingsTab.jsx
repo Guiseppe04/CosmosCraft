@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import PhoneInput from '../../../components/PhoneInput'
 import { motion, AnimatePresence } from 'motion/react'
 import { Settings, User, MapPin, Save, Info, History, ArrowRight, ArrowLeft, Mail, Phone } from 'lucide-react'
 import { AuditLogsSection } from '../components/settings/AuditLogsSection'
@@ -105,6 +106,9 @@ export function SettingsTab({
                   <Mail className="w-5 h-5 text-[var(--gold-primary)]" />
                   Site Contact Information
                 </h3>
+                <p className="mb-4 text-sm text-[var(--text-muted)]">
+                  Used for site contact details, including the landing page and Terms and Conditions.
+                </p>
                 <div className="space-y-4">
                   <label className="block">
                     <span className="mb-2 block text-sm font-semibold text-[var(--text-muted)]">Contact Email</span>
@@ -118,12 +122,10 @@ export function SettingsTab({
                   </label>
                   <label className="block">
                     <span className="mb-2 block text-sm font-semibold text-[var(--text-muted)]">Contact Phone</span>
-                    <input
-                      type="tel"
+                    <PhoneInput
                       value={siteContactInfo?.phone || ''}
                       onChange={(event) => setSiteContactInfo((current) => ({ ...current, phone: event.target.value }))}
                       className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50"
-                      placeholder="Contact phone"
                     />
                   </label>
                 </div>

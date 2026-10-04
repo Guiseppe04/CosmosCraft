@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { motion } from 'motion/react'
-import { Search, Settings, Briefcase, CheckCircle, Edit, Trash2, RotateCcw, Archive, Plus, Filter, ChevronDown } from 'lucide-react'
+import { Search, Settings, Briefcase, CheckCircle, Edit, Trash2, RotateCcw, Archive, Plus, Filter, ChevronDown, Table2, LayoutGrid } from 'lucide-react'
 import { EmptyState } from '../components/shared/EmptyState'
 import DefaultWorkflowEditor from '../../../components/projects/DefaultWorkflowEditor'
 import { PaginationBar } from '../components/shared/PaginationBar'
+import { ProjectsTable } from '../components/projects/ProjectsTable'
 
 export function ProjectsTab({
   visibleProjects,
@@ -50,6 +51,7 @@ export function ProjectsTab({
   debouncedSearch,
 }) {
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
+  const [projectView, setProjectView] = useState('table')
   const hasActiveFilters = projectStatusFilter !== 'all'
     || projectAssignedFilter !== 'all'
     || projectGuitarTypeFilter !== 'all'
@@ -155,6 +157,13 @@ export function ProjectsTab({
             onChange={(e) => { setSearchQuery(e.target.value) }}
             className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
           />
+        </div>
+        <div role="group" aria-label="Project view" className="inline-flex shrink-0 gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-1">
+          {[{ value: 'table', label: 'Table view', icon: Table2 }, { value: 'card', label: 'Card view', icon: LayoutGrid }].map(({ value, label, icon: Icon }) => (
+            <button key={value} type="button" aria-pressed={projectView === value} onClick={() => setProjectView(value)} className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${projectView === value ? 'bg-[var(--gold-primary)] text-black' : 'text-[var(--text-muted)] hover:text-[var(--gold-primary)]'}`}>
+              <Icon className="h-4 w-4" />{label}
+            </button>
+          ))}
         </div>
         <div className="relative shrink-0">
           <button
@@ -264,7 +273,9 @@ export function ProjectsTab({
           />
         ) : (
           <>
-          <div className="grid gap-6 xl:grid-cols-2">
+          {projectView === 'table' ? (
+            <ProjectsTable projects={visibleProjects} isAdmin={isAdmin} openModal={openModal} deleteProject={deleteProject} />
+          ) : <div className="grid gap-6 xl:grid-cols-2">
             {visibleProjects.map((project) => {
               const status = String(project.status || 'not_started').toLowerCase()
               const progress = Number.isFinite(Number(project.progress)) ? Math.max(0, Math.min(100, Number(project.progress))) : 0
@@ -374,7 +385,7 @@ export function ProjectsTab({
                 </div>
               )
             })}
-          </div>
+          </div>}
           <PaginationBar
             pagination={projectsPagination}
             onPageChange={(nextPage) => setProjectPage(nextPage)}
@@ -389,7 +400,9 @@ export function ProjectsTab({
           />
         ) : (
           <>
-          <div className="grid gap-6 xl:grid-cols-2">
+          {projectView === 'table' ? (
+            <ProjectsTable projects={visibleArchivedProjects} archived isAdmin={isAdmin} openModal={openModal} restoreProject={restoreProject} />
+          ) : <div className="grid gap-6 xl:grid-cols-2">
             {visibleArchivedProjects.map((project) => {
               const status = String(project.status || 'not_started').toLowerCase()
               const progress = Number.isFinite(Number(project.progress)) ? Math.max(0, Math.min(100, Number(project.progress))) : 0
@@ -489,7 +502,7 @@ export function ProjectsTab({
                 </div>
               )
             })}
-          </div>
+          </div>}
           <PaginationBar
             pagination={archivedProjectsPagination}
             onPageChange={(nextPage) => setArchivedProjectsPagination((prev) => ({ ...prev, page: nextPage }))}

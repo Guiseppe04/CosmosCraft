@@ -1,4 +1,9 @@
 const Joi = require('joi');
+const { normalizeRiderContact } = require('./riderContact');
+const riderContactSchema = Joi.string().trim().custom((value, helpers) => {
+  const normalized = normalizeRiderContact(value);
+  return normalized || helpers.error('any.invalid');
+}).messages({ 'any.invalid': 'Please enter a valid mobile number.', 'string.empty': 'Please enter a valid mobile number.' });
 
 // ============================================================================
 // REUSABLE FIELD SCHEMAS
@@ -7,8 +12,8 @@ const Joi = require('joi');
 // Philippine mobile numbers only: 11 digits starting with 09, or +63 followed
 // by 9 and 9 more digits. Everything else (letters, spaces, dashes, parentheses)
 // is rejected so stored contact numbers stay in one canonical format.
-const PH_MOBILE_REGEX = /^(09\d{9}|\+639\d{9})$/;
-const PH_MOBILE_MESSAGE = 'Phone number must be 11 digits starting with 09 or in +63 format (e.g. +639123456789)';
+const PH_MOBILE_REGEX = /^(9\d{9}|09\d{9}|\+639\d{9})$/;
+const PH_MOBILE_MESSAGE = 'Please enter 10 digits starting with 9 after +63 (e.g. 9661341242).';
 
 // Shared regex for PH-style place names (city / state-province). Matches any
 // Unicode letter (\p{L} -- accented Latin like ñ, é, ü, ß all pass), spaces,
@@ -187,6 +192,7 @@ exports.emailSignupSchema = Joi.object({
     }),
   phone: Joi.string()
     .pattern(PH_MOBILE_REGEX)
+    .custom(value => normalizeRiderContact(value))
     .required()
     .messages({
       'string.pattern.base': PH_MOBILE_MESSAGE,
@@ -371,6 +377,7 @@ exports.updateProfileSchema = Joi.object({
     .optional()
     .allow('')
     .pattern(PH_MOBILE_REGEX)
+    .custom(value => normalizeRiderContact(value))
     .messages({
       'string.pattern.base': PH_MOBILE_MESSAGE,
     }),
@@ -387,6 +394,7 @@ exports.updateProfileSchema = Joi.object({
 exports.updatePhoneSchema = Joi.object({
   phone: Joi.string()
     .pattern(PH_MOBILE_REGEX)
+    .custom(value => normalizeRiderContact(value))
     .required()
     .messages({
       'string.pattern.base': PH_MOBILE_MESSAGE,
@@ -907,7 +915,7 @@ exports.updateOrderSchema = Joi.object({
   tracking_number: Joi.string().max(100).optional().allow('').trim(),
   courier_name: Joi.string().max(100).optional().allow('').trim(),
   rider_name: Joi.string().max(100).optional().allow('').trim(),
-  rider_contact: Joi.string().max(20).optional().allow('').trim(),
+  rider_contact: riderContactSchema.optional().allow(''),
 }).or('status', 'payment_status', 'notes', 'tracking_number', 'courier_name', 'rider_name', 'rider_contact').messages({
   'object.missing': 'At least one field is required to update the order',
 });
@@ -934,7 +942,7 @@ exports.updateShipmentSchema = Joi.object({
     'any.required': 'Courier name is required',
   }),
   rider_name: Joi.string().trim().max(100).optional().allow(''),
-  rider_contact: Joi.string().trim().max(20).optional().allow(''),
+  rider_contact: riderContactSchema.optional().allow(''),
 });
 
 exports.updateOutForDeliverySchema = Joi.object({
@@ -943,11 +951,7 @@ exports.updateOutForDeliverySchema = Joi.object({
     'string.max': 'Rider name must not exceed 100 characters',
     'any.required': 'Rider name is required',
   }),
-  rider_contact: Joi.string().trim().min(7).max(20).required().messages({
-    'string.min': 'Rider contact must be at least 7 characters',
-    'string.max': 'Rider contact must not exceed 20 characters',
-    'any.required': 'Rider contact is required',
-  }),
+  rider_contact: riderContactSchema.required().messages({ 'any.required': 'Please enter a valid mobile number.' }),
 });
 
 exports.createProjectSchema = Joi.object({
@@ -1022,39 +1026,31 @@ exports.requestProjectCancelSchema = Joi.object({
   }),
 });
 
+const workflowTitle = Joi.string().trim().min(1).max(200).messages({
+  'string.empty': 'Task name is required', 'string.max': 'Task name must not exceed 200 characters',
+  'any.required': 'Task name is required',
+});
+const taskFields = {
+  title: workflowTitle,
+  due_date: Joi.date().iso().empty('').allow(null).optional(),
+  assigned_user_id: Joi.string().uuid().empty('').allow(null).optional(),
+  is_customer_updatable: Joi.boolean().optional(),
+  notes: Joi.string().trim().max(2000).allow('', null).optional(),
+};
 exports.createMilestoneSchema = Joi.object({
-  title: Joi.string().trim().min(3).max(150).required().messages({
-    'string.min': 'Milestone title must be at least 3 characters',
-    'string.max': 'Milestone title must not exceed 150 characters',
-    'any.required': 'Milestone title is required',
-  }),
-  due_date: Joi.date().iso().optional(),
-  notes: Joi.string().max(500).optional().allow('').trim(),
-  status: Joi.string().valid('not_started', 'in_progress', 'completed', 'cancelled').optional(),
+  title: workflowTitle.required(), description: Joi.string().trim().max(2000).allow('', null).optional(),
+  order_index: Joi.number().integer().min(0).optional(),
 });
-
 exports.updateMilestoneSchema = Joi.object({
-  title: Joi.string().trim().min(3).max(150).optional(),
-  due_date: Joi.date().iso().optional(),
-  notes: Joi.string().max(500).optional().allow('').trim(),
-  status: Joi.string().valid('not_started', 'in_progress', 'completed', 'cancelled').optional(),
-});
-
-exports.createSubtaskSchema = Joi.object({
-  title: Joi.string().trim().min(3).max(150).required().messages({
-    'string.min': 'Subtask title must be at least 3 characters',
-    'string.max': 'Subtask title must not exceed 150 characters',
-    'any.required': 'Subtask title is required',
-  }),
-  due_date: Joi.date().iso().optional(),
-  assigned_to: Joi.string().uuid().optional(),
-  notes: Joi.string().max(500).optional().allow('').trim(),
-});
-
+  title: workflowTitle.optional(), description: Joi.string().trim().max(2000).allow('', null).optional(),
+  order_index: Joi.number().integer().min(0).optional(),
+}).min(1);
+exports.createSubtaskSchema = Joi.object({ ...taskFields, title: workflowTitle.required() });
 exports.updateSubtaskSchema = Joi.object({
-  status: Joi.string().valid('not_started', 'in_progress', 'completed', 'cancelled', 'pending').optional(),
-  notes: Joi.string().max(500).optional().allow('', null),
-});
+  ...taskFields,
+  status: Joi.string().valid('pending', 'in_progress', 'completed').optional(),
+  progress: Joi.number().integer().min(0).max(100).optional(),
+}).min(1);
 
 const builderPartCommonFields = {
   name: Joi.string().trim().min(2).max(150).optional().messages({
@@ -1327,7 +1323,7 @@ exports.selectClaimMethodSchema = Joi.object({
     country: Joi.string().max(50).optional().allow(''),
   }).optional(),
   recipient_name: Joi.string().max(200).optional().trim(),
-  recipient_contact: Joi.string().max(50).optional().trim(),
+  recipient_contact: riderContactSchema.optional().allow(''),
   delivery_instructions: Joi.string().max(500).optional().allow('').trim(),
   pickup_schedule: Joi.string().isoDate().optional(),
   pickup_contact: Joi.string().max(200).optional().trim(),

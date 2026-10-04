@@ -28,6 +28,7 @@ function normalizeQuantity(value, fallback = 1) {
 
 function resolveStockValue(item = {}) {
   const rawStock = item?.available_stock ?? item?.stock
+  if (rawStock == null) return null
   const stock = Number(rawStock)
   if (!Number.isFinite(stock)) return null
   return Math.max(0, Math.trunc(stock))
@@ -292,9 +293,10 @@ export function CartProvider({ children }) {
 
   const toggleItemSelection = useCallback((productId) => {
     const normalizedProductId = String(productId)
+    if (resolveStockValue(cart.find(item => String(item.id) === normalizedProductId)) === 0) return
     setSelectedItemIds(prev => {
       const currentSelection = prev === null
-        ? cart.map(item => String(item.id))
+        ? cart.filter(item => resolveStockValue(item) !== 0).map(item => String(item.id))
         : prev.map(String)
 
       const hasId = currentSelection.includes(normalizedProductId)
@@ -304,14 +306,14 @@ export function CartProvider({ children }) {
         nextSelection.push(normalizedProductId)
       }
 
-      const cartIds = cart.map(item => String(item.id))
+      const cartIds = cart.filter(item => resolveStockValue(item) !== 0).map(item => String(item.id))
       const allSelected = cartIds.length > 0 && cartIds.every(id => nextSelection.includes(id))
       return allSelected ? null : nextSelection
     })
   }, [cart])
 
   const toggleSelectAllItems = useCallback(() => {
-    const cartIds = cart.map(item => String(item.id))
+    const cartIds = cart.filter(item => resolveStockValue(item) !== 0).map(item => String(item.id))
     const allSelected = selectedItemIds === null || cartIds.length > 0 && cartIds.every(id => (selectedItemIds || []).includes(id))
 
     setSelectedItemIds(allSelected ? [] : null)
@@ -322,7 +324,7 @@ export function CartProvider({ children }) {
   }, [])
 
   const getSelectedItemIds = useCallback(() => {
-    const cartIds = cart.map(item => String(item.id))
+    const cartIds = cart.filter(item => resolveStockValue(item) !== 0).map(item => String(item.id))
     if (selectedItemIds === null) return cartIds
     return selectedItemIds.map(String).filter(id => cartIds.includes(id))
   }, [cart, selectedItemIds])

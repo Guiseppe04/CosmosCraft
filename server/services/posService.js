@@ -1,5 +1,6 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+const { normalizePhMobile } = require('../utils/phone');
 
 const syncStockToBuilderParts = async (productId, delta) => {
   if (!productId || delta === 0) return;
@@ -53,6 +54,11 @@ exports.createSale = async (
   } = {}
 ) => {
   // Validate staff exists
+  if (customerPhone) {
+    const normalized = normalizePhMobile(customerPhone);
+    if (!normalized) throw new AppError('Please enter 10 digits starting with 9 after +63.', 400);
+    customerPhone = normalized;
+  }
   const staffRes = await pool.query(
     'SELECT user_id FROM users WHERE user_id = $1 AND is_active = true',
     [staffId]
@@ -556,6 +562,11 @@ exports.removeItem = async (saleId, itemId) => {
  * Update sale payment method and customer info
  */
 exports.updateSaleInfo = async (saleId, { paymentMethod, customerName, customerPhone } = {}) => {
+  if (customerPhone) {
+    const normalized = normalizePhMobile(customerPhone);
+    if (!normalized) throw new AppError('Please enter 10 digits starting with 9 after +63.', 400);
+    customerPhone = normalized;
+  }
   const updates = [];
   const values = [];
   let idx = 1;

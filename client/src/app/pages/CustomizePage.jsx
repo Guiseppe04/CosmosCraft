@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
+import { useStickerDraft } from '../hooks/useStickerDraft'
 import { motion, AnimatePresence } from 'motion/react'
 import { useSearchParams, useNavigate, useBlocker } from 'react-router'
 import {
@@ -8,6 +9,7 @@ import {
 } from 'lucide-react'
 import { exportMaskedPreview } from '../utils/exportMaskedPreview.js'
 import { adminApi } from '../utils/adminApi.js'
+import { API, getAuthHeaders } from '../utils/apiConfig'
 import { optimizeCloudinaryImage } from '../utils/cloudinary.js'
 import {
   BASE_STICKER_Z_INDEX,
@@ -308,8 +310,7 @@ export function CustomizePage() {
   const [zoomLevel, setZoomLevel] = useState(1)
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 })
   const [isDraggingPreview, setIsDraggingPreview] = useState(false)
-  const [stickers, setStickers] = useState([])
-  const [selectedStickerId, setSelectedStickerId] = useState(null)
+  const { stickers, setStickers, selectedStickerId, setSelectedStickerId } = useStickerDraft('electricBuild')
   const [isDraggingSticker, setIsDraggingSticker] = useState(false)
   const stickerFileInputRef = useRef(null)
   const stickersRef = useRef([])
@@ -769,7 +770,7 @@ export function CustomizePage() {
     const loadExistingBuild = async () => {
       for (const storageKey of ['cosmoscraft_saved_builds', 'cosmoscraft_saved_bass_builds']) {
         const builds = JSON.parse(window.localStorage.getItem(storageKey) || '[]')
-        const target = builds.find(b => b.id === editBuildId)
+        let target = builds.find(b => b.id === editBuildId)
         if (!target) continue
 
         const targetCustomizationId = target.dbCustomizationId || target.customization_id || null
@@ -790,12 +791,18 @@ export function CustomizePage() {
               })
               return
             }
+            if (matchingCustomization?.stickers != null) {
+              const savedStickers = typeof matchingCustomization.stickers === 'string'
+                ? JSON.parse(matchingCustomization.stickers) : matchingCustomization.stickers
+              if (Array.isArray(savedStickers)) target = { ...target, stickers: savedStickers }
+            }
           } catch (error) {
             console.error('Failed to validate customization lock status:', error)
           }
         }
 
         try {
+          if (cancelled) return
           baseLoadConfig(target.config)
           const loadedStickers = Array.isArray(target.stickers) ? target.stickers : []
           setStickers(loadedStickers)
@@ -979,13 +986,13 @@ export function CustomizePage() {
       }
 
       const endpoint = dbCustomizationId
-        ? `${API}/guitars/my-customizations/${dbCustomizationId}`
-        : `${API}/guitars/my-customizations`
+        ? `${API}/api/guitars/my-customizations/${dbCustomizationId}`
+        : `${API}/api/guitars/my-customizations`
       const method = dbCustomizationId ? 'PUT' : 'POST'
 
       const response = await fetch(endpoint, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         credentials: 'include',
         body: JSON.stringify(payload),
       })

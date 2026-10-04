@@ -12,11 +12,8 @@ import { ImageWithFallback } from '../components/figma/ImageWithFallback.jsx'
 import { TestimonialCarousel } from '../components/TestimonialCarousel.jsx'
 import { FacebookIcon, InstagramIcon, TikTokIcon, YouTubeIcon, SocialMediaLink } from '../components/social/SocialMediaIcons.jsx'
 import { API } from '../utils/apiConfig'
-
-const DEFAULT_CONTACT_INFO = {
-  email: 'cosmosguitars@gmail.com',
-  phone: '+095213121581',
-}
+import { formatContactPhone } from '../utils/contactDisplay'
+import { useSiteContact } from '../hooks/useSiteContact'
 
 const LANDING_SERVICES_STORAGE_KEY = 'cosmoscraft.landing.services'
 
@@ -129,7 +126,8 @@ const footerGroups = [
 
 export function LandingPage() {
   const { isAuthenticated, user } = useAuth()
-  const [contactInfo, setContactInfo] = useState(DEFAULT_CONTACT_INFO)
+  const contactInfo = useSiteContact()
+  const [showMoreAbout, setShowMoreAbout] = useState(false)
   const [serviceCards, setServiceCards] = useState(() => readLandingServiceCards())
   const footerGroupsForPage = footerGroups.map((group) => group.title === 'Services'
     ? { ...group, links: serviceCards.map(({ title, href }) => ({ label: title, href })) }
@@ -333,40 +331,6 @@ export function LandingPage() {
   }, [serviceCards])
 
   useEffect(() => {
-    const applyContactInfo = () => {
-      if (typeof window === 'undefined') return
-
-      try {
-        const raw = window.localStorage.getItem(SITE_CONTACT_STORAGE_KEY)
-        if (!raw) {
-          setContactInfo(DEFAULT_CONTACT_INFO)
-          return
-        }
-        const parsed = JSON.parse(raw)
-        setContactInfo({
-          email: parsed?.email || DEFAULT_CONTACT_INFO.email,
-          phone: parsed?.phone || DEFAULT_CONTACT_INFO.phone,
-        })
-      } catch {
-        setContactInfo(DEFAULT_CONTACT_INFO)
-      }
-    }
-
-    applyContactInfo()
-    fetch(`${API}/api/contact/settings`)
-      .then(async (response) => {
-        const result = await response.json()
-        if (!response.ok) throw new Error(result.message || 'Failed to load contact information')
-        return result
-      })
-      .then(({ data }) => {
-        setContactInfo({
-          email: data?.email || DEFAULT_CONTACT_INFO.email,
-          phone: data?.phone || DEFAULT_CONTACT_INFO.phone,
-        })
-      })
-      .catch(() => setContactInfo(DEFAULT_CONTACT_INFO))
-
     let isMounted = true
     const refreshLandingServices = () => {
       loadLandingServiceCards().then((cards) => {
@@ -376,19 +340,8 @@ export function LandingPage() {
     refreshLandingServices()
 
     const onStorage = (event) => {
-      if (event.key === SITE_CONTACT_STORAGE_KEY) {
-        applyContactInfo()
-      } else if (event.key === LANDING_SERVICES_STORAGE_KEY) {
+      if (event.key === LANDING_SERVICES_STORAGE_KEY) {
         refreshLandingServices()
-      }
-    }
-
-    const onContactUpdated = (event) => {
-      if (event?.detail) {
-        setContactInfo({
-          email: event.detail.email || DEFAULT_CONTACT_INFO.email,
-          phone: event.detail.phone || DEFAULT_CONTACT_INFO.phone,
-        })
       }
     }
 
@@ -397,13 +350,11 @@ export function LandingPage() {
     }
 
     window.addEventListener('storage', onStorage)
-    window.addEventListener('cosmoscraft-site-contact-updated', onContactUpdated)
     window.addEventListener('cosmoscraft-landing-services-updated', onLandingServicesUpdated)
 
     return () => {
       isMounted = false
       window.removeEventListener('storage', onStorage)
-      window.removeEventListener('cosmoscraft-site-contact-updated', onContactUpdated)
       window.removeEventListener('cosmoscraft-landing-services-updated', onLandingServicesUpdated)
     }
   }, [])
@@ -508,10 +459,21 @@ export function LandingPage() {
 
               <button
                 type="button"
+                onClick={() => setShowMoreAbout((expanded) => !expanded)}
+                aria-expanded={showMoreAbout}
+                aria-controls="more-about-content"
                 className="mt-7 inline-flex items-center justify-center rounded-full bg-[var(--gold-secondary)] px-6 py-3 text-sm font-semibold text-[var(--text-dark)] transition-colors hover:bg-[var(--gold-primary)]"
               >
-                More About
+                {showMoreAbout ? 'Show Less' : 'More About'}
               </button>
+              {showMoreAbout && (
+                <div id="more-about-content" className="mt-5 space-y-3 text-sm leading-relaxed text-[var(--text-muted)]">
+                  <p>Explore our services to learn more about the work we offer, or contact us to discuss your instrument.</p>
+                  {serviceCards.map((service) => (
+                    <p key={service.title}><Link to={service.href} className="font-semibold text-[var(--gold-primary)] hover:underline">{service.title}</Link>{service.text && <> — {service.text}</>}</p>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="relative mx-auto w-full max-w-[420px] h-auto">
@@ -563,7 +525,7 @@ export function LandingPage() {
                 </div>
                 <div className="mt-3 text-center sm:mt-4 sm:text-left">
                   <p className="text-xs sm:text-sm text-[var(--text-muted)]">Phone:</p>
-                  <p className="text-xl sm:text-2xl font-semibold text-[var(--text-light)]">{contactInfo.phone}</p>
+                  <p className="text-xl sm:text-2xl font-semibold text-[var(--text-light)]">{formatContactPhone(contactInfo.phone)}</p>
                 </div>
                 <p className="mt-1 text-xs text-[var(--text-muted)] text-center sm:text-left">Available Monday to Friday, 9 AM - 6 PM GMT</p>
               </div>

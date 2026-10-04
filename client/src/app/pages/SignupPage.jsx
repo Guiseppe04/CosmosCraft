@@ -640,11 +640,12 @@ export function SignupPage() {
                       ref={registerFieldRef('phone')}
                       onChange={e => {
                         const raw = e.target.value
+                        if (!/^\d{0,10}$/.test(raw)) return
                         const subscriber = extractPhSubscriberNumber(raw)
                         const truncated = subscriber.slice(0, 10)
                         setForm(prev => ({
                           ...prev,
-                          phoneDisplay: formatPhMobileDisplay(truncated),
+                          phoneDisplay: truncated,
                           phone: truncated ? toE164(truncated) : '',
                         }))
                         setErrors(prev => ({ ...prev, phone: '' }))
@@ -652,10 +653,12 @@ export function SignupPage() {
                       onBlur={() => {
                         const subscriber = extractPhSubscriberNumber(form.phone)
                         if (subscriber && !isValidPhMobile(subscriber)) {
-                          setErrors(prev => ({ ...prev, phone: 'Enter a valid Philippine mobile number (e.g. 0917 123 4567).' }))
+                          setErrors(prev => ({ ...prev, phone: 'Enter 10 digits starting with 9 after +63 (e.g. 9661341242).' }))
                         }
                       }}
-                      placeholder="917 123 4567"
+                      inputMode="numeric"
+                      maxLength={10}
+                      placeholder="9171234567"
                       className="w-full px-3 py-3 bg-transparent text-white placeholder-white/30 focus:outline-none text-sm"
                     />
                   </div>

@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { isValidPhoneNumber, normalizePhoneForSubmit, PHONE_ERROR_MESSAGE } from '../utils/phone'
+import { getSiteContactSnapshot, publishSiteContact, refreshSiteContact } from '../utils/siteContact'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   Users, Package, ShoppingBag, Calendar, Search,
@@ -128,10 +130,6 @@ import { OrderDetailsModal } from './admin/components/modals/OrderDetailsModal'
 import { OrderStatusModal } from './admin/components/modals/OrderStatusModal'
 import { getStockTier } from '../utils/stockUtils'
 
-const DEFAULT_SITE_CONTACT = {
-  email: 'cosmosguitars@gmail.com',
-  phone: '+095213121581',
-}
 
 export function AdminPage() {
   const { user, isAuthenticated } = useAuth()
@@ -326,7 +324,7 @@ export function AdminPage() {
   const [messagePanelOpen, setMessagePanelOpen] = useState(false)
   const [selectedConversation, setSelectedConversation] = useState(null)
   const [appointmentBranchAddress, setAppointmentBranchAddress] = useState(DEFAULT_APPOINTMENT_BRANCH.address)
-  const [siteContactInfo, setSiteContactInfo] = useState(DEFAULT_SITE_CONTACT)
+  const [siteContactInfo, setSiteContactInfo] = useState(getSiteContactSnapshot)
 
   // ── Derived / filtered views ─────────────────────────────────────────────
   const visibleProducts = products || []
@@ -611,27 +609,19 @@ export function AdminPage() {
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(APPOINTMENT_BRANCH_STORAGE_KEY)
-      if (!raw) return
-      const parsed = JSON.parse(raw)
-      if (parsed?.address) setAppointmentBranchAddress(parsed.address)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed?.address) setAppointmentBranchAddress(parsed.address)
+      }
     } catch {
       // Ignore invalid persisted admin setting
     }
 
-    try {
-    adminApi.getContactSettings()
-      .then(({ data }) => {
-        if (data?.email || data?.phone) {
-          setSiteContactInfo({
-            email: data.email || DEFAULT_SITE_CONTACT.email,
-            phone: data.phone || DEFAULT_SITE_CONTACT.phone,
-          })
-        }
-      })
-      .catch((error) => console.error('Could not load site contact settings:', error))
-      } catch {
-        // The contact settings request reports its own errors.
-      }
+    let isMounted = true
+    refreshSiteContact().then((contact) => {
+      if (isMounted) setSiteContactInfo(contact)
+    })
+    return () => { isMounted = false }
   }, [])
 
   const saveAppointmentBranchAddress = useCallback(() => {
@@ -660,10 +650,15 @@ export function AdminPage() {
 
   const saveSiteContactInfo = useCallback(async () => {
     const cleanEmail = siteContactInfo.email.trim()
-    const cleanPhone = siteContactInfo.phone.trim()
+    const rawPhone = siteContactInfo.phone.trim()
+    const cleanPhone = normalizePhoneForSubmit(rawPhone)
 
-    if (!cleanEmail || !cleanPhone) {
+    if (!cleanEmail || !rawPhone) {
       showToast('Email and phone are required', 'error')
+      return
+    }
+    if (!isValidPhoneNumber(rawPhone) || !cleanPhone) {
+      showToast(PHONE_ERROR_MESSAGE, 'error')
       return
     }
 
@@ -671,8 +666,8 @@ export function AdminPage() {
       const response = await adminApi.updateContactSettings({ email: cleanEmail, phone: cleanPhone })
       const savedContact = response.data || { email: cleanEmail, phone: cleanPhone }
       setSiteContactInfo(savedContact)
-      window.dispatchEvent(new CustomEvent('cosmoscraft-site-contact-updated', { detail: savedContact }))
-      showToast('Landing page contact info saved')
+      publishSiteContact(savedContact)
+      showToast('Site contact information saved')
     } catch (error) {
       showToast(error.message || 'Failed to save contact info', 'error')
     }
@@ -2883,6 +2878,10 @@ export function AdminPage() {
                   closeModal={closeModal}
                   visibleParts={visibleParts}
                   onRestockPart={handleProjectPartRestock}
+                  staffMembers={users}
+                  onProjectChange={(updated) => {
+                    setProjects(previous => previous.map(project => project.project_id === updated.project_id ? { ...project, progress: updated.progress, task_summary: updated.task_summary } : project))
+                  }}
                 />
               )}
 

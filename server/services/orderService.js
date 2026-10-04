@@ -1248,6 +1248,11 @@ exports.getAllOrders = async (params = {}) => {
 }
 
 exports.updateOrder = async (orderId, updateData) => {
+  if (updateData.rider_contact) {
+    const normalized = require('../utils/riderContact').normalizeRiderContact(updateData.rider_contact);
+    if (!normalized) throw createValidationError('Please enter a valid mobile number.');
+    updateData = { ...updateData, rider_contact: normalized };
+  }
   const { status, payment_status, notes, tracking_number, courier_name, shipped_at, out_for_delivery_at, delivered_at, received_at, rider_name, rider_contact } = updateData;
   
   if (status) {
@@ -1263,12 +1268,15 @@ exports.updateOrder = async (orderId, updateData) => {
     const currentStatus = currentRes.rows[0].status;
     const order = currentRes.rows[0];
     
-    // Skip validation if status is not actually changing (idempotent)
+    if (status === currentStatus) {
+      throw createValidationError(`Order is already ${currentStatus.replace(/_/g, ' ')}. Please select a valid next status.`);
+    }
+    // Keep the existing workflow and required-field rules for next statuses.
     if (status !== currentStatus) {
       const allowedTransitions = VALID_STATUS_TRANSITIONS[currentStatus] || [];
       
       if (!allowedTransitions.includes(status)) {
-        throw new Error(`Invalid status transition from '${currentStatus}' to '${status}'`);
+        throw createValidationError(`Invalid status transition from '${currentStatus}' to '${status}'`);
       }
       
       if (STATUS_FIELD_REQUIREMENTS[status]) {
@@ -1747,7 +1755,9 @@ exports.updateShipment = async (orderId, shipmentData, actorId = null) => {
 }
 
 exports.updateOutForDelivery = async (orderId, riderData, actorId = null) => {
-  const { rider_name, rider_contact } = riderData;
+  const { rider_name } = riderData;
+  const rider_contact = require('../utils/riderContact').normalizeRiderContact(riderData.rider_contact);
+  if (!rider_contact) throw createValidationError('Please enter a valid mobile number.');
   
   const orderRes = await pool.query(
     `SELECT status FROM orders WHERE order_id = $1`,

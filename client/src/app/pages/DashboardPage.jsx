@@ -24,6 +24,7 @@ import { SelectableCartItemRow } from '../components/cart/SelectableCartItemRow.
 import { DashboardSectionTabs } from '../components/DashboardSectionTabs.jsx'
 import { useSocketEvent } from '../context/SocketContext.jsx'
 import { sanitizePhoneInput, isValidPhoneNumber, PHONE_ERROR_MESSAGE } from '../utils/phone.js'
+import PhoneInput from '../components/PhoneInput'
 import AppointmentCard, { getSelectedGuitarLabel, formatAppointmentServiceType } from '../components/appointments/AppointmentCard.jsx'
 import { printAppointmentReceipt } from '../utils/appointmentReceipt'
 
@@ -481,10 +482,17 @@ const PasswordRequirement = ({ met, text }) => (
   </div>
 )
 
+// Navigation cache only; every visit still reconciles with the server.
+// Keep one user's data at a time and never persist purchase/customer data to disk.
+let dashboardCache = { userId: null, orders: null, appointments: null }
+
 export function DashboardPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { logout, user, updateUser } = useAuth()
+  if (dashboardCache.userId !== user?.id) {
+    dashboardCache = { userId: user?.id, orders: null, appointments: null }
+  }
   const {
     cart,
     addToCart,
@@ -556,7 +564,7 @@ export function DashboardPage() {
   const [trackerShowingInstallmentSchedule, setTrackerShowingInstallmentSchedule] = useState(false)
   const [activeBuildTab, setActiveBuildTab] = useState('build-projects')
 
-  const [myOrders, setMyOrders] = useState([])
+  const [myOrders, setMyOrders] = useState(() => dashboardCache.orders || [])
   const [activePurchaseTab, setActivePurchaseTab] = useState('All')
   const [purchaseSort, setPurchaseSort] = useState('created_latest')
   const [isCancelOrderModalOpen, setIsCancelOrderModalOpen] = useState(false)
@@ -622,9 +630,13 @@ export function DashboardPage() {
   const [resumeProjectTarget, setResumeProjectTarget] = useState(null)
   const [isResumingProject, setIsResumingProject] = useState(false)
 
-  const [myAppointments, setMyAppointments] = useState([])
+  const [myAppointments, setMyAppointments] = useState(() => dashboardCache.appointments || [])
   const [isAppointmentsLoading, setIsAppointmentsLoading] = useState(false)
   const [isPurchasesLoading, setIsPurchasesLoading] = useState(false)
+  const [isAppointmentsRefreshing, setIsAppointmentsRefreshing] = useState(false)
+  const [isPurchasesRefreshing, setIsPurchasesRefreshing] = useState(false)
+  const appointmentsSyncRef = useRef(0)
+  const appointmentsRequestsRef = useRef(0)
   const purchasesRequestsRef = useRef(0)
   const [appointmentSearch, setAppointmentSearch] = useState('')
   const [appointmentSort, setAppointmentSort] = useState('created_latest')
@@ -679,9 +691,6 @@ export function DashboardPage() {
     if (!sectionFromState) return
     const nextSection = VALID_SECTIONS.has(sectionFromState) ? sectionFromState : 'profile'
     setActiveSection(nextSection)
-    if (nextSection === 'purchases') {
-      fetchMyOrders()
-    }
   }, [location.state])
 
   useEffect(() => {
@@ -733,11 +742,26 @@ export function DashboardPage() {
       return
     }
 
-    setIsAppointmentsLoading(true)
+    const requestedUserId = user.id
+    const requestId = ++appointmentsSyncRef.current
+    appointmentsRequestsRef.current += 1
+    setIsAppointmentsLoading(dashboardCache.appointments === null)
+    setIsAppointmentsRefreshing(dashboardCache.appointments !== null)
     adminApi.getUserAppointments(user.id)
-      .then(res => setMyAppointments(res.data?.appointments || []))
+      .then(res => {
+        if (dashboardCache.userId !== requestedUserId || requestId !== appointmentsSyncRef.current) return
+        const appointments = res.data?.appointments || []
+        dashboardCache.appointments = appointments
+        setMyAppointments(appointments)
+      })
       .catch(console.error)
-      .finally(() => setIsAppointmentsLoading(false))
+      .finally(() => {
+        appointmentsRequestsRef.current -= 1
+        if (appointmentsRequestsRef.current === 0) {
+          setIsAppointmentsLoading(false)
+          setIsAppointmentsRefreshing(false)
+        }
+      })
   }
 
   const handlePrintAppointmentReceipt = (apt) => {
@@ -767,21 +791,30 @@ export function DashboardPage() {
   const ordersSyncRef = useRef(0)
 
   const fetchMyOrders = () => {
+    if (!user?.id) return
+    const requestedUserId = user.id
     const requestId = ++ordersSyncRef.current
     purchasesRequestsRef.current += 1
-    setIsPurchasesLoading(true)
+    setIsPurchasesLoading(dashboardCache.orders === null)
+    setIsPurchasesRefreshing(dashboardCache.orders !== null)
 
     adminApi.getMyOrders()
       .then(res => {
         // Superseded by a newer fetch, or by a realtime patch that landed while
         // this request was in flight.
         if (requestId !== ordersSyncRef.current) return
-        setMyOrders(res.data?.orders || [])
+        if (dashboardCache.userId !== requestedUserId) return
+        const orders = res.data?.orders || []
+        dashboardCache.orders = orders
+        setMyOrders(orders)
       })
       .catch(console.error)
       .finally(() => {
         purchasesRequestsRef.current -= 1
-        if (purchasesRequestsRef.current === 0) setIsPurchasesLoading(false)
+        if (purchasesRequestsRef.current === 0) {
+          setIsPurchasesLoading(false)
+          setIsPurchasesRefreshing(false)
+        }
       })
   }
 
@@ -1036,6 +1069,7 @@ export function DashboardPage() {
 
   useSocketEvent('project:updated', () => {
     fetchMyProjects()
+    if (activeSection === 'appointments') fetchMyAppointments()
     setToastMessage('Guitar build project progress updated!')
   })
 
@@ -2115,6 +2149,7 @@ const filteredOrders = myOrders.filter(order => {
             </div>
           </div>
 
+          {isPurchasesRefreshing && <p role="status" className="mb-3 text-xs text-[var(--text-muted)]">Refreshing purchases…</p>}
           {isPurchasesLoading ? (
             <div className="flex flex-col items-center justify-center py-16 text-center" role="status">
               <Loader2 className="w-8 h-8 animate-spin text-[var(--gold-primary)] mb-3" />
@@ -2691,6 +2726,7 @@ const filteredOrders = myOrders.filter(order => {
           </button>
         </div>
 
+        {isAppointmentsRefreshing && <p role="status" className="mb-3 text-xs text-[var(--text-muted)]">Refreshing appointments…</p>}
         {isAppointmentsLoading ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Loader2 className="w-8 h-8 animate-spin text-[var(--gold-primary)] mb-3" />
@@ -3900,7 +3936,7 @@ const filteredOrders = myOrders.filter(order => {
           </div>
           <div>
             <label className="block text-xs font-semibold text-white mb-2">Phone Number</label>
-            <input type="tel" inputMode="numeric" autoComplete="tel" maxLength={13} value={profileData.phone} onChange={e => handleInputChange('phone', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" placeholder="09XXXXXXXXX or +639XXXXXXXXX" />
+            <PhoneInput value={profileData.phone} onChange={e => handleInputChange('phone', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
             {isEditingProfile && String(profileData.phone || '').trim() && !isValidPhoneNumber(profileData.phone) && (
               <p className="text-[11px] text-red-400 mt-1">{PHONE_ERROR_MESSAGE}</p>
             )}
@@ -4512,11 +4548,9 @@ const filteredOrders = myOrders.filter(order => {
                                 placeholder="Recipient name"
                                 className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3.5 py-2.5 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 focus:outline-none transition-all"
                               />
-                              <input
-                                type="text"
+                              <PhoneInput
                                 value={cancelClaimRecipientContact}
                                 onChange={(e) => setCancelClaimRecipientContact(e.target.value)}
-                                placeholder="Contact number"
                                 className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3.5 py-2.5 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 focus:outline-none transition-all"
                               />
                               <textarea

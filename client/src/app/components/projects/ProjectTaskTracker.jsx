@@ -1,6 +1,7 @@
+import ProjectTaskForm from './ProjectTaskForm';
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, Flag, Loader2, MapPin, Package, Lock } from 'lucide-react';
+import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, Flag, Loader2, MapPin, Package, Lock, Edit3 } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { staffApi } from '../../utils/staffApi';
 
@@ -77,7 +78,7 @@ const formatDisplayDate = (value) => {
   return date.toLocaleDateString();
 };
 
-export default function ProjectTaskTracker({ projectId, projectName, isAdmin = false, parts = [], projectData = null, showTracker = true, onRestockPart = null }) {
+export default function ProjectTaskTracker({ projectId, projectName, isAdmin = false, parts = [], projectData = null, showTracker = true, onRestockPart = null, staffMembers = [], onProjectChange = null }) {
   const { user } = useAuth();
   const [hierarchy, setHierarchy] = useState(null);
   const [requiredParts, setRequiredParts] = useState([]);
@@ -91,6 +92,9 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const [isAddingMilestone, setIsAddingMilestone] = useState(false);
   const [addingSubtaskTo, setAddingSubtaskTo] = useState(null); // tracking milestone_id
   const [form, setForm] = useState({});
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [taskFeedback, setTaskFeedback] = useState(null);
+  const [taskMutationBusy, setTaskMutationBusy] = useState(false);
   const [selectedFulfillmentMethod, setSelectedFulfillmentMethod] = useState('pickup');
   const [pickupDate, setPickupDate] = useState('');
   const [pickupTime, setPickupTime] = useState('');
@@ -129,9 +133,13 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
       const projectApi = isAdmin ? adminApi : staffApi;
       const [hierarchyRes, requiredPartsRes] = await Promise.all([
         projectApi.getProjectHierarchy(projectId),
-        projectApi.getProjectRequiredParts(projectId),
+        projectApi.getProjectRequiredParts(projectId).catch(err => {
+          console.warn('Could not refresh project parts:', err.message);
+          return { data: requiredParts };
+        }),
       ]);
       setHierarchy(hierarchyRes.data);
+      onProjectChange?.(hierarchyRes.data);
       const loadedRequiredParts = Array.isArray(requiredPartsRes.data) ? requiredPartsRes.data : [];
       // Specs with no stock record (no guitar part match, no product) are not part of the
       // checklist, so keep only parts whose stock can actually be tracked.
@@ -320,7 +328,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const toggleSubtaskStatus = async (subtask) => {
     if (!isAdmin && !subtask.is_customer_updatable) return;
     if (isAdmin && isOnHold) return;
-    if (togglingSubtaskId === subtask.subtask_id) return;
+    if (togglingSubtaskId || taskMutationBusy) return;
 
     const parentMilestone = milestones.find((milestone) =>
       milestone.subtasks?.some((item) => item.subtask_id === subtask.subtask_id)
@@ -348,6 +356,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
       const updatedSubtask = result?.data?.subtask || {};
       const taskSummary = result?.data?.task_summary;
       const progress = result?.data?.progress;
+      onProjectChange?.({ project_id: projectId, progress, task_summary: taskSummary });
 
       if (updatedSubtask.subtask_id) {
         setHierarchy((prev) => {
@@ -395,6 +404,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
       const updatedSubtask = result?.data?.subtask || {};
       const taskSummary = result?.data?.task_summary;
       const progress = result?.data?.progress;
+      onProjectChange?.({ project_id: projectId, progress, task_summary: taskSummary });
 
       setPendingUncheckSubtask(null);
 
@@ -456,34 +466,45 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     } catch (err) { alert(err.message); }
   };
 
-  const handleAddSubtask = async (mId) => {
-    if (isOnHold) return;
-    try {
-      await adminApi.createSubtask(mId, { 
-        title: form.subtaskTitle, 
-        is_customer_updatable: form.isCustomerUpdatable || false 
-      });
-      setAddingSubtaskTo(null);
-      setForm({});
-      loadData();
-    } catch (err) {
-      alert(err.message);
-    }
+  const handleTaskSaved = async (_result) => {
+    setAddingSubtaskTo(null);
+    setEditingTaskId(null);
+    setTaskFeedback({ type: 'success', message: 'Task saved successfully.' });
+    await loadData();
   };
-
   const handleDeleteSubtask = async (sId) => {
-    if (isOnHold) return;
-    if(!window.confirm("Delete this subtask?")) return;
+    if (isOnHold || taskMutationBusy) return;
+    if (!window.confirm('Delete this task?')) return;
+    setTaskMutationBusy(true);
     try {
       await adminApi.deleteSubtask(sId);
-      loadData();
-    } catch (err) { alert(err.message); }
+      setTaskFeedback({ type: 'success', message: 'Task deleted successfully.' });
+      await loadData();
+    } catch (err) { setTaskFeedback({ type: 'error', message: err.message }); }
+    finally { setTaskMutationBusy(false); }
   };
 
-  const completeNextSubtask = (milestone) => {
-    if (!isAdmin || isOnHold) return;
-    const nextSubtask = (milestone.subtasks || []).find((subtask) => subtask.status !== 'completed');
-    if (nextSubtask) toggleSubtaskStatus(nextSubtask);
+  const completeAllSubtasks = async (milestone) => {
+    if (!isAdmin || isOnHold || isMilestoneLocked(milestone) || taskMutationBusy || togglingSubtaskId) return;
+    const remainingTasks = (milestone.subtasks || []).filter((subtask) => subtask.status !== 'completed');
+    if (!remainingTasks.length) return;
+    if (!window.confirm(`Mark all ${remainingTasks.length} remaining tasks in "${milestone.title}" as completed?`)) return;
+
+    setTaskMutationBusy(true);
+    setTaskFeedback(null);
+    let completedCount = 0;
+    try {
+      for (const subtask of remainingTasks) {
+        await adminApi.updateSubtask(subtask.subtask_id, { status: 'completed' });
+        completedCount += 1;
+      }
+      setTaskFeedback({ type: 'success', message: 'All tasks in this milestone are completed.' });
+    } catch (err) {
+      setTaskFeedback({ type: 'error', message: `${completedCount} of ${remainingTasks.length} tasks completed. Could not complete the remaining tasks: ${err.message}` });
+    } finally {
+      await loadData();
+      setTaskMutationBusy(false);
+    }
   };
 
   const handleSaveEstimatedCompletion = async () => {
@@ -688,6 +709,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
       {/* MAIN TRACKER SECTION */}
       <div className="space-y-6">
         
+        {taskFeedback && <p role={taskFeedback.type === 'error' ? 'alert' : 'status'} className={`mb-4 text-sm ${taskFeedback.type === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>{taskFeedback.message}</p>}
         {/* Progress Header */}
         <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 md:p-7 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--gold-primary)]/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
@@ -1423,7 +1445,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               Project-Specific Tasks
             </div>
             <p className="text-xs text-[var(--text-muted)]">
-              These milestones and tasks are specific to this project and were seeded from the global default template on creation.
+              These tasks belong to this project. Default task edits apply to future projects only; edit this project?s tasks here.
             </p>
           </div>
 
@@ -1438,7 +1460,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               const isExpanded = expandedMilestones.has(milestone.milestone_id);
               const isLockedMilestone = isMilestoneLocked(milestone);
               const mProgress = milestone.subtasks?.length 
-                ? Math.round((milestone.subtasks.filter(s => s.status === 'completed').length / milestone.subtasks.length) * 100)
+                ? Math.round(milestone.subtasks.reduce((sum, task) => sum + (task.status === 'completed' ? 100 : Number(task.progress || 0)), 0) / milestone.subtasks.length)
                 : 0;
               const milestoneStatusLabel = mProgress === 100 ? 'Done' : mProgress > 0 ? 'In Progress' : 'Pending';
               
@@ -1474,10 +1496,11 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                      <div className="flex items-center gap-3">
                        {isAdmin && milestone.status !== 'completed' && milestone.subtasks?.some((subtask) => subtask.status !== 'completed') && (
                          <button 
-                           onClick={(e) => { e.stopPropagation(); completeNextSubtask(milestone); }}
-                           disabled={isOnHold || isLockedMilestone}
+                           onClick={(e) => { e.stopPropagation(); completeAllSubtasks(milestone); }}
+                           disabled={isOnHold || isLockedMilestone || taskMutationBusy || Boolean(togglingSubtaskId)}
                            className="p-2 hover:bg-green-500/10 rounded-lg text-green-400 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                           title="Complete next task"
+                           title="Complete all tasks in this milestone"
+                           aria-label={`Complete all tasks in ${milestone.title}`}
                          >
                            <Flag className="w-4 h-4" />
                          </button>
@@ -1514,11 +1537,13 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                               const isLocked = isLockedMilestone;
                               const canUserUpdate = (isAdmin || subtask.is_customer_updatable) && !isLocked;
 
+                              if (editingTaskId === subtask.subtask_id) return <ProjectTaskForm key={subtask.subtask_id} task={subtask}
+                                staff={[...staffMembers, ...(hierarchy.team || [])]} onSaved={handleTaskSaved} onCancel={() => setEditingTaskId(null)} />;
                               return (
                                 <div key={subtask.subtask_id} className={`flex items-start gap-4 p-4 rounded-xl border transition-all ${isLocked ? 'opacity-60' : ''} ${isCompleted ? 'bg-green-500/5 border-green-500/30' : 'bg-[var(--surface-dark)] border-[var(--border)] hover:border-[var(--gold-primary)]/50'}`}>
                                   <button
                                     onClick={() => toggleSubtaskStatus(subtask)}
-                                    disabled={!canUserUpdate || togglingSubtaskId === subtask.subtask_id}
+                                    disabled={!canUserUpdate || taskMutationBusy || Boolean(togglingSubtaskId)}
                                     title={isLocked ? 'Complete all tasks in the previous milestone first' : undefined}
                                     className={`mt-0.5 rounded-full outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all ${canUserUpdate && !isCompleted && togglingSubtaskId !== subtask.subtask_id ? 'hover:scale-110' : 'cursor-not-allowed opacity-60'}`}
                                   >
@@ -1532,6 +1557,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                                   </button>
                                   <div className="flex-1">
                                     <p className={`font-medium ${isCompleted ? 'text-[var(--text-muted)] line-through' : 'text-white'}`}>{subtask.title}</p>
+                                    <p className="mt-1 text-xs text-[var(--text-muted)]">Progress: {isCompleted ? 100 : subtask.progress || 0}%{subtask.due_date ? ` ? Due ${subtask.due_date.slice(0, 10)}` : ''}</p>
                                     <div className="flex flex-wrap items-center gap-3 mt-1.5">
                                       {subtask.assignee_first && (
                                         <span className="flex items-center gap-1 text-xs text-[var(--text-muted)]">
@@ -1545,8 +1571,9 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                                       )}
                                     </div>
                                   </div>
+                                  {isAdmin && !isOnHold && <button type="button" aria-label={`Edit task ${subtask.title}`} onClick={() => { setEditingTaskId(subtask.subtask_id); setAddingSubtaskTo(null); }} className="p-1.5 hover:bg-white/10 rounded"><Edit3 className="w-4 h-4" /></button>}
                                   {isAdmin && (
-                                     <button onClick={() => handleDeleteSubtask(subtask.subtask_id)} className="p-1.5 hover:bg-red-500/10 text-[var(--text-muted)] hover:text-red-400 rounded">
+                                     <button disabled={taskMutationBusy || isOnHold} onClick={() => handleDeleteSubtask(subtask.subtask_id)} className="p-1.5 hover:bg-red-500/10 text-[var(--text-muted)] hover:text-red-400 rounded">
                                        <Trash2 className="w-4 h-4" />
                                      </button>
                                   )}
@@ -1558,20 +1585,11 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                           {/* Admin: Add Subtask Row */}
                           {isAdmin && (
                             addingSubtaskTo === milestone.milestone_id ? (
-                              <div className="p-4 bg-[var(--surface-dark)] border border-[var(--gold-primary)]/50 rounded-xl mt-4">
-                                <input autoFocus type="text" placeholder="Task description..." value={form.subtaskTitle || ''} onChange={e => setForm({...form, subtaskTitle: e.target.value})} className="w-full bg-transparent text-white border-b border-[var(--border)] focus:border-[var(--gold-primary)] px-2 py-1 outline-none mb-3" />
-                                <label className="flex items-center gap-2 mb-4 cursor-pointer w-fit">
-                                  <input type="checkbox" checked={form.isCustomerUpdatable || false} onChange={e => setForm({...form, isCustomerUpdatable: e.target.checked})} className="w-4 h-4" />
-                                  <span className="text-sm text-[var(--text-muted)]">Click to mark this complete</span>
-                                </label>
-                                <div className="flex gap-2">
-                                  <button onClick={() => handleAddSubtask(milestone.milestone_id)} className="px-4 py-1.5 bg-[var(--gold-primary)] text-black font-bold text-sm rounded-lg">Save Task</button>
-                                  <button onClick={() => setAddingSubtaskTo(null)} className="px-4 py-1.5 bg-white/10 text-white font-medium text-sm rounded-lg">Cancel</button>
-                                </div>
-                              </div>
+                              <ProjectTaskForm milestoneId={milestone.milestone_id} staff={[...staffMembers, ...(hierarchy.team || [])]}
+                                onSaved={handleTaskSaved} onCancel={() => setAddingSubtaskTo(null)} />
                             ) : (
-                              <button onClick={() => setAddingSubtaskTo(milestone.milestone_id)} className="flex items-center gap-2 w-full p-3 rounded-xl border border-dashed border-[var(--border)] hover:border-[var(--gold-primary)]/50 text-[var(--text-muted)] hover:text-[var(--gold-primary)] transition-all justify-center mt-2">
-                                <Plus className="w-4 h-4" /> Add Subtask
+                              <button disabled={isOnHold} onClick={() => { setAddingSubtaskTo(milestone.milestone_id); setEditingTaskId(null); }} className="flex items-center gap-2 w-full p-3 rounded-xl border border-dashed border-[var(--border)] hover:border-[var(--gold-primary)]/50 text-[var(--text-muted)] hover:text-[var(--gold-primary)] transition-all justify-center mt-2">
+                                <Plus className="w-4 h-4" /> Add Task
                               </button>
                             )
                           )}

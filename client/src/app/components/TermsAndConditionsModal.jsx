@@ -1,6 +1,8 @@
 import { motion, AnimatePresence } from 'motion/react'
+import { useSiteContact } from '../hooks/useSiteContact'
 
 export default function TermsAndConditionsModal({ isOpen, onClose }) {
+  const contactInfo = useSiteContact()
   if (!isOpen) return null
 
   return (
@@ -217,10 +219,10 @@ export default function TermsAndConditionsModal({ isOpen, onClose }) {
                 or by email.
               </p>
               <a
-                href="mailto:cosmosguitars@gmail.com"
+                href={`mailto:${contactInfo.email}`}
                 className="mt-2 inline-block text-[var(--gold-primary)] underline decoration-[var(--gold-secondary)] underline-offset-4 hover:text-[var(--gold-secondary)]"
               >
-                cosmosguitars@gmail.com
+                {contactInfo.email}
               </a>
             </section>
 

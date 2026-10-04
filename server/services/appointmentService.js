@@ -15,12 +15,35 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 // Statuses that end an appointment's life. A customer can no longer cancel once
 // one of these is reached. Mirrors isTerminalStatus in AppointmentCard.jsx.
 const CUSTOMER_UNCANCELLABLE_STATUSES = [
+  'ready_for_pickup',
   'completed',
   'cancelled',
   'rejected',
   'no_show',
   'rescheduled_by_customer',
 ];
+
+// Also cover pickup appointments whose build/fulfillment progressed separately.
+const RELATED_PICKUP_READY_SQL = `EXISTS (
+  SELECT 1 FROM projects p
+  WHERE (p.order_id = a.order_id OR p.pickup_appointment_id = a.appointment_id)
+    AND p.fulfillment_status IN ('ready_for_pickup', 'picked_up', 'received')
+) OR EXISTS (
+  SELECT 1 FROM fulfillment_requests fr
+  WHERE (fr.order_id = a.order_id OR fr.pickup_appointment_id = a.appointment_id)
+    AND fr.status IN ('ready_for_pickup', 'completed')
+) OR EXISTS (
+  SELECT 1 FROM orders o WHERE o.order_id = a.order_id AND o.status::text = 'ready_for_pickup'
+)`;
+
+const assertCustomerCanCancel = (appointment) => {
+  if (CUSTOMER_UNCANCELLABLE_STATUSES.includes(String(appointment.status || '').toLowerCase()) || appointment.related_pickup_ready) {
+    throw new AppError('This appointment can no longer be cancelled because it is ready for pickup or already closed.', 400);
+  }
+  if (['approved', 'paid', 'verified', 'confirmed', 'refunded'].includes(String(appointment.payment_status || '').toLowerCase())) {
+    throw new AppError('An approved payment cannot be cancelled directly. Please use the appointment refund process or contact the shop for assistance.', 400);
+  }
+};
 
 // ─── STATUS TRANSITION RULES ─────────────────────────────────────────────────
 
@@ -537,6 +560,7 @@ exports.getAppointmentById = async (appointmentId) => {
   const result = await pool.query(
     `SELECT 
        a.*,
+       (${RELATED_PICKUP_READY_SQL}) AS related_pickup_ready,
        u.email AS user_email,
        u.first_name || ' ' || u.last_name AS user_name,
        u.phone AS user_phone,
@@ -606,6 +630,7 @@ exports.listAppointments = async ({ user_id, appointment_type, status, date_from
   const result = await pool.query(
     `SELECT 
        a.*,
+       (${RELATED_PICKUP_READY_SQL}) AS related_pickup_ready,
        u.email AS user_email,
        u.first_name || ' ' || u.last_name AS user_name,
        u.phone AS user_phone,
@@ -1017,12 +1042,22 @@ exports.cancelAppointment = async (appointmentId, reason, { forCustomer = false,
     if (CUSTOMER_UNCANCELLABLE_STATUSES.includes(status)) {
       throw new AppError(`Cannot cancel a ${status.replace(/_/g, ' ')} appointment`, 400);
     }
+    assertCustomerCanCancel(appointment);
   }
 
   const cancelReason = reason || `Cancelled on ${new Date().toISOString()}`;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    if (forCustomer) {
+      const locked = await client.query(
+        `SELECT a.*, (${RELATED_PICKUP_READY_SQL}) AS related_pickup_ready
+         FROM appointments a WHERE a.appointment_id = $1 FOR UPDATE OF a`,
+        [appointmentId]
+      );
+      if (!locked.rows[0]) throw new AppError('Appointment not found', 404);
+      assertCustomerCanCancel(locked.rows[0]);
+    }
     await client.query(
       `UPDATE appointments SET status = 'cancelled', reason = $1, updated_at = now() WHERE appointment_id = $2`,
       [cancelReason, appointmentId]

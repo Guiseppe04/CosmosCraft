@@ -1,4 +1,5 @@
   import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
+  import PhoneInput from '../components/PhoneInput'
   import { useNavigate, useLocation } from 'react-router'
   import { motion, AnimatePresence } from 'motion/react'
   import { API, getAuthHeaders } from '../utils/apiConfig'
@@ -1790,8 +1791,7 @@
                         {showPhoneForm && (
                           <div className="mb-2 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/5 p-4 space-y-3">
                             <p className="text-sm font-semibold text-[var(--text-light)]">Enter Phone Number</p>
-                            <input
-                              type="tel"
+                            <PhoneInput
                               inputMode="numeric"
                               autoComplete="tel"
                               value={newPhone}
@@ -1800,7 +1800,7 @@
                                 setPhoneError('')
                               }}
                               className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
-                              placeholder="09XXXXXXXXX or +639XXXXXXXXX"
+                              placeholder="9XXXXXXXXX"
                               maxLength={13}
                             />
                             {phoneError && (
@@ -1826,8 +1826,7 @@
                           </div>
                         )}
                         {user?.phone || showPhoneForm ? (
-                          <input
-                            type="tel"
+                          <PhoneInput
                             inputMode="numeric"
                             autoComplete="tel"
                             value={homeServiceContact}
@@ -1841,7 +1840,7 @@
                               }
                             }}
                             className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
-                            placeholder="09XXXXXXXXX or +639XXXXXXXXX"
+                            placeholder="9XXXXXXXXX"
                             maxLength={13}
                           />
                         ) : null}

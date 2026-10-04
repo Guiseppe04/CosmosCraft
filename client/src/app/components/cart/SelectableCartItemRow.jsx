@@ -12,10 +12,11 @@ export function SelectableCartItemRow({
   showRemove = true,
   className = '',
 }) {
-  const parsedStock = Number(item.stock)
+  const parsedStock = item.stock == null ? NaN : Number(item.stock)
   const hasStockValue = Number.isFinite(parsedStock) && parsedStock >= 0
   const itemStock = hasStockValue ? parsedStock : null
   const atStockLimit = hasStockValue && item.quantity >= itemStock
+  const outOfStock = hasStockValue && itemStock === 0
 
   return (
     <motion.div
@@ -25,10 +26,12 @@ export function SelectableCartItemRow({
     >
       <div className="flex items-center gap-4">
         {selectionEnabled && (
-          <label className="flex-shrink-0 cursor-pointer">
+          <label className={`flex-shrink-0 ${outOfStock ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`}>
             <input
               type="checkbox"
-              checked={Boolean(isSelected)}
+              checked={!outOfStock && Boolean(isSelected)}
+              disabled={outOfStock}
+              aria-label={`Select ${item.name}`}
               onChange={() => onToggleSelect(item.id)}
               className="sr-only"
             />
@@ -62,6 +65,7 @@ export function SelectableCartItemRow({
         <div className="flex-1 min-w-0 flex items-center justify-between gap-4">
           <div className="min-w-0 flex-1">
             <h3 className="font-semibold text-[var(--text-light)] truncate">{item.name}</h3>
+            {outOfStock && <p className="mt-1 text-xs font-semibold text-red-400">Out of Stock</p>}
             <div className="flex items-center gap-2 mt-1">
               <p className="text-xs text-[var(--text-muted)] tracking-wide uppercase">{item.category || 'Product'}</p>
             </div>
