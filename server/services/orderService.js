@@ -993,7 +993,7 @@ exports.getOrderById = async (orderId, userId) => {
     `SELECT o.*, 
       a.line1 as shipping_line1, a.line2 as shipping_line2, a.city as shipping_city, 
       a.province as shipping_province, a.postal_code as shipping_postal_code, a.country as shipping_country,
-      u.first_name, u.last_name, u.email, u.phone as contact_phone
+      u.first_name, u.middle_name, u.last_name, u.email, u.phone as contact_phone
       FROM orders o
       LEFT JOIN addresses a ON o.shipping_address_id = a.address_id
       LEFT JOIN users u ON o.user_id = u.user_id
@@ -1156,6 +1156,7 @@ exports.getAllOrders = async (params = {}) => {
       a.postal_code AS shipping_postal_code,
       a.country AS shipping_country,
       u.first_name,
+      u.middle_name,
       u.last_name,
       u.email,
       u.phone AS contact_phone
