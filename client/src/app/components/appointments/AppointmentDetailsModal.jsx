@@ -1,4 +1,5 @@
 import AppointmentPaymentReview from './AppointmentPaymentReview'
+import { AppointmentRefundAdmin } from './AppointmentRefund'
 import React, { useState, useEffect, useMemo } from 'react'
 import { format } from 'date-fns'
 import {
@@ -514,6 +515,7 @@ export default function AppointmentDetailsModal({
               )}
 
               <AppointmentPaymentReview appointment={appointment} onUpdate={onPaymentStatusUpdate} />
+              {onPaymentStatusUpdate && <AppointmentRefundAdmin key={appointment.appointment_id || appointment.id} appointment={appointment} />}
             </div>
           </section>
 
