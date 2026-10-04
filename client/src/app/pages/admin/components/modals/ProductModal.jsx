@@ -1,9 +1,15 @@
 import { motion, AnimatePresence } from 'motion/react'
-import { Check, AlertCircle, Loader2, X, Sparkles } from 'lucide-react'
-import { ModalHeader } from '../shared/ModalHeader'
+import { Check, AlertCircle, Loader2, X, Sparkles, ArrowLeft, ArrowRight, Package } from 'lucide-react'
 import { ImageUploadWidget } from '../shared/ImageUploadWidget'
 import { useRef, useState, useEffect, useCallback } from 'react'
 import { formatLowStockHelper } from '../../../../utils/stockUtils'
+import { validate } from '../../constants/adminOptions'
+
+const STEP_FIELDS = {
+  basic: ['name', 'sku', 'description', 'brand', 'category_id'],
+  inventory: ['price', 'cost_price', 'max_stock', 'low_stock_threshold'],
+  media: ['image_url', 'image_file'],
+}
 
 function AutoResizeTextarea({ value, onChange, placeholder, className, maxLength = 500 }) {
   const textareaRef = useRef(null)
@@ -49,13 +55,15 @@ function ClearableInput({ value, onChange, placeholder, className, type = 'text'
         value={value ?? ''}
         onChange={onChange}
         placeholder={placeholder}
-        className={`${className} ${prefix ? 'pl-9' : ''} ${isFocused ? 'ring-2 ring-[var(--gold-primary)]/30 border-[var(--gold-primary)]' : ''} transition-all duration-200`}
+        className={`${className} pr-10 ${prefix ? 'pl-9' : ''} ${isFocused ? 'ring-2 ring-[var(--gold-primary)]/30 border-[var(--gold-primary)]' : ''} transition-all duration-200`}
+        aria-invalid={Boolean(error)}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
       />
       {hasValue && (
         <button
           type="button"
+          aria-label="Clear field"
           onClick={() => {
             onChange({ target: { value: '' } })
             onClear?.()
@@ -117,6 +125,7 @@ export function ProductModal({
   form,
   setForm,
   formErrors,
+  setFormErrors,
   wizardTab,
   setWizardTab,
   closeModal,
@@ -127,26 +136,24 @@ export function ProductModal({
   categories,
   formatCurrency,
   validateAndSave,
-  showToast,
   productRules,
   labelCls,
-  inputCls,
 }) {
   const [direction, setDirection] = useState(1)
   const [showUnsavedWarning, setShowUnsavedWarning] = useState(false)
-  const [savedAnother, setSavedAnother] = useState(false)
   const formRef = useRef(null)
-  const firstErrorRef = useRef(null)
 
-  const productStep1Complete = Boolean(String(form.name || '').trim() && String(form.category_id || '').trim())
+  const productStep1Complete = Boolean(String(form.name || '').trim() && String(form.sku || '').trim() && String(form.category_id || '').trim())
   const sellingN = parseFloat(form.price)
-  const productStep2Complete = Boolean(!Number.isNaN(sellingN) && sellingN > 0)
+  const productStep2Complete = Number.isFinite(sellingN) && sellingN > 0
   const productStep3Complete = Boolean(form.image_url || form.preview_url || form.image_file)
   const productTabs = [
-    { id: 'basic', step: 1, label: 'Basic Info', done: productStep1Complete, summary: productStep1Complete ? '✓ Name & Category set' : null },
-    { id: 'inventory', step: 2, label: 'Pricing & Stock', done: productStep2Complete, summary: productStep2Complete ? '✓ Price & Stock set' : null },
-    { id: 'media', step: 3, label: 'Media & Assets', done: productStep3Complete, summary: productStep3Complete ? '✓ Image uploaded' : null },
+    { id: 'basic', step: 1, label: 'Basic Info', done: productStep1Complete, description: 'Introduce your product', title: 'Start with the essentials', hint: 'Give your product a name, SKU, and category so customers can find it.' },
+    { id: 'inventory', step: 2, label: 'Pricing & Stock', done: productStep2Complete, description: 'Set price and inventory', title: 'Set your price and stock', hint: 'Choose a selling price and set inventory levels. Cost price is optional.' },
+    { id: 'media', step: 3, label: 'Media & Assets', done: productStep3Complete, description: 'Add an image and review', title: 'Make it ready for the catalog', hint: 'Add an optional product image, review the details, and save your product.' },
   ]
+  const currentStep = productTabs.find((tab) => tab.id === wizardTab) || productTabs[0]
+  const isBusy = isSaving || isUploading
 
   const sellingPrice = parseFloat(form.price)
   const costPrice = parseFloat(form.cost_price) || 0
@@ -160,40 +167,46 @@ export function ProductModal({
   const fieldBase = 'w-full px-4 py-2.5 bg-[var(--bg-primary)] rounded-xl text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 text-sm transition-colors'
   const fieldOk = `${fieldBase} border border-[var(--border)] focus:ring-[var(--gold-primary)]`
   const fieldErr = `${fieldBase} border border-[var(--border)] border-l-4 border-l-red-500 focus:ring-red-500/40`
-  const selErr = `${inputCls} border-l-4 border-l-red-500`
-  const selOk = inputCls
+  const selErr = fieldErr
+  const selOk = fieldOk
+  const scrollToFirstError = () => formRef.current?.querySelector('[data-error="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 
-  // Scroll to first error when formErrors change
+  // Bring validation errors on an earlier step back into view.
   useEffect(() => {
-    if (Object.keys(formErrors).length > 0 && formRef.current) {
-      const firstError = formRef.current.querySelector('[data-error="true"]')
-      if (firstError) {
-        firstError.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        firstErrorRef.current = firstError
-      }
+    const errorStep = Object.keys(STEP_FIELDS).find((step) => STEP_FIELDS[step].some((field) => formErrors[field]))
+    if (errorStep && errorStep !== wizardTab) {
+      setDirection(-1)
+      setWizardTab(errorStep)
+    } else {
+      scrollToFirstError()
     }
-  }, [formErrors])
+  }, [formErrors, wizardTab, setWizardTab])
 
-  const handleTabChange = useCallback((tabId) => {
+  const validateSteps = (steps) => {
+    const fields = steps.flatMap((step) => STEP_FIELDS[step])
+    const rules = Object.fromEntries(Object.entries(productRules).filter(([field]) => fields.includes(field)))
+    const errors = validate(rules, form)
+    setFormErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  const handleTabChange = (tabId) => {
+    if (isBusy) return
     const currentIdx = productTabs.findIndex((t) => t.id === wizardTab)
     const newIdx = productTabs.findIndex((t) => t.id === tabId)
+    if (newIdx > currentIdx && !validateSteps(productTabs.slice(0, newIdx).map((tab) => tab.id))) return
+    if (newIdx <= currentIdx) setFormErrors({})
     setDirection(newIdx > currentIdx ? 1 : -1)
     setWizardTab(tabId)
-  }, [wizardTab, productTabs, setWizardTab])
+    formRef.current?.scrollTo({ top: 0 })
+  }
 
-  const handleBack = useCallback(() => {
-    setDirection(-1)
-    if (wizardTab === 'inventory') setWizardTab('basic')
-    else if (wizardTab === 'media') setWizardTab('inventory')
-  }, [wizardTab, setWizardTab])
+  const handleBack = () => handleTabChange(wizardTab === 'media' ? 'inventory' : 'basic')
 
-  const handleNext = useCallback(() => {
-    setDirection(1)
-    if (wizardTab === 'basic') setWizardTab('inventory')
-    else if (wizardTab === 'inventory') setWizardTab('media')
-  }, [wizardTab, setWizardTab])
+  const handleNext = () => handleTabChange(wizardTab === 'basic' ? 'inventory' : 'media')
 
   const handleCancel = useCallback(() => {
+    if (isBusy) return
     const trackedFields = [
       'name', 'sku', 'description', 'brand', 'category_id', 'price',
       'cost_price', 'low_stock_threshold', 'max_stock',
@@ -227,7 +240,7 @@ export function ProductModal({
     } else {
       closeModal()
     }
-  }, [form, modal.data, closeModal])
+  }, [form, modal.data, closeModal, isBusy])
 
   const generateSku = useCallback(() => {
     const rawBrand = String(form.brand || '').trim()
@@ -303,16 +316,7 @@ export function ProductModal({
     setForm((f) => ({ ...f, sku: sku + suffix }))
   }, [form.brand, form.name, form.category_id, categories, modal.data?.product_id, setForm])
 
-  const handleSaveAndAnother = useCallback(async () => {
-    await validateAndSave(productRules, async () => {
-      await saveProduct()
-      setSavedAnother(true)
-      setTimeout(() => setSavedAnother(false), 2000)
-      setForm({})
-      setWizardTab('basic')
-      showToast('Product saved! Add another.')
-    })()
-  }, [validateAndSave, productRules, saveProduct, setForm, setWizardTab, showToast])
+  const handleSaveAndAnother = () => validateAndSave(productRules, () => saveProduct({ addAnother: true }))()
 
   const pageVariants = {
     enter: (dir) => ({ opacity: 0, x: dir > 0 ? 30 : -30 }),
@@ -360,65 +364,55 @@ export function ProductModal({
         )}
       </AnimatePresence>
 
-      <div className="sticky top-0 z-20 -mx-8 px-8 pt-0 pb-4 mb-1 bg-[var(--surface-dark)] border-b border-[var(--border)]">
-        <ModalHeader title={modal.data ? 'Edit Product' : 'New Product'} onClose={handleCancel} />
-        <div className="mt-5 flex w-full items-center relative">
-          {productTabs.map((tab, idx) => (
-            <div key={tab.id} className="flex min-w-0 flex-1 items-center">
-              <button
-                type="button"
-                onClick={() => handleTabChange(tab.id)}
-                className="flex w-full min-w-0 flex-col items-center gap-2 relative pt-1"
-                aria-current={wizardTab === tab.id ? 'step' : undefined}
-                aria-label={`${tab.label}${tab.done ? ' (completed)' : ''}`}
-              >
-                <div
-                  className={`relative z-[1] flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold transition-all duration-300 ${
-                    wizardTab === tab.id
-                      ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] scale-110 shadow-lg shadow-[var(--gold-primary)]/20'
-                      : tab.done
-                        ? 'border-emerald-500/70 bg-emerald-500/15 text-emerald-400'
-                        : 'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)]'
-                  }`}
-                >
-                  {tab.done ? (
-                    <motion.div
-                      initial={{ scale: 0, rotate: -90 }}
-                      animate={{ scale: 1, rotate: 0 }}
-                      transition={{ type: 'spring', stiffness: 300, damping: 15 }}
-                    >
-                      <Check className="h-4 w-4" strokeWidth={2.5} />
-                    </motion.div>
-                  ) : (
-                    tab.step
-                  )}
-                </div>
-                <span className={`text-center text-[10px] font-semibold uppercase leading-tight tracking-wide sm:text-xs transition-colors ${wizardTab === tab.id ? 'text-[var(--gold-primary)]' : 'text-[var(--text-muted)]'}`}>
-                  {tab.label}
-                </span>
-                {tab.summary && (
-                  <motion.span
-                    initial={{ opacity: 0, y: -5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="hidden sm:block text-[9px] text-emerald-400/70 leading-tight -mt-1"
-                  >
-                    {tab.summary}
-                  </motion.span>
-                )}
-              </button>
-              {idx < productTabs.length - 1 && (
-                <div className="mx-1 h-0.5 min-w-[1rem] flex-1 shrink rounded-full bg-[var(--border)] sm:mx-2" aria-hidden />
-              )}
+      <div className="shrink-0 border-b border-[var(--border)] px-5 pb-5 pt-5 sm:px-8 sm:pt-7">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="hidden h-11 w-11 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--gold-primary)] sm:flex">
+              <Package className="h-5 w-5" />
             </div>
-          ))}
+            <div>
+              <h2 className="text-xl font-semibold text-white">{modal.data ? 'Edit Product' : 'New Product'}</h2>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Build your catalog in three simple steps.</p>
+            </div>
+          </div>
+          <button type="button" onClick={handleCancel} disabled={isBusy} aria-label="Close product modal" className="rounded-xl p-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-primary)] disabled:opacity-50">
+            <X className="h-5 w-5" />
+          </button>
         </div>
+        <nav aria-label="Product setup steps" className="mt-6 grid grid-cols-3 gap-2 sm:gap-3">
+          {productTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => handleTabChange(tab.id)}
+              disabled={isBusy}
+              aria-current={wizardTab === tab.id ? 'step' : undefined}
+              aria-label={tab.label}
+              className={`flex min-w-0 flex-col items-center gap-2 rounded-xl border px-2 py-3 text-center transition-colors disabled:opacity-50 sm:flex-row sm:gap-3 sm:px-3 sm:text-left ${wizardTab === tab.id ? 'border-[var(--gold-primary)] bg-[var(--bg-primary)]' : 'border-[var(--border)] hover:bg-[var(--bg-primary)]'}`}
+            >
+              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${wizardTab === tab.id ? 'bg-[var(--gold-primary)] text-black' : tab.done ? 'bg-emerald-500/15 text-emerald-400' : 'bg-[var(--bg-primary)] text-[var(--text-muted)]'}`}>
+                {tab.done && wizardTab !== tab.id ? <Check className="h-3.5 w-3.5" /> : tab.step}
+              </span>
+              <span className="min-w-0">
+                <span className={`block text-[11px] font-semibold sm:text-xs ${wizardTab === tab.id ? 'text-[var(--gold-primary)]' : 'text-[var(--text-muted)]'}`}>{tab.label}</span>
+                <span className="mt-1 hidden text-[10px] text-[var(--text-muted)] sm:block">{tab.description}</span>
+              </span>
+            </button>
+          ))}
+        </nav>
       </div>
 
-      <div className="min-h-[350px]" ref={formRef}>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 sm:px-8" ref={formRef}>
+        <div className="mb-6">
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-[var(--gold-primary)]">Step {currentStep.step} of 3</p>
+          <h3 className="text-lg font-semibold text-white">{currentStep.title}</h3>
+          <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">{currentStep.hint}</p>
+        </div>
         <AnimatePresence mode="wait" custom={direction}>
           {wizardTab === 'basic' && (
             <motion.div
               key="basic"
+              onAnimationComplete={scrollToFirstError}
               custom={direction}
               variants={pageVariants}
               initial="enter"
@@ -477,7 +471,7 @@ export function ProductModal({
                   value={form.description || ''}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                   placeholder="Write a compelling description..."
-                  className={fieldOk}
+                  className={`${fieldOk} pb-7`}
                   maxLength={500}
                 />
                 <p className="mt-1.5 text-xs text-[var(--text-muted)]">Shown on the product page and in search previews.</p>
@@ -518,7 +512,7 @@ export function ProductModal({
                 </div>
               </div>
 
-              <div className="flex flex-col justify-start pb-0.5 md:pb-1">
+              <div className="rounded-xl border border-[var(--border)] px-4 py-3">
                 <ToggleSwitch
                   id="is_active"
                   checked={form.is_active ?? true}
@@ -533,6 +527,7 @@ export function ProductModal({
           {wizardTab === 'inventory' && (
             <motion.div
               key="inventory"
+              onAnimationComplete={scrollToFirstError}
               custom={direction}
               variants={pageVariants}
               initial="enter"
@@ -568,9 +563,11 @@ export function ProductModal({
                       value={form.cost_price || ''}
                       onChange={(e) => setForm((f) => ({ ...f, cost_price: e.target.value }))}
                       placeholder="e.g. 30000"
-                      className={fieldOk}
+                      className={formErrors.cost_price ? fieldErr : fieldOk}
                       prefix="₱"
+                      error={formErrors.cost_price}
                     />
+                    {formErrors.cost_price && <p className="mt-1 text-xs text-red-400" data-error="true" role="alert">{formErrors.cost_price}</p>}
                     <p className="mt-1.5 text-xs text-[var(--text-muted)]">Your landed cost per unit (optional, for margin math).</p>
                   </div>
                 </div>
@@ -662,8 +659,10 @@ export function ProductModal({
                        value={form.max_stock ?? ''}
                        onChange={(e) => setForm((f) => ({ ...f, max_stock: e.target.value }))}
                        placeholder="e.g. 100"
-                       className={fieldOk}
+                       className={formErrors.max_stock ? fieldErr : fieldOk}
+                       error={formErrors.max_stock}
                      />
+                     {formErrors.max_stock && <p className="mt-1 text-xs text-red-400" data-error="true" role="alert">{formErrors.max_stock}</p>}
                      <p className="mt-1.5 text-xs text-[var(--text-muted)]">Full-stock capacity. On creation, current stock is initialized to this value.</p>
                    </div>
                    <div>
@@ -673,8 +672,10 @@ export function ProductModal({
                        value={form.low_stock_threshold ?? ''}
                        onChange={(e) => setForm((f) => ({ ...f, low_stock_threshold: e.target.value }))}
                        placeholder="10"
-                       className={fieldOk}
+                       className={formErrors.low_stock_threshold ? fieldErr : fieldOk}
+                       error={formErrors.low_stock_threshold}
                      />
+                     {formErrors.low_stock_threshold && <p className="mt-1 text-xs text-red-400" data-error="true" role="alert">{formErrors.low_stock_threshold}</p>}
                      {form.max_stock !== '' && form.max_stock != null && Number(form.max_stock) > 0 && form.low_stock_threshold !== '' && form.low_stock_threshold != null && (
                        <p className="mt-1.5 text-xs text-[var(--text-muted)]">
                          {formatLowStockHelper(form.low_stock_threshold, form.max_stock)}
@@ -692,6 +693,7 @@ export function ProductModal({
           {wizardTab === 'media' && (
             <motion.div
               key="media"
+              onAnimationComplete={scrollToFirstError}
               custom={direction}
               variants={pageVariants}
               initial="enter"
@@ -700,27 +702,17 @@ export function ProductModal({
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               className="space-y-4"
             >
-              <motion.div
-                whileHover={{
-                  boxShadow: '0 0 0 2px rgba(212, 175, 55, 0.22)',
-                  borderColor: 'rgba(212, 175, 55, 0.45)',
-                }}
-                transition={{ type: 'spring', stiffness: 420, damping: 28 }}
-                className="rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--bg-primary)]/40 p-4 sm:p-5 relative overflow-hidden"
-              >
-                {/* Animated dashed border background */}
-                <div className="absolute inset-0 opacity-[0.03] pointer-events-none">
-                  <div className="absolute inset-0 bg-gradient-to-br from-[var(--gold-primary)] via-transparent to-emerald-400" />
-                </div>
+              <div className="rounded-2xl bg-[var(--bg-primary)] p-4 sm:p-5">
                 <ImageUploadWidget
-                  label="Primary Main Image"
+                  label="Product image (optional)"
                   imageUrl={form.image_url}
                   previewUrl={form.preview_url}
                   isUploading={isUploading}
                   onUpload={handleImageUpload}
-                  hint="High-quality transparent PNGs or JPGs work best for optimal catalog display."
+                  hint="Use a clear PNG or JPG to help your product stand out in the catalog."
                 />
-              </motion.div>
+                {(formErrors.image_url || formErrors.image_file) && <p className="mt-2 text-xs text-red-400" data-error="true" role="alert">{formErrors.image_url || formErrors.image_file}</p>}
+              </div>
               {(form.image_file || form.preview_url || form.image_url) && (
                 <motion.div
                   initial={{ opacity: 0, y: 5 }}
@@ -735,12 +727,13 @@ export function ProductModal({
                       {form.image_file
                         ? `${(form.image_file.size / 1024).toFixed(form.image_file.size >= 102400 ? 0 : 1)} KB`
                         : form.image_url
-                          ? 'Replace below or remove to clear.'
+                          ? 'Select another image above or remove it.'
                           : ''}
                     </p>
                   </div>
                   <button
                     type="button"
+                    disabled={isBusy}
                     onClick={() =>
                       setForm((f) => ({
                         ...f,
@@ -755,67 +748,58 @@ export function ProductModal({
                   </button>
                 </motion.div>
               )}
+              <div className="rounded-2xl border border-[var(--border)] p-4 sm:p-5">
+                <div className="mb-4 flex items-center justify-between gap-2">
+                  <h4 className="text-sm font-semibold text-white">Review your product</h4>
+                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${form.is_active === false ? 'bg-[var(--bg-primary)] text-[var(--text-muted)]' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                    {form.is_active === false ? 'Hidden from shop' : 'Active in shop'}
+                  </span>
+                </div>
+                <p className="break-words font-semibold text-white">{form.name || 'Untitled product'}</p>
+                <p className="mt-1 break-words text-xs text-[var(--text-muted)]">{form.sku || 'No SKU'} · {categories?.find((category) => String(category.category_id) === String(form.category_id))?.name || 'No category'}</p>
+                <dl className="mt-4 grid grid-cols-2 gap-4 border-t border-[var(--border)] pt-4">
+                  <div>
+                    <dt className="text-xs text-[var(--text-muted)]">Selling price</dt>
+                    <dd className="mt-1 text-sm font-semibold text-[var(--gold-primary)]">{hasValidSelling ? formatCurrency(sellingPrice, false) : '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-[var(--text-muted)]">Maximum stock</dt>
+                    <dd className="mt-1 text-sm font-semibold text-white">{form.max_stock !== '' && form.max_stock != null ? form.max_stock : 'Not set'}</dd>
+                  </div>
+                </dl>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      <div className="mt-8 flex items-center justify-between border-t border-[var(--border)] bg-[var(--surface-dark)] -mx-8 -mb-8 rounded-b-2xl px-8 pb-8 pt-5">
-        <div className="flex gap-2 text-sm">
-          <button
-            type="button"
-            onClick={handleBack}
-            className={`rounded-lg border border-[var(--border)] px-4 py-2 font-medium text-white hover:bg-[var(--bg-primary)] transition-colors ${wizardTab === 'basic' ? 'invisible' : 'visible'}`}
-          >
-            Back
-          </button>
-          {wizardTab !== 'media' && (
-            <button
-              type="button"
-              onClick={handleNext}
-              className="rounded-lg border border-[var(--gold-primary)]/50 px-4 py-2 font-medium text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-colors"
-            >
-              Next
+      <div className="shrink-0 border-t border-[var(--border)] bg-[var(--surface-dark)] px-5 py-4 sm:px-8 sm:py-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            {wizardTab !== 'basic' && (
+              <button type="button" onClick={handleBack} disabled={isBusy} className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border)] px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--bg-primary)] disabled:opacity-50">
+                <ArrowLeft className="h-4 w-4" /> Back
+              </button>
+            )}
+            <button type="button" onClick={handleCancel} disabled={isBusy} className="rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-primary)] disabled:opacity-50">
+              Cancel
             </button>
+          </div>
+          {wizardTab !== 'media' ? (
+            <button type="button" onClick={handleNext} disabled={isBusy} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--gold-primary)] px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-[var(--gold-secondary)] disabled:opacity-50">
+              Next <ArrowRight className="h-4 w-4" />
+            </button>
+          ) : (
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:gap-3">
+              <button type="button" onClick={handleSaveAndAnother} disabled={isBusy} className="rounded-xl border border-[var(--gold-primary)] px-4 py-2.5 text-sm font-medium text-[var(--gold-primary)] transition-colors hover:bg-[var(--bg-primary)] disabled:cursor-not-allowed disabled:opacity-50">
+                Save &amp; Add Another
+              </button>
+              <button type="button" onClick={validateAndSave(productRules, saveProduct)} disabled={isBusy} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--gold-primary)] px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-[var(--gold-secondary)] disabled:cursor-not-allowed disabled:opacity-50">
+                {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                {isSaving ? 'Saving...' : 'Save Product'}
+              </button>
+            </div>
           )}
-        </div>
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="px-4 py-2 font-medium text-[var(--text-muted)] transition-colors hover:text-white"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSaveAndAnother}
-            disabled={isSaving}
-            className="relative rounded-lg border border-[var(--gold-primary)] px-4 py-2 font-medium text-[var(--gold-primary)] transition-colors hover:bg-[var(--gold-primary)]/10 disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
-          >
-            <span className={savedAnother ? 'opacity-0' : ''}>Save & Add Another</span>
-            {savedAnother && (
-              <motion.span
-                initial={{ scale: 0.5, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="absolute inset-0 flex items-center justify-center gap-1.5 text-emerald-400"
-              >
-                <Check className="h-4 w-4" /> Saved!
-              </motion.span>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={validateAndSave(productRules, saveProduct)}
-            disabled={isSaving}
-            className="flex items-center gap-2 rounded-lg bg-[var(--gold-primary)] px-4 py-2 font-semibold text-black shadow-lg shadow-[var(--gold-primary)]/20 transition-all hover:bg-[var(--gold-secondary)] disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSaving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <>Save Product</>
-            )}
-          </button>
         </div>
       </div>
     </>

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
+import { useNavigate } from 'react-router'
+import '../../styles/AdminWorkspace.css'
 import {
   Activity,
   AlertCircle,
@@ -7,8 +9,6 @@ import {
   Briefcase,
   Calendar,
   CheckCircle,
-  ChevronLeft,
-  ChevronRight,
   Package,
   Plus,
   RefreshCw,
@@ -18,6 +18,7 @@ import {
   Truck,
 } from 'lucide-react'
 import { Topbar } from '../components/admin/Topbar'
+import { WorkspaceSidebar } from '../components/admin/WorkspaceSidebar'
 import { useAuth } from '../context/AuthContext'
 import { useDebounce } from '../hooks/useDebounce'
 import { useSocketEvent } from '../context/SocketContext'
@@ -37,6 +38,7 @@ import {
   validate,
 } from './admin/constants/adminOptions'
 import { DashboardTab } from './admin/tabs/DashboardTab'
+import { SalesReportTab } from './admin/tabs/SalesReportTab'
 import { ProjectsTab } from './admin/tabs/ProjectsTab'
 import { OrdersTab } from './admin/tabs/OrdersTab'
 import { InventoryTab } from './admin/tabs/InventoryTab'
@@ -77,7 +79,8 @@ const inputCls =
 const labelCls = 'block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2'
 
 export function StaffDashboard() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
   const isSuperAdmin = hasRole(user?.role, 'admin')
 
   const [activeTab, setActiveTab] = useState('dashboard')
@@ -184,7 +187,7 @@ export function StaffDashboard() {
   const [productsInventoryFilter, setProductsInventoryFilter] = useState({ search: '', status: 'all', category: '', sort: 'name_asc', page: 1 })
   const [partsInventoryFilter, setPartsInventoryFilter] = useState({ search: '', status: 'all', category: 'all', sort: 'name_asc', page: 1 })
   const [inventoryPage, setInventoryPage] = useState(1)
-  const INVENTORY_PAGE_SIZE = 10
+  const [inventoryPageSize, setInventoryPageSize] = useState(10)
 
   // ── Projects Filters ─────────────────────────────────────────────────────
   const [projectStatusFilter, setProjectStatusFilter] = useState('all')
@@ -196,8 +199,9 @@ export function StaffDashboard() {
   const [projectDueDateTo, setProjectDueDateTo] = useState('')
   const [projectCompletionFilter, setProjectCompletionFilter] = useState('all')
   const [projectSort, setProjectSort] = useState('updated')
+  const [projectSortDirection, setProjectSortDirection] = useState('desc')
   const [projectPage, setProjectPage] = useState(1)
-  const PROJECTS_PAGE_SIZE = 10
+  const [projectPageSize, setProjectPageSize] = useState(10)
 
   // ── Tabs Navigation List ─────────────────────────────────────────────────
   const tabs = [
@@ -207,6 +211,7 @@ export function StaffDashboard() {
     { id: 'inventory', label: 'Inventory', icon: Package },
     { id: 'appointments', label: 'Appointments', icon: Calendar },
     { id: 'pos', label: 'POS', icon: Wallet },
+    { id: 'sales-report', label: 'Sales Report', icon: BarChart3 },
   ]
 
   // ── API Fetchers ─────────────────────────────────────────────────────────
@@ -374,41 +379,62 @@ export function StaffDashboard() {
     return requestPromise
   }, [debouncedSearch, showToast])
 
+  const buildProjectQuery = useCallback((page, pageSize) => {
+    const params = {
+      search: debouncedSearch || undefined,
+      status: projectStatusFilter === 'all' ? undefined : projectStatusFilter,
+      assigned_to: projectAssignedFilter === 'all' ? undefined : projectAssignedFilter,
+      guitar_type: projectGuitarTypeFilter === 'all' ? undefined : projectGuitarTypeFilter,
+      date_from: projectDateFrom || undefined,
+      date_to: projectDateTo || undefined,
+      due_date_from: projectDueDateFrom || undefined,
+      due_date_to: projectDueDateTo || undefined,
+      completion_percentage: projectCompletionFilter === 'all' ? undefined : projectCompletionFilter,
+      include_tasks: true,
+      page,
+      page_size: pageSize,
+      sort_by: ({ updated: 'updated_at', created: 'created_at', name: 'project_name', customer: 'customer_name', progress: 'progress', due: 'estimated_completion_date', status: 'status' })[projectSort] || 'updated_at',
+      sort_dir: projectSortDirection,
+    }
+    Object.keys(params).forEach((key) => params[key] === undefined && delete params[key])
+    return params
+  }, [debouncedSearch, projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, projectSortDirection])
+
   const fetchProjects = useCallback(async () => {
     try {
-      const res = await staffApi.getAllProjects({
-        search: debouncedSearch,
-        include_tasks: true,
-      })
+      const res = await staffApi.getAllProjects(buildProjectQuery(projectPage, projectPageSize))
       const rows = normalizeArray(res, 'projects')
       setProjects(rows)
-      setProjectsPagination((prev) => ({
-        ...prev,
-        total: rows.length,
-        totalPages: Math.max(1, Math.ceil(rows.length / PROJECTS_PAGE_SIZE)),
-      }))
+      setProjectsPagination({
+        page: projectPage,
+        pageSize: projectPageSize,
+        total: res.pagination?.total ?? rows.length,
+        totalPages: res.pagination?.totalPages ?? res.pagination?.total_pages ?? 1,
+      })
     } catch (e) {
       showToast(e.message, 'error')
     }
-  }, [debouncedSearch, showToast])
+  }, [buildProjectQuery, projectPage, projectPageSize, showToast])
 
   const fetchArchivedProjects = useCallback(async () => {
     try {
-      const res = await adminApi.getArchivedProjects({
-        search: debouncedSearch,
-        include_tasks: true,
-      })
+      const res = await adminApi.getArchivedProjects(buildProjectQuery(archivedProjectsPagination.page, archivedProjectsPagination.pageSize))
       const rows = normalizeArray(res, 'projects')
       setArchivedProjects(rows)
       setArchivedProjectsPagination((prev) => ({
         ...prev,
-        total: rows.length,
-        totalPages: Math.max(1, Math.ceil(rows.length / PROJECTS_PAGE_SIZE)),
+        total: res.pagination?.total ?? rows.length,
+        totalPages: res.pagination?.totalPages ?? res.pagination?.total_pages ?? 1,
       }))
     } catch {
       // ignore
     }
-  }, [debouncedSearch])
+  }, [buildProjectQuery, archivedProjectsPagination.page, archivedProjectsPagination.pageSize])
+
+  useEffect(() => {
+    setProjectPage(1)
+    setArchivedProjectsPagination((previous) => ({ ...previous, page: 1 }))
+  }, [buildProjectQuery])
 
   const fetchAppointments = useCallback(async (options = {}) => {
     const { silent = false } = options
@@ -503,6 +529,7 @@ export function StaffDashboard() {
       fetchArchivedProjects()
     }
     if (activeTab === 'orders') fetchOrders()
+    if (activeTab === 'sales-report') fetchSalesReport()
     if (activeTab === 'inventory' || activeTab === 'pos') fetchInventory()
     if (activeTab === 'appointments') {
       fetchAppointments()
@@ -589,6 +616,7 @@ export function StaffDashboard() {
       },
       projects: fetchProjects,
       orders: fetchOrders,
+      'sales-report': fetchSalesReport,
       inventory: () => fetchInventory({ silent: true }),
       pos: () => fetchInventory({ silent: true }),
       appointments: () => Promise.all([fetchAppointments({ silent: true }), fetchUnavailableDates()]),
@@ -683,9 +711,9 @@ export function StaffDashboard() {
   }, [productsInventoryFilter, visibleInventory])
 
   const paginatedProductsInventory = useMemo(() => {
-    const start = (inventoryPage - 1) * INVENTORY_PAGE_SIZE
-    return filteredProductsInventory.slice(start, start + INVENTORY_PAGE_SIZE)
-  }, [filteredProductsInventory, inventoryPage])
+    const start = (inventoryPage - 1) * inventoryPageSize
+    return filteredProductsInventory.slice(start, start + inventoryPageSize)
+  }, [filteredProductsInventory, inventoryPage, inventoryPageSize])
 
   const filteredPartsInventory = useMemo(() => {
     const pts = visibleParts.map((p) => ({
@@ -743,12 +771,12 @@ export function StaffDashboard() {
   }, [partsInventoryFilter, visibleParts])
 
   const paginatedPartsInventory = useMemo(() => {
-    const start = (inventoryPage - 1) * INVENTORY_PAGE_SIZE
-    return filteredPartsInventory.slice(start, start + INVENTORY_PAGE_SIZE)
-  }, [filteredPartsInventory, inventoryPage])
+    const start = (inventoryPage - 1) * inventoryPageSize
+    return filteredPartsInventory.slice(start, start + inventoryPageSize)
+  }, [filteredPartsInventory, inventoryPage, inventoryPageSize])
 
   const inventoryCurrentRows = inventoryIsProducts ? filteredProductsInventory : filteredPartsInventory
-  const inventoryTotalPages = Math.max(1, Math.ceil(inventoryCurrentRows.length / INVENTORY_PAGE_SIZE))
+  const inventoryTotalPages = Math.max(1, Math.ceil(inventoryCurrentRows.length / inventoryPageSize))
   const inventoryCurrentPageRows = inventoryIsProducts ? paginatedProductsInventory : paginatedPartsInventory
 
   const inventoryGroupedPartPageRows = useMemo(() => {
@@ -808,72 +836,9 @@ export function StaffDashboard() {
   }, [orders])
 
   // ── Filtered Projects ────────────────────────────────────────────────────
-  const filterProjectList = useCallback((list) => {
-    let result = [...list]
-    if (debouncedSearch) {
-      const q = debouncedSearch.toLowerCase()
-      result = result.filter(
-        (p) =>
-          String(p.name || p.title || '').toLowerCase().includes(q) ||
-          String(p.order_number || '').toLowerCase().includes(q) ||
-          String(p.customer_name || p.client_name || '').toLowerCase().includes(q)
-      )
-    }
-    if (projectStatusFilter !== 'all') {
-      result = result.filter((p) => String(p.status || 'not_started').toLowerCase() === projectStatusFilter)
-    }
-    if (projectAssignedFilter !== 'all') {
-      result = result.filter((p) => p.claimed_by === projectAssignedFilter || p.user_id === projectAssignedFilter)
-    }
-    if (projectGuitarTypeFilter !== 'all') {
-      result = result.filter((p) => String(p.guitar_type || '').toLowerCase() === projectGuitarTypeFilter.toLowerCase())
-    }
-    if (projectDateFrom) {
-      result = result.filter((p) => p.created_at && new Date(p.created_at) >= new Date(projectDateFrom))
-    }
-    if (projectDateTo) {
-      result = result.filter((p) => p.created_at && new Date(p.created_at) <= new Date(projectDateTo + 'T23:59:59'))
-    }
-    if (projectDueDateFrom) {
-      result = result.filter((p) => p.estimated_completion_date && new Date(p.estimated_completion_date) >= new Date(projectDueDateFrom))
-    }
-    if (projectDueDateTo) {
-      result = result.filter((p) => p.estimated_completion_date && new Date(p.estimated_completion_date) <= new Date(projectDueDateTo + 'T23:59:59'))
-    }
-    if (projectCompletionFilter !== 'all') {
-      const targetPct = Number(projectCompletionFilter)
-      result = result.filter((p) => Number(p.progress || 0) >= targetPct)
-    }
+  const visibleProjects = projects
+  const visibleArchivedProjects = archivedProjects
 
-    result.sort((a, b) => {
-      if (projectSort === 'updated') return new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0)
-      if (projectSort === 'created') return new Date(b.created_at || 0) - new Date(a.created_at || 0)
-      if (projectSort === 'name') return (a.name || a.title || '').localeCompare(b.name || b.title || '')
-      if (projectSort === 'customer') return (a.customer_name || '').localeCompare(b.customer_name || '')
-      if (projectSort === 'progress') return Number(b.progress || 0) - Number(a.progress || 0)
-      if (projectSort === 'due') return new Date(a.estimated_completion_date || 0) - new Date(b.estimated_completion_date || 0)
-      if (projectSort === 'status') return (a.status || '').localeCompare(b.status || '')
-      return 0
-    })
-
-    return result
-  }, [
-    debouncedSearch,
-    projectAssignedFilter,
-    projectCompletionFilter,
-    projectDateFrom,
-    projectDateTo,
-    projectDueDateFrom,
-    projectDueDateTo,
-    projectGuitarTypeFilter,
-    projectSort,
-    projectStatusFilter,
-  ])
-
-  const visibleProjects = useMemo(() => filterProjectList(projects), [filterProjectList, projects])
-  const visibleArchivedProjects = useMemo(() => filterProjectList(archivedProjects), [filterProjectList, archivedProjects])
-
-  // ── Modal Actions & Handlers ─────────────────────────────────────────────
   const openModal = (type, data = null) => {
     let initialForm = data ? { ...data } : {}
     if (type === 'inventory' && data?.product_id) {
@@ -954,6 +919,20 @@ export function StaffDashboard() {
       showToast(e.message || 'Action failed', 'error')
       setConfirm((prev) => ({ ...prev, isBusy: false }))
     }
+  }
+
+  const handleLogout = () => {
+    openConfirm({
+      title: 'Log out',
+      description: 'Are you sure you want to log out of the staff workspace?',
+      confirmLabel: 'Log out',
+      cancelLabel: 'Cancel',
+      variant: 'warning',
+      onConfirm: async () => {
+        await logout()
+        navigate('/')
+      },
+    })
   }
 
   const validateAndSave = (rules, saveFn) => async () => {
@@ -1140,7 +1119,7 @@ export function StaffDashboard() {
   const pageTitle = tabs.find((t) => t.id === activeTab)?.label || 'Staff Dashboard'
 
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)]">
+    <div className={`admin-workspace ${sidebarCollapsed ? 'admin-workspace--collapsed' : ''}`}>
       {/* ── Toast Stack ────────────────────────────────────────────────────── */}
       <AnimatePresence>
         {toasts.length > 0 && (
@@ -1192,66 +1171,22 @@ export function StaffDashboard() {
       />
 
       {/* ── Sidebar ────────────────────────────────────────────────────────── */}
-      <aside
-        className={`fixed left-0 top-0 h-screen bg-[var(--surface-dark)] border-r border-[var(--border)] transition-all duration-300 z-40 flex flex-col ${
-          sidebarCollapsed ? 'w-20' : 'w-64'
-        }`}
-      >
-        <div className="h-24 px-4 py-4 border-b border-[var(--border)] flex items-center justify-between relative">
-          <button
-            type="button"
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="absolute -right-3 top-6 w-6 h-6 bg-[var(--surface-dark)] border border-[var(--border)] rounded-full flex items-center justify-center hover:bg-[var(--gold-primary)] hover:border-[var(--gold-primary)] transition-all text-white hover:text-black"
-          >
-            {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-          </button>
+      <WorkspaceSidebar
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed((previous) => !previous)}
+        user={user}
+        roleLabel="Staff"
+        navigationLabel="Staff navigation"
+        onLogout={handleLogout}
+      />
 
-          {!sidebarCollapsed && (
-            <div className="flex items-center gap-3">
-              <img src="/logo-cosmos.png" alt="CosmosCraft" className="w-10 h-10 object-contain flex-shrink-0" />
-              <div className="min-w-0">
-                <p className="text-[var(--text-light)] font-black text-lg tracking-tight">CosmosCraft</p>
-                <span className="text-[10px] uppercase tracking-widest text-[var(--gold-primary)] font-semibold">Staff Hub</span>
-              </div>
-            </div>
-          )}
-          {sidebarCollapsed && (
-            <img src="/logo-cosmos.png" alt="CosmosCraft" className="w-10 h-10 object-contain flex-shrink-0 mx-auto" />
-          )}
-        </div>
+      <div className="admin-content transition-all duration-300">
+        <Topbar title={pageTitle} userRole={user?.role || 'staff'} workspace />
 
-        <nav className="p-4 space-y-1.5 overflow-y-auto flex-1">
-          {tabs.map((tab) => {
-            const Icon = tab.icon
-            const isActive = activeTab === tab.id
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-medium transition-all duration-200 ${
-                  isActive
-                    ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] border-2 border-[var(--gold-primary)] shadow-[0_0_15px_rgba(212,175,55,0.3)]'
-                    : 'text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] border-2 border-transparent'
-                }`}
-              >
-                <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-[var(--text-dark)]' : 'text-[var(--text-muted)]'}`} />
-                {!sidebarCollapsed && (
-                  <span className={`truncate font-semibold ${isActive ? 'text-[var(--text-dark)]' : 'text-[var(--text-muted)]'}`}>
-                    {tab.label}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </nav>
-      </aside>
-
-      {/* ── Main Content Area ──────────────────────────────────────────────── */}
-      <div className={`transition-all duration-300 bg-[var(--bg-primary)] ${sidebarCollapsed ? 'ml-20' : 'ml-64'}`}>
-        <Topbar title={pageTitle} userRole={user?.role || 'staff'} />
-
-        <main className={`p-6 ${activeTab === 'pos' ? 'pt-19' : 'pt-5'}`}>
+        <main className={`p-6 ${activeTab === 'pos' ? 'pt-19' : ['orders', 'sales-report', 'projects'].includes(activeTab) ? 'pt-3.5' : 'pt-5'}`}>
           {/* ── DASHBOARD TAB ─────────────────────────────────────────────── */}
           {activeTab === 'dashboard' && (
             <DashboardTab
@@ -1266,7 +1201,6 @@ export function StaffDashboard() {
               isLoading={isLoading}
               setActiveTab={setActiveTab}
               lastRefreshed={lastRefreshed}
-              showProductsQuickNav={false}
             />
           )}
 
@@ -1286,6 +1220,8 @@ export function StaffDashboard() {
               setProjectAssignedFilter={setProjectAssignedFilter}
               projectSort={projectSort}
               setProjectSort={setProjectSort}
+              projectSortDirection={projectSortDirection}
+              setProjectSortDirection={setProjectSortDirection}
               projectGuitarTypeFilter={projectGuitarTypeFilter}
               setProjectGuitarTypeFilter={setProjectGuitarTypeFilter}
               projectDateFrom={projectDateFrom}
@@ -1310,7 +1246,8 @@ export function StaffDashboard() {
               archivedProjectsPagination={archivedProjectsPagination}
               setArchivedProjectsPagination={setArchivedProjectsPagination}
               projectsPagination={projectsPagination}
-              PROJECTS_PAGE_SIZE={PROJECTS_PAGE_SIZE}
+              projectPageSize={projectPageSize}
+              setProjectPageSize={setProjectPageSize}
               isAdmin={isSuperAdmin}
               debouncedSearch={debouncedSearch}
             />
@@ -1344,7 +1281,8 @@ export function StaffDashboard() {
               inventoryTotalPages={inventoryTotalPages}
               inventoryPage={inventoryPage}
               setInventoryPage={setInventoryPage}
-              inventoryPageSize={INVENTORY_PAGE_SIZE}
+              inventoryPageSize={inventoryPageSize}
+              setInventoryPageSize={setInventoryPageSize}
               setProductsInventoryFilter={setProductsInventoryFilter}
               setPartsInventoryFilter={setPartsInventoryFilter}
               resolveInventoryImage={resolveInventoryImage}
@@ -1387,6 +1325,9 @@ export function StaffDashboard() {
                 description="Create and record walk-in sales."
               />
             </motion.div>
+          )}
+          {activeTab === 'sales-report' && (
+            <SalesReportTab salesReport={salesReport} categories={categories} />
           )}
         </main>
       </div>

@@ -35,7 +35,6 @@ export function GuitarPartsTab({
         searchQuery={partSearchQuery}
         setSearchQuery={setPartSearchQuery}
         onAddPart={() => openModal('part')}
-        onClearFilters={clearPartFilters}
         onMigrateCatalog={migrateCatalog}
         partQuery={partQuery}
       />

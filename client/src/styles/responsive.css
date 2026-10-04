@@ -324,7 +324,7 @@
   }
 
   /* ---- Admin sidebar ---- */
-  [class*="admin-sidebar"] {
+  [class*="admin-sidebar"]:not(.admin-workspace *) {
     width: 16rem !important;
   }
 
@@ -2125,8 +2125,8 @@
   }
 
   /* ---- Sidebar (Dashboard) ---- */
-  aside,
-  [class*="sidebar"] {
+  aside:not(.admin-workspace *),
+  [class*="sidebar"]:not(.admin-workspace *) {
     display: none !important;
   }
   .xl\\:hidden {
@@ -2497,7 +2497,7 @@
   }
 
   /* ---- Admin sidebar ---- */
-  [class*="admin-sidebar"] {
+  [class*="admin-sidebar"]:not(.admin-workspace *) {
     width: 100% !important;
     position: relative !important;
   }

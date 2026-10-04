@@ -10,9 +10,6 @@ export function GuitarPartsStickyHeader({ viewMode, setViewMode, density, setDen
           <p className="text-[var(--text-muted)] text-sm">Manage parts aligned with builder slots used in customization pages.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Link to="/customize?mode=walk-in" className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold text-[var(--gold-primary)] hover:border-[var(--gold-primary)]">
-            Walk-In Customization
-          </Link>
           <button
             onClick={onAddPart}
             className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all"
@@ -72,13 +69,6 @@ export function GuitarPartsStickyHeader({ viewMode, setViewMode, density, setDen
             Compact
           </button>
         </div>
-
-        <button
-          onClick={onClearFilters}
-          className="px-3 py-2 rounded-lg border border-[var(--border)] text-sm text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] transition-colors"
-        >
-          Clear filters
-        </button>
       </div>
     </div>
   )

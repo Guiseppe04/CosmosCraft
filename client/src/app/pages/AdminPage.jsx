@@ -8,11 +8,11 @@ import {
   Filter, Edit, Trash2, Eye, BarChart3,
   PieChart, Activity, ArrowUpRight,
   CheckCircle, Check, Info, XCircle, Plus, RefreshCw, X,
-  MessageSquare, Briefcase, ChevronLeft, ChevronRight,
+  MessageSquare, Briefcase,
   ChevronDown, ChevronUp, ArrowUp, ArrowDown,
   Printer, Mail, FileText, CreditCard, RotateCcw, Copy, Truck, MapPin, Smartphone, Upload,
   UserCheck, Clock10, PackageCheck, CircleCheck,
-  Layers, User, Tag, AlertCircle, DollarSign, Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal, Shield, Settings, Guitar, Wrench, PaintBucket, Hammer, Zap, Sparkles, Wallet, CalendarX, LogOut,
+  Layers, User, Tag, AlertCircle, DollarSign, Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal, Shield, Settings, Guitar, Wrench, PaintBucket, Hammer, Zap, Sparkles, Wallet, CalendarX,
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
@@ -28,6 +28,7 @@ import { useAuth } from '../context/AuthContext'
 import { hasRole } from '../utils/roles.js'
 import { useNavigate } from 'react-router'
 import { Topbar } from '../components/admin/Topbar'
+import { WorkspaceSidebar } from '../components/admin/WorkspaceSidebar'
 import { formatCurrency } from '../utils/formatCurrency'
 import { adminApi } from '../utils/adminApi'
 import { ProjectsTab } from './admin/tabs/ProjectsTab'
@@ -1034,6 +1035,7 @@ export function AdminPage() {
 
      setForm(initialForm)
      setFormErrors({})
+     if (type === 'product') setWizardTab('basic')
      setModal({ open: true, type, data })
    }
 
@@ -1173,7 +1175,7 @@ export function AdminPage() {
   }
 
   // ── CRUD: Products ───────────────────────────────────────────────────────
-  const saveProduct = async () => {
+  const saveProduct = async ({ addAnother = false } = {}) => {
     setIsSaving(true)
     try {
       let finalImageUrl = form.image_url
@@ -1201,7 +1203,16 @@ export function AdminPage() {
         await adminApi.createProduct(payload)
         showToast('Product created!')
       }
-      fetchProducts(); closeModal()
+      fetchProducts()
+      if (addAnother) {
+        setForm({})
+        setFormErrors({})
+        setWizardTab('basic')
+        setModal({ open: true, type: 'product', data: null })
+      } else {
+        closeModal()
+      }
+      return true
     } catch (e) {
       // Map field-level errors from the API to the form so they show inline.
       if (Array.isArray(e.fieldErrors) && e.fieldErrors.length > 0) {
@@ -1213,6 +1224,7 @@ export function AdminPage() {
       } else {
         showToast(e.message, 'error')
       }
+      return false
     }
     finally { setIsSaving(false) }
   }
@@ -2468,113 +2480,17 @@ export function AdminPage() {
         </>
       )}
 
-      {/* Sidebar */}
-      <aside className="admin-sidebar fixed left-0 top-0 h-screen border-r transition-all duration-300 z-40 flex flex-col">
-        {/* Header with CosmosCraft branding */}
-        <div className="admin-brand flex items-center justify-between relative">
-          <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            aria-label={sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'}
-            aria-expanded={!sidebarCollapsed}
-            className="admin-sidebar-toggle absolute -right-3 top-6 w-6 h-6 border rounded-full flex items-center justify-center hover:bg-[var(--gold-primary)] hover:border-[var(--gold-primary)] transition-all"
-          >
-            {sidebarCollapsed ? <ChevronRight className="w-4 h-4 text-[var(--text-light)]" /> : <ChevronLeft className="w-4 h-4 text-[var(--text-light)]" />}
-          </button>
-
-          {!sidebarCollapsed && (
-          <div className="flex items-center gap-3">
-            <span className="admin-brand-mark">
-              <img
-                src="/logo-cosmos.png"
-                alt="CosmosCraft"
-                className="admin-brand-logo"
-              />
-            </span>
-
-            <div className="admin-brand-copy min-w-0">
-              <p className="admin-brand-name">CosmosCraft</p>
-            </div>
-          </div>
-        )}
-
-        {sidebarCollapsed && (
-          <span className="admin-brand-mark mx-auto">
-            <img
-              src="/logo-cosmos.png"
-              alt="CosmosCraft"
-              className="admin-brand-logo"
-            />
-          </span>
-        )}
-        </div>
-
-        <nav className="admin-nav space-y-0.5 overflow-y-auto flex-1" aria-label="Admin navigation">
-          {!sidebarCollapsed && <p className="admin-workspace-label">WORKSPACE</p>}
-          {tabs.map((tab) => {
-            const Icon = tab.icon
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                aria-label={tab.label}
-                aria-current={activeTab === tab.id ? 'page' : undefined}
-                title={sidebarCollapsed ? tab.label : undefined}
-                className={`admin-nav-item ${activeTab === tab.id ? 'admin-nav-item--active' : ''}`}
-              >
-                <Icon />
-                {!sidebarCollapsed && (
-                  <span className="admin-nav-label truncate">{tab.label}</span>
-                )}
-              </button>
-            )
-          })}
-        </nav>
-
-<div className="admin-sidebar-footer">
-  <div className={`admin-sidebar-profile ${sidebarCollapsed ? 'justify-center' : ''}`}>
-    <span className="admin-profile-avatar" aria-hidden="true">CC</span>
-
-    {!sidebarCollapsed && (
-      <>
-        <div className="admin-profile-copy min-w-0 flex-1">
-          <p className="admin-profile-name">
-            {user?.firstName ||
-              user?.name?.firstName ||
-              user?.email?.split('@')[0] ||
-              'CosmosCraft'}
-          </p>
-
-          <p className="admin-profile-role">
-            {isSuperAdmin ? 'Administrator' : 'Admin'}
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="admin-logout-button"
-          title="Log out"
-          aria-label="Log out"
-        >
-          <LogOut className="w-4 h-4" />
-        </button>
-      </>
-    )}
-
-    {sidebarCollapsed && (
-      <button
-        type="button"
-        onClick={handleLogout}
-        className="admin-logout-button"
-        title="Log out"
-        aria-label="Log out"
-      >
-        <LogOut className="w-4 h-4" />
-      </button>
-    )}
-  </div>
-</div>
-      </aside>
+      <WorkspaceSidebar
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed((previous) => !previous)}
+        user={user}
+        roleLabel={isSuperAdmin ? 'Administrator' : 'Admin'}
+        navigationLabel="Admin navigation"
+        onLogout={handleLogout}
+      />
 
       {/* Main content */}
       <div className="admin-content transition-all duration-300">
@@ -2915,7 +2831,7 @@ export function AdminPage() {
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className={`bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-8 w-full shadow-2xl overflow-y-auto ${modal.type === 'project_tasks' ? 'max-w-6xl h-[90vh]' : modal.type === 'part' ? 'max-h-[90vh] max-w-[min(92vw,72rem)]' : 'max-w-lg max-h-[90vh]'}`}
+              className={`bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl w-full shadow-2xl ${modal.type === 'product' ? 'flex max-h-[90dvh] max-w-3xl flex-col overflow-hidden' : `p-8 overflow-y-auto ${modal.type === 'project_tasks' ? 'max-w-6xl h-[90vh]' : modal.type === 'part' ? 'max-h-[90vh] max-w-[min(92vw,72rem)]' : 'max-w-lg max-h-[90vh]'}`}`}
             >
 
               {modal.type === 'project_tasks' && modal.data && (
@@ -2946,13 +2862,14 @@ export function AdminPage() {
                 />
               )}
 
-              {/* Product Modal - Industry Redesign Wizard */}
+              {/* Product setup wizard */}
               {modal.type === 'product' && (
                 <ProductModal
                   modal={modal}
                   form={form}
                   setForm={setForm}
                   formErrors={formErrors}
+                  setFormErrors={setFormErrors}
                   wizardTab={wizardTab}
                   setWizardTab={setWizardTab}
                   closeModal={closeModal}
@@ -2963,10 +2880,8 @@ export function AdminPage() {
                   categories={categories}
                   formatCurrency={formatCurrency}
                   validateAndSave={validateAndSave}
-                  showToast={showToast}
                   productRules={PRODUCT_RULES}
                   labelCls={labelCls}
-                  inputCls={inputCls}
                 />
               )}
 
