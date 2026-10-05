@@ -11,6 +11,26 @@ const syncStockToBuilderParts = async (productId, delta) => {
 };
 
 /**
+ * Collapse pos_returns rows into one post-restock stock level per product.
+ *
+ * A void/return touches the same product through several sale lines, and only
+ * resalable items are put back on the shelf. The last recorded
+ * `inventory_after` for a product is the level the database was left at, so that
+ * is the value the socket notification has to carry.
+ */
+const buildRestockUpdates = (returnRecords) => {
+  const byProduct = new Map();
+  for (const record of returnRecords || []) {
+    if (!record?.product_id || !record.restocked || record.inventory_after == null) continue;
+    byProduct.set(String(record.product_id), {
+      product_id: record.product_id,
+      stock: Number(record.inventory_after)
+    });
+  }
+  return Array.from(byProduct.values());
+};
+
+/**
  * POS SERVICE
  * Manages Point of Sale transactions for walk-in customers
  */
@@ -101,6 +121,10 @@ exports.createSale = async (
   try {
     await client.query('BEGIN');
 
+    // Post-deduction stock levels, collected so the caller can publish them over
+    // the socket only after the transaction commits.
+    const stockUpdates = [];
+
     const saleRes = await client.query(
       `INSERT INTO pos_sales (
         sale_number, staff_id, customer_name, customer_phone,
@@ -165,10 +189,18 @@ exports.createSale = async (
             throw new AppError(`Insufficient stock for ${item.name || item.item_name}. Available: ${currentStock}, Requested: ${itemQuantity}`, 400);
           }
 
+          const remainingStock = Number(currentStock) - itemQuantity;
+
           await client.query(
             `UPDATE inventory SET stock = stock - $1, updated_at = now() WHERE product_id = $2`,
             [itemQuantity, item.product_id]
           );
+
+          stockUpdates.push({
+            product_id: item.product_id,
+            product_name: item.name || item.item_name || null,
+            stock: remainingStock
+          });
 
           await syncStockToBuilderParts(item.product_id, -itemQuantity);
 
@@ -184,7 +216,7 @@ exports.createSale = async (
             userId: staffId,
             entityId: item.product_id,
             previousQuantity: currentStock,
-            newQuantity: currentStock - itemQuantity,
+            newQuantity: remainingStock,
             delta: -itemQuantity,
             movement: 'pos_deduction',
             source: 'pos_sale',
@@ -246,7 +278,7 @@ exports.createSale = async (
     });
 
     await client.query('COMMIT');
-    return sale;
+    return { ...sale, stockUpdates };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -936,9 +968,11 @@ exports.voidSale = async (saleId, voidedBy, reason = null) => {
     await client.query('COMMIT');
 
     return {
-      sale: updateRes.rows[0],
+      sale: { ...updateRes.rows[0], sale_number: sale.sale_number },
       returns: returnRecords,
-      itemsProcessed: items.length
+      itemsProcessed: items.length,
+      // Restocked quantities, published by the controller only after the commit.
+      stockUpdates: buildRestockUpdates(returnRecords)
     };
   } catch (err) {
     await client.query('ROLLBACK');
@@ -1127,10 +1161,12 @@ exports.returnSale = async (saleId, returnedBy, { reason = null, items = [] } = 
     await client.query('COMMIT');
 
     return {
-      sale: updateRes.rows[0],
+      sale: { ...updateRes.rows[0], sale_number: sale.sale_number },
       returns: returnRecords,
       itemsProcessed: items.length,
-      refundAmount: totalRefund
+      refundAmount: totalRefund,
+      // Only resalable items went back to stock; damaged ones are tracked only.
+      stockUpdates: buildRestockUpdates(returnRecords)
     };
   } catch (err) {
     await client.query('ROLLBACK');

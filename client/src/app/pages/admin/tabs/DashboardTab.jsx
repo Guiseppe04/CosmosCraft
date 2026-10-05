@@ -162,6 +162,10 @@ export function DashboardTab({
   useSocketEvent('pos:sale_completed', () => {
     fetchInventory?.({ silent: true })
   })
+  useSocketEvent('pos:sale_updated', () => {
+    // Void/return puts stock back, so the low-stock and attention panels follow.
+    fetchInventory?.({ silent: true })
+  })
 
   // `salesReport` stays null until the first dashboard fetch resolves, so it is
   // a reliable "nothing rendered yet" signal alongside the shared isLoading flag.

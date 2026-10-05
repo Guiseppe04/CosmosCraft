@@ -22,7 +22,7 @@ test('staff POS supports void/return, pagination, filters and cash checkout', as
     bundle: true, write: false, format: 'iife', logLevel: 'silent', define: { 'import.meta.env': '{}' },
     plugins: [{ name: 'isolated-pos', setup(builder) {
       builder.onLoad({ filter: /AuthContext\.jsx$/ }, () => ({ loader: 'js', contents: `export const useAuth=()=>({user:{role:'staff'}});` }))
-      builder.onLoad({ filter: /SocketContext\.jsx$/ }, () => ({ loader: 'js', contents: `export const useSocketEvent=()=>{};` }))
+      builder.onLoad({ filter: /SocketContext\.jsx$/ }, () => ({ loader: 'js', contents: `export const useSocketEvent=()=>{}; export const useSocket=()=>({socket:null,isConnected:false});` }))
       builder.onLoad({ filter: /apiConfig\.js$/ }, () => ({ loader: 'js', contents: `export const API=window.location.origin; export const getAuthHeaders=()=>({});` }))
     } }],
   })
