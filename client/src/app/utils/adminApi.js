@@ -391,6 +391,8 @@ export const adminApi = {
 
   // Shared Branch Address
   updateBranchSettings: (body) => request('/api/branch/settings', { method: 'PUT', body }),
+  addBranchLocation: (body) => request('/api/branch/locations', { method: 'POST', body }),
+  updateBranchLocation: (id, body) => request(`/api/branch/locations/${encodeURIComponent(id)}`, { method: 'PUT', body }),
 
   // User Addresses
   updateAddress: (addressId, body) => request(`/api/users/me/addresses/${addressId}`, { method: 'PUT', body }),

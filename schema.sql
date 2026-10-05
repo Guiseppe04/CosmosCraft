@@ -377,6 +377,7 @@ CREATE TABLE orders (
     subtotal NUMERIC(12, 2) NOT NULL CHECK (subtotal >= 0),
     tax_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (tax_amount >= 0),
     shipping_cost NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (shipping_cost >= 0),
+    additional_shipping_fee NUMERIC(12, 2) CHECK (additional_shipping_fee >= 0),
     discount_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (discount_amount >= 0),
     total_amount NUMERIC(12, 2) NOT NULL CHECK (total_amount >= 0),
     status order_status_enum NOT NULL DEFAULT 'pending',

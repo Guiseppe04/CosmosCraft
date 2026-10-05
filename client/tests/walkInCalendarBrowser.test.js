@@ -252,7 +252,7 @@ test('calendar navigation, saved-only sending and customer checkout work across 
         return true
       }),true)
     }
-    await page.getByRole('checkbox',{name:'I have read and agree to the Terms and Conditions.'}).check()
+    await page.getByRole('checkbox',{name:'I have read and agree to the Customization Terms and Conditions.'}).check()
     await page.getByRole('button',{name:'Continue to Down Payment',exact:true}).click()
     await page.locator('input[type=file]').setInputFiles({name:'receipt.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64')})
     await page.getByRole('button',{name:/^Pay Down Payment/}).click()

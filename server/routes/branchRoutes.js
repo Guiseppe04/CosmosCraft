@@ -7,7 +7,8 @@ const router = express.Router();
 
 router.get('/settings', async (req, res) => {
   try {
-    res.json({ success: true, data: await branchSettings.getBranchSettings() });
+    const branch = await branchSettings.getBranchSettings();
+    res.json({ success: true, data: branch, branches: await branchSettings.getBranchLocations(branch) });
   } catch (error) {
     console.error('Error loading branch settings:', error);
     res.status(500).json({ success: false, message: 'Failed to load branch address.' });
@@ -27,5 +28,18 @@ router.put('/settings', authenticateToken, authorize('super_admin'), async (req,
     });
   }
 });
+
+async function saveLocation(req, res) {
+  try {
+    const branch = await branchSettings.saveBranchLocation(req.body, req.params.branchId);
+    emitBroadcast('branch:updated', branch);
+    res.status(req.params.branchId ? 200 : 201).json({ success: true, data: branch });
+  } catch (error) {
+    if (!error.statusCode) console.error('Error saving branch location:', error);
+    res.status(error.statusCode || 500).json({ success: false, message: error.statusCode ? error.message : 'Failed to save branch address.' });
+  }
+}
+router.post('/locations', authenticateToken, authorize('super_admin'), saveLocation);
+router.put('/locations/:branchId', authenticateToken, authorize('super_admin'), saveLocation);
 
 module.exports = router;

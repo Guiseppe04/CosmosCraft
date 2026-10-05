@@ -19,6 +19,7 @@ import { getPaymentStatusConfig } from '../utils/orderPaymentStatus'
 import { useDebounce } from '../hooks/useDebounce'
 import { uploadToCloudinary } from '../utils/cloudinary.js'
 import { formatCurrency } from '../utils/formatCurrency.js'
+import { ShippingFeeNotice } from '../components/ShippingFeeNotice.jsx'
 import CustomerProjectTracker from '../components/projects/CustomerProjectTracker.jsx'
 import { AddressForm } from '../components/AddressForm.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
@@ -2413,15 +2414,20 @@ const filteredOrders = myOrders.filter(order => {
                           <dt>Items</dt>
                           <dd className="text-white font-medium">{orderItems.length}</dd>
                         </div>
-                        <div className="flex gap-2">
-                          <dt>Shipping</dt>
-                          <dd className="text-white font-medium">₱{Number(order.shipping_cost || 0).toLocaleString('en-PH')}</dd>
-                        </div>
+                        {shippingAmount > 0 && (
+                          <div className="flex gap-2">
+                            <dt>Shipping included in order</dt>
+                            <dd className="text-white font-medium">₱{shippingAmount.toLocaleString('en-PH')}</dd>
+                          </div>
+                        )}
                       </dl>
                       <div className="text-right">
                         <span className="text-sm text-[var(--text-muted)] mb-1 block">Total Amount</span>
                         <div className="text-xl font-bold text-[var(--gold-primary)]">₱{displayTotalAmount.toLocaleString('en-PH')}</div>
                       </div>
+                    </div>
+                    <div className="mt-4">
+                      <ShippingFeeNotice fee={order.additional_shipping_fee} />
                     </div>
                     <div className="purch-actions-row">
                       <button

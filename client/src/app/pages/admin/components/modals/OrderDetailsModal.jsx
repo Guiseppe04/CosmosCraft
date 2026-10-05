@@ -1,5 +1,6 @@
 import { motion } from 'motion/react'
 import { X, RefreshCw, Save, Loader2, Package, Check } from 'lucide-react'
+import { ShippingFeeInput, ShippingFeeNotice } from '../../../../components/ShippingFeeNotice'
 
 export function OrderDetailsModal({
   modal,
@@ -209,6 +210,7 @@ export function OrderDetailsModal({
           </div>
 
           {/* Unified Status Update Section */}
+          <ShippingFeeNotice fee={modal.data.additional_shipping_fee} />
           <div className="bg-[var(--bg-primary)]/50 rounded-xl p-4 border border-[var(--border)]">
             {(() => {
               const isCODOrder = isCashOnDeliveryOrder(modal.data)
@@ -272,6 +274,14 @@ export function OrderDetailsModal({
                   )}
 
                   {/* Save Button */}
+                  {form.order_status === 'shipped' && modal.data.status !== 'shipped' && (
+                    <div className="mb-4 space-y-3">
+                      <ShippingFeeInput value={form.additional_shipping_fee} onChange={(value) => setForm((f) => ({ ...f, additional_shipping_fee: value }))} />
+                      <label className="block text-sm text-[var(--text-muted)]">Tracking Number
+                        <input type="text" value={form.tracking_info || ''} onChange={(e) => setForm((f) => ({ ...f, tracking_info: e.target.value }))} className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white" />
+                      </label>
+                    </div>
+                  )}
                   <button
                     onClick={updateOrderAndPaymentStatus}
                     disabled={paymentStatusUpdate.loading}

@@ -1,5 +1,6 @@
 const { pool } = require('../config/database');
 const Joi = require('joi');
+const { randomUUID } = require('node:crypto');
 const { addAddressSchema } = require('../utils/validation');
 
 const DEFAULT_BRANCH = {
@@ -19,6 +20,11 @@ const branchAddressSchema = addAddressSchema.required()
       is: 'PH', then: Joi.string().min(2).required(), otherwise: Joi.string().optional().allow(''),
     }),
   });
+const branchLocationSchema = Joi.object({
+  name: Joi.string().trim().min(2).max(100).required(),
+  hours: Joi.string().trim().min(2).max(200).required(),
+  address_details: branchAddressSchema,
+}).required();
 
 let settingsReady;
 async function ensureBranchSettings() {
@@ -37,7 +43,15 @@ async function ensureBranchSettings() {
       `INSERT INTO branch_settings (id, branch_id, name, address, hours)
        VALUES (1, $1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
       [DEFAULT_BRANCH.id, DEFAULT_BRANCH.name, DEFAULT_BRANCH.address, DEFAULT_BRANCH.hours],
-    )).catch((error) => {
+    )).then(() => pool.query(`CREATE TABLE IF NOT EXISTS branch_locations (
+      branch_id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      address TEXT NOT NULL,
+      hours TEXT NOT NULL,
+      address_details JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`)).catch((error) => {
       settingsReady = null;
       throw error;
     });
@@ -75,4 +89,30 @@ async function updateBranchSettings(details) {
   return result.rows[0];
 }
 
-module.exports = { DEFAULT_BRANCH, ensureBranchSettings, getBranchSettings, updateBranchSettings };
+async function getBranchLocations(primary) {
+  const mainBranch = primary || await getBranchSettings();
+  const result = await pool.query('SELECT branch_id AS id, name, address, hours, address_details FROM branch_locations ORDER BY created_at, branch_id');
+  return [mainBranch, ...result.rows];
+}
+
+async function saveBranchLocation(details, branchId) {
+  const { error, value } = branchLocationSchema.validate(details, { abortEarly: false });
+  if (error) {
+    const invalid = new Error(error.details.map(detail => detail.message).join(' '));
+    invalid.statusCode = 400;
+    throw invalid;
+  }
+  await ensureBranchSettings();
+  const params = [value.name, formatBranchAddress(value.address_details), value.hours, JSON.stringify(value.address_details), branchId || randomUUID()];
+  const result = await pool.query(branchId
+    ? `UPDATE branch_locations SET name=$1, address=$2, hours=$3, address_details=$4::jsonb, updated_at=NOW() WHERE branch_id=$5 RETURNING branch_id AS id, name, address, hours, address_details`
+    : `INSERT INTO branch_locations (name,address,hours,address_details,branch_id) VALUES ($1,$2,$3,$4::jsonb,$5) RETURNING branch_id AS id, name, address, hours, address_details`, params);
+  if (!result.rows[0]) {
+    const missing = new Error('Branch not found.');
+    missing.statusCode = 404;
+    throw missing;
+  }
+  return result.rows[0];
+}
+
+module.exports = { DEFAULT_BRANCH, ensureBranchSettings, getBranchSettings, updateBranchSettings, getBranchLocations, saveBranchLocation };

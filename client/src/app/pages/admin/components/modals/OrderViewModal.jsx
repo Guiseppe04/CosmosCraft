@@ -1,4 +1,5 @@
 import { ModalHeader } from '../shared/ModalHeader'
+import { ShippingFeeNotice } from '../../../../components/ShippingFeeNotice'
 
 export function OrderViewModal({ modal, closeModal, getStatusBadge, formatCurrency }) {
   if (!modal.data) return null
@@ -35,6 +36,7 @@ export function OrderViewModal({ modal, closeModal, getStatusBadge, formatCurren
           </div>
         )}
       </div>
+      <div className="mt-4"><ShippingFeeNotice fee={modal.data.additional_shipping_fee} /></div>
       <button onClick={closeModal} className="w-full mt-6 py-3 bg-white/5 border border-white/10 rounded-xl text-white hover:bg-white/10 transition-all">Close</button>
     </>
   )

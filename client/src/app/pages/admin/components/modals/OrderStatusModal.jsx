@@ -2,6 +2,8 @@ import { motion } from 'motion/react'
 import { X, Save, Loader2 } from 'lucide-react'
 import { normalizeRiderContact } from '../../../../utils/phone'
 import PhoneInput from '../../../../components/PhoneInput'
+import { ShippingFeeInput } from '../../../../components/ShippingFeeNotice'
+import { isValidShippingFee } from '../../../../utils/shippingFee'
 
 export function OrderStatusModal({
   modal,
@@ -19,6 +21,10 @@ export function OrderStatusModal({
 }) {
   const handleUpdateStatus = async () => {
     if (!form.order_status) return
+    if (form.order_status === 'shipped' && !isValidShippingFee(form.additional_shipping_fee)) {
+      showToast('Enter a valid additional shipping fee before shipping.', 'error')
+      return
+    }
     const currentOrderStatus = modal.data.status || 'pending'
     const allowedTransitions = ORDER_STATUS_TRANSITIONS[currentOrderStatus] || []
     if (form.order_status === currentOrderStatus || !allowedTransitions.includes(form.order_status)) {
@@ -37,6 +43,7 @@ export function OrderStatusModal({
     setIsSaving(true)
     try {
       const updateData = { status: form.order_status }
+      if (form.order_status === 'shipped') updateData.additional_shipping_fee = Number(form.additional_shipping_fee)
       if (form.tracking_info) {
         if (form.order_status === 'shipped') updateData.tracking_number = form.tracking_info
       }
@@ -69,7 +76,7 @@ export function OrderStatusModal({
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-8 w-full max-w-lg shadow-2xl"
+        className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-8 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto"
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-white">Update Order Status</h2>
@@ -119,6 +126,9 @@ export function OrderStatusModal({
 
           {form.order_status === 'shipped' && (
             <div>
+              <div className="mb-4">
+                <ShippingFeeInput value={form.additional_shipping_fee} onChange={(value) => setForm((f) => ({ ...f, additional_shipping_fee: value }))} />
+              </div>
               <p className="text-[var(--text-muted)] text-sm mb-2">
                 {form.order_status === 'shipped' ? 'Tracking Number' : 'Rider Details'}
               </p>
