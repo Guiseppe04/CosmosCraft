@@ -321,8 +321,11 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
     return found ? found.label : "Selected Period";
   }, [datePreset, customStartDate, customEndDate]);
 
+  const reportRequestRef = useRef(0);
+
   // Fetch Report Data from Backend
   const loadReport = useCallback(async () => {
+    const requestId = ++reportRequestRef.current;
     try {
       setIsLoading(true);
       setErrorMsg("");
@@ -363,14 +366,15 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
       }
 
       const res = await adminApi.getSalesReport(params);
-      if (res && res.data) {
+      if (requestId === reportRequestRef.current && res && res.data) {
         setReportData(res.data);
       }
     } catch (err) {
+      if (requestId !== reportRequestRef.current) return;
       console.error("Failed to load sales report:", err);
       setErrorMsg(err.message || "Failed to load sales report. Please try again.");
     } finally {
-      setIsLoading(false);
+      if (requestId === reportRequestRef.current) setIsLoading(false);
     }
   }, [reportType, resolvedDates, filters, sortBy, sortOrder, page, pageSize]);
 
@@ -430,6 +434,8 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
   // Handle Tab Change: Adaptively switch report context and clear irrelevant filters
   const handleTabChange = (newType) => {
     if (newType === reportType) return;
+    reportRequestRef.current += 1;
+    setReportData(null);
     setReportType(newType);
     setPage(1);
 
@@ -905,12 +911,12 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
       </div>
 
       {/* ─── 4. Performance Trend Visual (Collapsible) ─── */}
-      {dailyTrend.length > 1 && (
+      {!isLoading && (
         <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 shadow-sm print:hidden">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider">Daily Revenue Trend</h3>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">Day-by-day revenue trajectory for the selected scope</p>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">{REPORT_TABS.find(tab => tab.key === reportType)?.label} ? {reportType === "refunds" ? "daily refunds and adjustments" : "daily revenue"}</p>
             </div>
             <button
               onClick={() => setShowTrendChart((v) => !v)}
@@ -920,7 +926,9 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
             </button>
           </div>
 
-          {showTrendChart && (
+          {showTrendChart && (dailyTrend.length === 0 ? (
+            <p className="py-12 text-center text-sm text-[var(--text-muted)]">No transactions for this sales category in the selected period.</p>
+          ) : (
             <div className="h-52 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={dailyTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -953,11 +961,12 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
                       fontSize: "12px",
                       color: "#fff",
                     }}
-                    formatter={(val) => [formatCurrency(val), "Revenue"]}
+                    formatter={(val) => [formatCurrency(val), reportType === "refunds" ? "Adjustments" : "Revenue"]}
                   />
                   <Area
                     type="monotone"
                     dataKey="revenue"
+                    dot={dailyTrend.length === 1 ? { r: 4 } : false}
                     stroke="#D4AF37"
                     strokeWidth={2}
                     fillOpacity={1}
@@ -966,7 +975,7 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
                 </AreaChart>
               </ResponsiveContainer>
             </div>
-          )}
+          ))}
         </div>
       )}
 

@@ -555,10 +555,6 @@ exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actor
     const method = normalizeMethod(currentReq.fulfillment_method);
     const currentStatus = currentReq.status;
 
-    if (method === 'pickup' && newStatus === 'completed' && pickupIdVerified !== true) {
-      throw new AppError('Verify that the claimant photo ID name matches the pickup receipt before completing pickup.', 400);
-    }
-
     // Validate transition
     const allowedNext = VALID_STATUS_TRANSITIONS[method]?.[currentStatus] || [];
     if (!allowedNext.includes(newStatus)) {

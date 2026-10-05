@@ -13,8 +13,7 @@ import {
   ArrowRight,
   Loader2,
   Calendar,
-  AlertCircle,
-  ShieldCheck
+  AlertCircle
 } from 'lucide-react';
 
 const formatLabel = (val) => {
@@ -48,7 +47,6 @@ export function FulfillmentDetailsModal({ request, onClose, onUpdateStatus }) {
   const [adminNotes, setAdminNotes] = useState(request.admin_notes || '');
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState(null);
-  const [pickupIdVerified, setPickupIdVerified] = useState(false);
 
   const method = request.fulfillment_method?.includes('delivery') ? 'delivery' : 'pickup';
   const status = request.status;
@@ -85,9 +83,7 @@ export function FulfillmentDetailsModal({ request, onClose, onUpdateStatus }) {
     try {
       setUpdating(true);
       setError(null);
-      await onUpdateStatus(request.id, targetStatus, adminNotes, {
-        pickup_id_verified: method === 'pickup' && targetStatus === 'completed' && pickupIdVerified,
-      });
+      await onUpdateStatus(request.id, targetStatus, adminNotes);
       onClose();
     } catch (err) {
       setError(err.message || 'Failed to update fulfillment status');
@@ -284,21 +280,6 @@ export function FulfillmentDetailsModal({ request, onClose, onUpdateStatus }) {
           />
         </div>
 
-        {method === 'pickup' && status === 'ready_for_pickup' && (
-          <label className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3.5 text-xs text-amber-100 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={pickupIdVerified}
-              onChange={(event) => setPickupIdVerified(event.target.checked)}
-              className="mt-0.5 h-4 w-4 accent-amber-500"
-            />
-            <span className="flex items-start gap-2">
-              <ShieldCheck className="h-4 w-4 shrink-0 text-amber-400" />
-              I checked the claimant's valid photo ID and confirmed the name matches the pickup receipt.
-            </span>
-          </label>
-        )}
-
         {/* Footer Actions */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-[var(--border)]">
           <button
@@ -312,7 +293,7 @@ export function FulfillmentDetailsModal({ request, onClose, onUpdateStatus }) {
           {nextStatus && (
             <button
               type="button"
-              disabled={updating || (method === 'pickup' && nextStatus === 'completed' && !pickupIdVerified)}
+              disabled={updating}
               onClick={() => handleAdvance(nextStatus)}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-5 py-2.5 text-xs font-bold text-black shadow-lg shadow-[var(--gold-primary)]/20 hover:opacity-95 disabled:opacity-50 transition-all cursor-pointer"
             >

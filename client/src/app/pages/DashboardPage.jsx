@@ -2933,6 +2933,15 @@ const filteredOrders = myOrders.filter(order => {
             projectName={cleanTrackerName}
             projectData={activeProjectView}
             customBuildId={activeProjectView.customBuildId}
+            onLeaveCustomizationFeedback={(fulfillment) => {
+              const order = myOrders.find(item => item.order_id === fulfillment?.order_id) || {
+                order_id: fulfillment?.order_id || activeProjectView.order_id,
+                project_title: cleanTrackerName,
+              };
+              setFeedbackForm({ overall_rating: 5, build_quality_rating: 5, communication_rating: 5, accuracy_rating: 5, comment: '', images: [] });
+              setFeedbackModal({ mode: order.customization_feedback ? 'edit' : 'leave', order, feedback: order.customization_feedback || null });
+              if (order.customization_feedback) setFeedbackForm({ ...order.customization_feedback, images: order.customization_feedback.images || [] });
+            }}
             onInstallmentScheduleChange={setTrackerShowingInstallmentSchedule}
           />
         </div>

@@ -344,7 +344,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   // User Actions
   const toggleSubtaskStatus = async (subtask) => {
     if (!isAdmin && !subtask.is_customer_updatable) return;
-    if (isAdmin && isOnHold) return;
+    if (togglingSaving || (isAdmin && isOnHold)) return;
     if (isTaskUpdateBlocked) return;
     if (togglingSubtaskId || taskMutationBusy) return;
 
@@ -620,8 +620,31 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   };
 
 
+  const handleMarkAllReceived = async () => {
+    if (!isAdmin || isOnHold || isTaskUpdateBlocked || togglingSaving) return;
+    const pending = requiredParts.filter(part => !part.is_received &&
+      (!(part.product_id || part.builder_part_id) ||
+        (part.stock_status !== 'out_of_stock' && Number(part.stock) > 0)));
+    setTogglingSaving(true);
+    setTogglingPartKey(null);
+    setTogglingFeedback(null);
+    let marked = 0;
+    try {
+      for (const part of pending) {
+        await adminApi.toggleProjectRequiredPart(projectId, part.part_key, true);
+        marked += 1;
+      }
+      setTogglingFeedback({ type: 'success', message: `${marked} parts marked as received. Out-of-stock parts remain pending.` });
+    } catch (err) {
+      setTogglingFeedback({ type: 'error', message: `${marked} parts marked. ${err.message || 'Unable to mark remaining parts.'}` });
+    } finally {
+      await loadData();
+      setTogglingSaving(false);
+    }
+  };
+
   const handleToggleReceive = async (part) => {
-    if (isAdmin && isOnHold) return;
+    if (togglingSaving || (isAdmin && isOnHold)) return;
     if (isTaskUpdateBlocked) return;
 
     if (part.is_received) {
@@ -996,11 +1019,21 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                 <p className="text-sm text-[var(--text-muted)]">Parts required to complete this build.</p>
               </div>
               <div className="flex flex-wrap items-center gap-3 text-xs">
+                {isAdmin && (
+                  <button type="button" onClick={handleMarkAllReceived}
+                    disabled={togglingSaving || isOnHold || isTaskUpdateBlocked || !requiredParts.some(part => !part.is_received && (!(part.product_id || part.builder_part_id) || (part.stock_status !== 'out_of_stock' && Number(part.stock) > 0)))}
+                    className="rounded-lg border border-[var(--gold-primary)]/40 px-3 py-2 font-semibold text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 disabled:opacity-50">
+                    {togglingSaving && !togglingPartKey ? 'Marking...' : 'Mark All'}
+                  </button>
+                )}
                 <span className="text-[var(--text-muted)]">{requiredParts.length} Parts</span>
                 <span className="text-emerald-400">{requiredParts.filter(p => p.is_received).length} Received</span>
                 <span className="text-[var(--text-muted)]">{requiredParts.filter(p => !p.is_received).length} Pending</span>
               </div>
             </div>
+            {togglingFeedback && !togglingPartKey && (
+              <p className={`mt-3 text-xs ${togglingFeedback.type === 'error' ? 'text-red-400' : 'text-emerald-300'}`}>{togglingFeedback.message}</p>
+            )}
             <div className="mt-5 border border-[var(--border)] rounded-2xl overflow-hidden bg-[var(--bg-primary)]/40">
               <div className="divide-y divide-[var(--border)]">
                 {requiredParts.map((part, idx) => {
@@ -1028,7 +1061,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                             type="checkbox"
                             checked={isReceived}
                             onChange={() => handleToggleReceive(part)}
-                             disabled={(togglingSaving && togglingPartKey === part.part_key) || isOutOfStock || isTaskUpdateBlocked}
+                             disabled={togglingSaving || isOutOfStock || isTaskUpdateBlocked}
                              title={isOutOfStock ? 'Out of stock. Restock this part before marking it received.' : undefined}
                             className="w-4 h-4 rounded border-[var(--border)] bg-[var(--surface-dark)] text-[var(--gold-primary)] focus:ring-[var(--gold-primary)] shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
                           />

@@ -1,5 +1,12 @@
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const fulfillmentService = require('../services/fulfillmentService');
+const socketService = require('../services/socketService');
+
+const notifyFulfillmentChange = (result) => {
+  const payload = { projectId: result.project_id, requestId: result.id, status: result.status };
+  socketService.emitToUserAndStaff(result.user_id, 'fulfillment:updated', payload);
+  socketService.emitToUserAndStaff(result.user_id, 'project:updated', { projectId: result.project_id });
+};
 
 // Customer or Admin: Submit fulfillment choice for a completed custom build
 exports.submitFulfillmentChoice = asyncHandler(async (req, res) => {
@@ -10,6 +17,7 @@ exports.submitFulfillmentChoice = asyncHandler(async (req, res) => {
     req.user.role,
     req.validatedData || req.body
   );
+  notifyFulfillmentChange(result);
   res.json({
     status: 'success',
     success: true,
@@ -77,6 +85,7 @@ exports.updateFulfillmentStatus = asyncHandler(async (req, res) => {
     pickup_id_verified
   );
 
+  notifyFulfillmentChange(result);
   res.json({
     status: 'success',
     success: true,
@@ -94,6 +103,7 @@ exports.confirmDelivery = asyncHandler(async (req, res) => {
     req.user.role
   );
 
+  notifyFulfillmentChange(result);
   res.json({
     status: 'success',
     success: true,

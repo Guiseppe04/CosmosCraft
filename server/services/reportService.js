@@ -636,41 +636,54 @@ async function getSalesReport(filters = {}) {
     apptParams
   );
 
-  // 3. Payment methods & daily trends (includes appointments)
+  // Daily trends use the selected report scope across all dates, independent of pagination.
   const trendParams = [];
   const trendDateClauseOrder = dateCond('o.created_at', trendParams, startDate, endDate);
   const trendDateClausePos = dateCond('ps.created_at', trendParams, startDate, endDate);
   const trendDateClauseAppt = dateCond('a.scheduled_at', trendParams, startDate, endDate);
+  const trendDateClauseRefund = dateCond('rr.created_at', trendParams, startDate, endDate);
+  const trendDateClauseAdjustment = dateCond('COALESCE(ps.returned_at, ps.voided_at, ps.created_at)', trendParams, startDate, endDate);
+  const trendScope = report_type === 'pos' ? 'walkIn'
+    : report_type === 'appointments' ? 'appointment'
+    : report_type === 'all' ? (order_type && order_type !== 'all' ? order_type : 'all')
+    : report_type;
+  trendParams.push(trendScope);
+  const scopeParam = `$${trendParams.length}`;
   const dailyTrendQ = pool.query(
     `WITH combined_days AS (
-       SELECT DATE_TRUNC('day', o.created_at) AS day, o.total_amount AS revenue, 1 AS tx
+       SELECT DATE_TRUNC('day', o.created_at) AS day, o.total_amount AS revenue,
+         CASE WHEN o.order_type = 'customization' THEN 'customization' ELSE 'online' END AS channel
        FROM orders o
        WHERE o.deleted_at IS NULL AND o.payment_status = 'approved' AND o.status != 'cancelled'
-         AND ${trendDateClauseOrder}
+         AND o.order_type IN ('product', 'customization') AND ${trendDateClauseOrder}
        UNION ALL
-       SELECT DATE_TRUNC('day', ps.created_at) AS day, ps.total_amount AS revenue, 1 AS tx
+       SELECT DATE_TRUNC('day', ps.created_at), ps.total_amount, 'walkIn'
        FROM pos_sales ps
        WHERE ps.deleted_at IS NULL AND ps.status = 'completed' AND ps.payment_status = 'verified'
          AND ${trendDateClausePos}
        UNION ALL
-       SELECT DATE_TRUNC('day', a.scheduled_at) AS day,
-         COALESCE((
-           SELECT SUM(s.price)
-           FROM services s
-           WHERE s.service_id::text = ANY(ARRAY(SELECT jsonb_array_elements_text(a.services)))
-         ), 0) AS revenue,
-         1 AS tx
+       SELECT DATE_TRUNC('day', a.scheduled_at),
+         COALESCE((SELECT SUM(s.price) FROM services s
+           WHERE s.service_id::text = ANY(ARRAY(SELECT jsonb_array_elements_text(a.services)))), 0),
+         'appointment'
        FROM appointments a
-       WHERE a.deleted_at IS NULL AND a.status = 'completed'
-         AND ${trendDateClauseAppt}
+       WHERE a.deleted_at IS NULL AND a.status = 'completed' AND ${trendDateClauseAppt}
+       UNION ALL
+       SELECT DATE_TRUNC('day', rr.created_at),
+         COALESCE(rr.approved_amount, rr.refunded_amount, rr.amount_requested, 0), 'refunds'
+       FROM refund_requests rr
+       WHERE rr.status IN ('approved', 'processing', 'refunded') AND ${trendDateClauseRefund}
+       UNION ALL
+       SELECT DATE_TRUNC('day', COALESCE(ps.returned_at, ps.voided_at, ps.created_at)),
+         ps.total_amount, 'refunds'
+       FROM pos_sales ps
+       WHERE ps.deleted_at IS NULL AND ps.status IN ('voided', 'returned') AND ${trendDateClauseAdjustment}
      )
-     SELECT day AS date,
-            COALESCE(SUM(revenue), 0)::numeric AS gross,
+     SELECT day AS date, COALESCE(SUM(revenue), 0)::numeric AS gross,
             COUNT(*)::int AS transactions
      FROM combined_days
-     GROUP BY day
-     ORDER BY day ASC
-     LIMIT 90`,
+     WHERE (${scopeParam}::text = 'all' AND channel != 'refunds') OR channel = ${scopeParam}::text
+     GROUP BY day ORDER BY day ASC LIMIT 90`,
     trendParams
   );
 

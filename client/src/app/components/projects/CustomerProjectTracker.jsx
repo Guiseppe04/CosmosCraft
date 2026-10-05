@@ -4,7 +4,7 @@ import {
   CheckCircle, Clock, AlertCircle, Guitar, DollarSign, Calendar,
   CreditCard, RefreshCw, HelpCircle, Info, Layers, Hammer,
   CheckSquare, FileText, ChevronDown, ChevronUp, Package, Truck, ShieldCheck,
-  X, Upload, QrCode, Eye, Loader2, Check, MapPin, Edit2, Printer, CircleDot
+  X, Upload, QrCode, Eye, Loader2, Check, MapPin, Edit2, Printer, CircleDot, MessageSquare
 } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { resolveImageUrl, API, getAuthHeaders } from '../../utils/apiConfig';
@@ -597,7 +597,7 @@ function PaymentSubmittedModal({ isOpen, data, onClose }) {
   );
 }
 
-export default function CustomerProjectTracker({ projectId, projectName, projectData, customBuildId, onInstallmentScheduleChange }) {
+export default function CustomerProjectTracker({ projectId, projectName, projectData, customBuildId, onInstallmentScheduleChange, onLeaveCustomizationFeedback }) {
   const [hierarchy, setHierarchy] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -692,6 +692,13 @@ export default function CustomerProjectTracker({ projectId, projectName, project
       loadInstallments();
       loadBuildClaim();
       loadSettlement();
+      loadFulfillment();
+    }
+  });
+
+  useSocketEvent('fulfillment:updated', (data) => {
+    if (String(data?.projectId) === String(projectId)) {
+      loadData();
       loadFulfillment();
     }
   });
@@ -1291,7 +1298,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
             </div>
 
             {/* LOCKED NOTICE when fulfillment has started */}
-            {isFulfillmentActive && (
+            {isFulfillmentActive && activeMethod === 'delivery' && fStatus !== 'completed' && (
               <div className="rounded-2xl border border-sky-500/40 bg-sky-500/10 p-4 flex items-center gap-3">
                 <Clock className="h-5 w-5 text-sky-400 flex-shrink-0" />
                 <div>
@@ -1408,6 +1415,17 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                   ))}
                 </div>
               </div>
+            )}
+
+            {fStatus === 'completed' && activeMethod === 'pickup' && onLeaveCustomizationFeedback && (
+              <button
+                type="button"
+                onClick={() => onLeaveCustomizationFeedback(fulfillmentData)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--gold-primary)]/10 transition-colors cursor-pointer"
+              >
+                <MessageSquare className="h-3 w-3" />
+                Leave Customization Feedback
+              </button>
             )}
 
             {/* STATE A: REQUEST SUBMITTED & NOT LOCKED (Customer can view preference or toggle change) */}

@@ -15,6 +15,7 @@ import {
   Calendar,
   AlertCircle
 } from 'lucide-react';
+import { useSocketEvent } from '../../../context/SocketContext';
 import { adminApi } from '../../../utils/adminApi';
 import { FulfillmentDetailsModal } from '../components/modals/FulfillmentDetailsModal';
 
@@ -73,6 +74,18 @@ export function FulfillmentTab({ showToast }) {
   useEffect(() => {
     fetchRequests(1);
   }, [fetchRequests]);
+
+  useSocketEvent('fulfillment:updated', async (event) => {
+    fetchRequests(pagination.page);
+    if (selectedRequest && String(selectedRequest.id) === String(event?.requestId)) {
+      try {
+        const response = await adminApi.getFulfillmentRequest(selectedRequest.id);
+        setSelectedRequest(response.data);
+      } catch (err) {
+        if (showToast) showToast('Unable to refresh fulfillment details', 'error');
+      }
+    }
+  });
 
   const handleAdvanceStatus = async (requestId, nextStatus, notes = '', options = {}) => {
     try {
