@@ -1304,7 +1304,7 @@ if (resolvedConfig.bassType === 'jb' && assets.knobs?.src) {
   return (
     <div className="w-full" ref={previewRef}>
       <div className="relative mx-auto w-full">
-        <div className="relative rounded-xl" style={{ overflow: 'visible' }}>
+        <div className="instrument-preview-frame relative rounded-xl" style={{ overflow: 'visible' }}>
           {/* Background fills only the visible card area */}
           <div
             className="absolute rounded-xl"
@@ -1330,7 +1330,7 @@ if (resolvedConfig.bassType === 'jb' && assets.knobs?.src) {
             still be seen (headstock tuners on the right, bridge on the left).
           */}
           <div
-            className="relative flex items-center justify-center py-8"
+            className="instrument-preview-canvas relative flex items-center justify-center py-8"
             style={{ overflow: 'visible', zIndex: 1 }}
           >
             {/*
@@ -1339,6 +1339,7 @@ if (resolvedConfig.bassType === 'jb' && assets.knobs?.src) {
               We do NOT put overflow:hidden here.
             */}
             <div
+              className="instrument-preview-guard"
               style={{
                 position: 'relative',
                 width: '100%',

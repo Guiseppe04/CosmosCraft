@@ -1,5 +1,6 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
 import { useStickerDraft } from '../hooks/useStickerDraft'
+import { useBuilderDesktop } from '../hooks/useBuilderDesktop.js'
 import { motion, AnimatePresence } from 'motion/react'
 import { useSearchParams, useNavigate, useBlocker } from 'react-router'
 import {
@@ -31,6 +32,7 @@ import { BuilderCheckoutSection } from '../components/customize/BuilderCheckoutS
 import { BuilderSavedBadge } from '../components/customize/BuilderSavedBadge.jsx'
 import { StickerPanel } from '../components/customize/StickerPanel.jsx'
 import { BuilderConfigurationPanel } from '../components/customize/BuilderConfigurationPanel.jsx'
+import { BuilderConfiguratorDrawer } from '../components/customize/BuilderConfiguratorDrawer.jsx'
 import {
   buildConfigurationLineItems,
   GUITAR_CONFIGURATION_ITEMS,
@@ -288,6 +290,7 @@ const MAX_STICKERS = 10
 const DEFAULT_STICKER_PRICE = 100
 
 export function CustomizePage() {
+  const isDesktopBuilder = useBuilderDesktop()
   const [searchParams, setSearchParams] = useSearchParams()
   const editBuildId = searchParams.get('edit')
   const [activeBuildId, setActiveBuildId] = useState(editBuildId)
@@ -1190,982 +1193,1052 @@ export function CustomizePage() {
     [summary, pricingBreakdown, stickerLineItems],
   )
 
+  const optionsPanel = (
+    <section aria-label="Customization options" className="builder-options-panel flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]">
+      <div className="border-b border-[var(--border)] px-4 py-4">
+        <h2 className="text-lg font-semibold tracking-tight">Build Your Guitar</h2>
+        <p className="mt-1 text-xs text-[var(--text-muted)]">Select a category to customize</p>
+      </div>
+
+      {/* Combined dropdown - Guitar Type + Categories */}
+      <div className="p-3 flex-shrink-0" ref={categoryDropdownRef}>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all duration-200 border border-[var(--border)] bg-[var(--surface-elevated)]"
+          >
+            <div
+              className="flex h-9 w-9 items-center justify-center rounded-lg"
+              style={{
+                backgroundColor: CATEGORIES.find(c => c.id === activeCategory)?.color + '20',
+              }}
+            >
+              {(() => {
+                const CatIcon = CATEGORIES.find(c => c.id === activeCategory)?.icon
+                return CatIcon ? <CatIcon className="h-4 w-4" style={{ color: CATEGORIES.find(c => c.id === activeCategory)?.color }} /> : null
+              })()}
+            </div>
+            <span className="text-sm font-medium text-[var(--text-light)] flex-1">
+              {CATEGORIES.find(c => c.id === activeCategory)?.label}
+            </span>
+            <ChevronDown className={`h-4 w-4 text-[var(--text-muted)] transition-transform duration-200 ${categoryDropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {/* Dropdown menu */}
+          {categoryDropdownOpen && (
+            <div className="absolute top-full left-0 right-0 mt-1 z-50 border border-[var(--border)] rounded-xl bg-[var(--surface-elevated)] shadow-lg overflow-hidden">
+              {/* Categories Section */}
+              <div className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] border-b border-[var(--border)]">
+                Category
+              </div>
+              {CATEGORIES.map((category) => {
+                const Icon = category.icon
+                const isActive = activeCategory === category.id
+
+                return (
+                  <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveCategory(category.id)
+                      setCategoryDropdownOpen(false)
+                    }}
+                    className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-all duration-200 ${isActive
+                        ? 'bg-gradient-to-r from-[#d4af37]/20 border-l-2 border-[#d4af37]'
+                        : 'hover:bg-[var(--surface-dark)] border-l-2 border-transparent'
+                      }`}
+                  >
+                    <div
+                      className="flex h-9 w-9 items-center justify-center rounded-lg"
+                      style={{
+                        backgroundColor: isActive ? `${category.color}20` : 'var(--surface-dark)',
+                      }}
+                    >
+                      <Icon className="h-4 w-4" style={{ color: isActive ? category.color : 'var(--text-muted)' }} />
+                    </div>
+                    <span className={`text-sm font-medium ${isActive ? 'text-[var(--text-light)]' : 'text-[var(--text-muted)]'}`}>
+                      {category.label}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Category-specific options */}
+      <div className="builder-options-scroll min-h-0 flex-1 overflow-y-auto border-t border-[var(--border)]">
+
+        {/* GENERAL OPTIONS */}
+        {activeCategory === 'general' && (
+          <div className="p-4 space-y-5">
+            {/* Dexterity */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Dexterity</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.dexterityOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.dexterity === opt.value}
+                    onClick={() => updateConfig({ dexterity: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Strings */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Number of Strings</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.stringCountOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.strings === opt.value}
+                    onClick={() => updateConfig({ strings: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Multiscale */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Multiscale</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.multiscaleOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.multiscale === opt.value}
+                    onClick={() => updateConfig({ multiscale: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Scale Length */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Scale Length</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.scaleLengthOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.scaleLength === opt.value}
+                    onClick={() => updateConfig({ scaleLength: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Case */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Case</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.caseOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.case === opt.value}
+                    onClick={() => updateConfig({ case: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* BODY OPTIONS */}
+        {activeCategory === 'body' && (
+          <div className="p-4 space-y-5">
+            {/* Body Shape */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Body Shape</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.bodyOptions?.map((opt) => (
+                  <VisualCard
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.body === opt.value}
+                    onClick={() => updateConfig({ body: opt.value })}
+                    previewImage={opt.previewImageUrl}
+                    fallbackImage={opt.bodySrc}
+                    imageHeight="h-24"
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Beveled Body Edges */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Bevel</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.bevelOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.bevel === opt.value}
+                    onClick={() => updateConfig({ bevel: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Body Wood */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Body Wood</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.bodyWoodOptions?.map((opt) => (
+                  <VisualCard
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.bodyWood === opt.value}
+                    onClick={() => updateConfig({ bodyWood: opt.value })}
+                    previewImage={opt.texture}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Top Wood */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Top Wood</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.topWoodOptions?.map((opt) => (
+                  <VisualCard
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.topWood === opt.value}
+                    onClick={() => updateConfig({ topWood: opt.value })}
+                    previewImage={opt.preview || opt.texture}
+                    imageHeight="h-16"
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Finish Type */}
+            {showDcFinish && (
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Finish Type</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {options.finishTypeOptions?.map((opt) => (
+                    <OptionButton
+                      key={opt.value}
+                      option={opt}
+                      isSelected={config.finishType === opt.value}
+                      onClick={() => updateConfig({ finishType: opt.value, finishColor: opt.value === 'metallic' ? 'black' : opt.value === 'translucent' ? 'black' : opt.value === 'sparkle' ? 'black' : config.finishColor })}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Finish Color - dynamically discovered from selected finish folder */}
+            {showDcFinish && config.finishType && config.finishType !== 'solid' && (
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Finish Color</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {options.finishColorOptions?.map((opt) => (
+                    <VisualCard
+                      key={opt.value}
+                      option={opt}
+                      isSelected={config.finishColor === opt.value}
+                      onClick={() => updateConfig({ finishColor: opt.value })}
+                      previewImage={opt.preview}
+                      imageHeight="h-14"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Top Coat */}
+            {showDcTopCoat && (
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Top Coat</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {visibleTopCoatOptions?.map((opt) => (
+                    <VisualCard
+                      key={opt.value}
+                      option={opt}
+                      isSelected={config.topCoat === opt.value}
+                      onClick={() => updateConfig({ topCoat: opt.value })}
+                      previewImage={opt.preview}
+                      imageHeight="h-14"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Additional Finish Options (Burst Finish) - depends on Top Coat */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Additional Finish Options</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.burstFinishOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.burstFinish === opt.value}
+                    onClick={() => updateConfig({ burstFinish: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Body Finish - Solid color picker, shown when finishType is 'solid' or not set */}
+            {showDcFinish && (!config.finishType || config.finishType === 'solid') && (
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-3">Body Finish Color</h3>
+                <RGBColorPicker
+                  value={config.bodyFinish && config.bodyFinish !== 'none' ? config.bodyFinish : '#1a1a1a'}
+                  onChange={(color) => updateConfig({ bodyFinish: color })}
+                  label="Select Guitar Body Color"
+                />
+                <p className="text-xs text-[var(--text-muted)] mt-3">Choose any custom color for your guitar body using the RGB picker or enter a hex value.</p>
+              </div>
+            )}
+
+            {/* Pickguard */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pickguard</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {pickguardOptions.map((opt) => (
+                  config.body === 'delos' ? (
+                    <VisualCard
+                      key={opt.value}
+                      option={opt}
+                      isSelected={config.pickguard === opt.value}
+                      onClick={() => updateConfig({ pickguard: opt.value })}
+                      previewImage={opt.preview}
+                      imageHeight="h-16"
+                      fit="contain"
+                      imageZoom={1.4}
+                      imagePosition="30%"
+                    />
+                  ) : (
+                    <OptionButton
+                      key={opt.value}
+                      option={opt}
+                      isSelected={config.pickguard === opt.value}
+                      onClick={() => updateConfig({ pickguard: opt.value })}
+                    />
+                  )
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* NECK OPTIONS */}
+        {activeCategory === 'neck' && (
+          <div className="p-4 space-y-5">
+            {/* Neck Construction */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Neck Construction</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.neckConstructionOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.neckConstruction === opt.value}
+                    onClick={() => updateConfig({ neckConstruction: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Neck */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Neck Wood</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.neckOptions?.filter(opt => opt.construction === config.neckConstruction).map((opt) => (
+                  <VisualCard
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.neck === opt.value}
+                    onClick={() => updateConfig({ neck: opt.value })}
+                    previewImage={opt.preview}
+                    imageHeight="h-16"
+                    fit="contain"
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Fretboard */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Fingerboard Wood</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.fretboardOptions?.map((opt) => (
+                  <VisualCard
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.fretboard === opt.value}
+                    onClick={() => updateConfig({ fretboard: opt.value })}
+                    previewImage={opt.preview}
+                    imageHeight="h-16"
+                    fit="contain"
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Frets */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Frets</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.fretOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.frets === opt.value}
+                    onClick={() => updateConfig({ frets: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Neck Rear Finish */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Neck Rear Finish</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.neckRearFinishOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.neckRearFinish === opt.value}
+                    onClick={() => updateConfig({ neckRearFinish: opt.value })}
+                    disabled={config.topCoat === 'tungOil'}
+                  />
+                ))}
+              </div>
+              {config.neckRearFinish && (() => {
+                const opt = options.neckRearFinishOptions?.find(o => o.value === config.neckRearFinish)
+                return opt?.disclaimer ? (
+                  <p className="mt-2 text-[10px] leading-tight text-amber-300/80">{opt.disclaimer}</p>
+                ) : null
+              })()}
+            </div>
+
+            {/* Headstock Shape */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Headstock Shape</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.headstockShapeOptions?.map((opt) => (
+                  <VisualCard
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.headstockShape === opt.value}
+                    onClick={() => updateConfig({ headstockShape: opt.value })}
+                    previewImage={opt.preview}
+                    imageHeight="h-16"
+                    fit="contain"
+                    imageZoom={7}
+                    imagePosition="88% 50%"
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Headstock Wood */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Headstock Overlay</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.headstockWoodOptions?.map((opt) => (
+                  <VisualCard
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.headstockWood === opt.value}
+                    onClick={() => updateConfig({ headstockWood: opt.value })}
+                    previewImage={opt.preview}
+                    imageHeight="h-16"
+                    fit="contain"
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Truss Rod Cover */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Truss Rod Cover</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.trussRodCoverOptions?.map((opt) => (
+                  <VisualCard
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.trussRodCover === opt.value}
+                    onClick={() => updateConfig({ trussRodCover: opt.value })}
+                    previewImage={opt.preview}
+                    imageHeight="h-16"
+                    fit="contain"
+                    imageZoom={20}
+                    imagePosition="80% 50%"
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Inlay Shape */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Inlay Shape</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.inlayShapeOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.inlayShape === opt.value}
+                    onClick={() => updateConfig({ inlayShape: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Inlay Material</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.inlayMaterialOptions?.map((opt) => (
+                  <VisualCard
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.inlayMaterial === opt.value}
+                    onClick={() => updateConfig({ inlayMaterial: opt.value })}
+                    previewImage={opt.preview}
+                    imageHeight="h-16"
+                    fit="contain"
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* HARDWARE OPTIONS */}
+        {activeCategory === 'hardware' && (
+          <div className="p-4 space-y-5">
+            {/* Hardware Color */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Hardware Color</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.hardwareOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.hardware === opt.value}
+                    onClick={() => updateConfig({ hardware: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Bridge */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Bridge</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.bridgeOptions?.map((opt) => (
+                  <VisualCard
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.bridge === opt.value}
+                    onClick={() => updateConfig({ bridge: opt.value })}
+                    previewImage={opt.preview}
+                    imageHeight="h-16"
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Knobs */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Control Knobs</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {knobOptions.map((opt) => (
+                  <VisualCard
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.knobs === opt.value}
+                    onClick={() => updateConfig({ knobs: opt.value })}
+                    previewImage={opt.preview}
+                    imageHeight="h-16"
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Nut */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Nut</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.nutOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.nut === opt.value}
+                    onClick={() => updateConfig({ nut: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Tuning */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Tuning</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.tuningOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.tuning === opt.value}
+                    onClick={() => updateConfig({ tuning: opt.value })}
+                  />
+                ))}
+              </div>
+              {options.tuningDisclaimer && (
+                <p className="mt-2 text-[10px] leading-relaxed text-[var(--text-muted)] italic">{options.tuningDisclaimer}</p>
+              )}
+            </div>
+
+            {/* String Brand */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">String Brand</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.stringBrandOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.stringBrand === opt.value}
+                    onClick={() => updateConfig({ stringBrand: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Output Jack */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Output Jack</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.outputJackOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.outputJack === opt.value}
+                    onClick={() => updateConfig({ outputJack: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Strap Buttons */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Strap Buttons</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.strapButtonOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.strapButtons === opt.value}
+                    onClick={() => updateConfig({ strapButtons: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Tuner Buttons */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Tuner Buttons</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.tunerButtonOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.tunerButtons === opt.value}
+                    onClick={() => updateConfig({ tunerButtons: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Electronics Cavity Cover */}
+            {config.body !== 'delos' && (
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Electronics Cavity Cover</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {options.electronicsCavityCoverOptions?.map((opt) => (
+                    <VisualCard
+                      key={opt.value}
+                      option={opt}
+                      isSelected={config.electronicsCavityCover === opt.value}
+                      onClick={() => updateConfig({ electronicsCavityCover: opt.value })}
+                      previewImage={opt.preview}
+                      imageHeight="h-16"
+                      fit="contain"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Tremolo Cover - only for bridges with a tremolo */}
+            {(config.bridge === 'hipshotTremolo' || config.bridge === 'floydRoseTremolo') && (
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Tremolo Cover</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {options.tremoloCoverOptions?.map((opt) => (
+                    <VisualCard
+                      key={opt.value}
+                      option={opt}
+                      isSelected={config.tremoloCover === opt.value}
+                      onClick={() => updateConfig({ tremoloCover: opt.value })}
+                      previewImage={opt.preview}
+                      imageHeight="h-16"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ELECTRONICS OPTIONS */}
+        {activeCategory === 'electronics' && (
+          <div className="p-4 space-y-4">
+            {/* Pickup Configuration */}
+            <AccordionSection title="Pickup Configuration" icon={Zap} defaultOpen={true}>
+              {/* Electronics Type */}
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Electronics Type</h3>
+                {/* Responsible for rendering electronics type selector (passive/active) */}
+                <div className="grid grid-cols-2 gap-2">
+                  {options.electronicsTypeOptions?.map((opt) => (
+                    <OptionButton
+                      key={opt.value}
+                      option={opt}
+                      isSelected={config.electronicsType === opt.value}
+                      onClick={() => updateConfig({ electronicsType: opt.value })}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Pickup Configuration - hidden when Active (Fluence locks the layout) */}
+              {!isActive && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pickup Configuration</h3>
+                  {/* Responsible for rendering pickup configuration selector (HH / H-S-H) */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.pickupConfigurationOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.pickupConfiguration === opt.value}
+                        onClick={() => updateConfig({ pickupConfiguration: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Bridge Pickup Model - hidden when Active */}
+              {!isActive && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Bridge Pickup</h3>
+                  {/* Responsible for rendering bridge humbucker model selector */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.bridgePickupModelOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.bridgePickupModel === opt.value}
+                        onClick={() => updateConfig({ bridgePickupModel: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Middle Pickup Model - only for H-S-H - hidden when Active */}
+              {!isActive && ['hss'].includes(config.pickupConfiguration || config.pickups) && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Middle Pickup</h3>
+                  {/* Responsible for rendering middle single coil model selector */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.middlePickupModelOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.middlePickupModel === opt.value}
+                        onClick={() => updateConfig({ middlePickupModel: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Neck Pickup Model - hidden when Active */}
+              {!isActive && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Neck Pickup</h3>
+                  {/* Responsible for rendering neck humbucker model selector */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.neckPickupModelOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.neckPickupModel === opt.value}
+                        onClick={() => updateConfig({ neckPickupModel: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </AccordionSection>
+
+            {/* Pickup Appearance */}
+            <AccordionSection title="Pickup Appearance" icon={Palette} defaultOpen={true}>
+              {/* Pickup Color - hidden when Active (Painted Bobbin RGB is used instead) */}
+              {!isActive && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pickup Color</h3>
+                  {/* Responsible for rendering pickup color/style selector (bobbins, painted, wooden, covers) */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.pickupColorOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.pickupColor === opt.value}
+                        onClick={() => updateConfig({ pickupColor: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Pickup Color Variant - hidden when Active */}
+              {!isActive && config.pickupColor === 'bobbins' && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Bobbin Color</h3>
+                  {/* Responsible for rendering bobbin color variant selector */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.pickupColorVariantOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.pickupColorVariant === opt.value}
+                        onClick={() => updateConfig({ pickupColorVariant: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Cover Color - hidden when Active */}
+              {!isActive && config.pickupColor === 'covers' && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Cover Color</h3>
+                  {/* Responsible for rendering cover color variant selector */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.pickupColorVariantOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.pickupColorVariant === opt.value}
+                        onClick={() => updateConfig({ pickupColorVariant: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Painted Color (RGB) - visible in Active mode (Fluence mask tint) */}
+              {(config.pickupColor === 'painted' || isActive) && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Painted Color (RGB)</h3>
+                  {/* Responsible for rendering RGB color picker for painted bobbins */}
+                  <RGBColorPicker
+                    value={config.pickupPaintedColor || '#000000'}
+                    onChange={(color) => updateConfig({ pickupPaintedColor: color })}
+                  />
+                </div>
+              )}
+
+              {/* Wood Type - hidden when Active */}
+              {!isActive && config.pickupColor === 'wooden' && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Wood Type</h3>
+                  {/* Responsible for rendering wood type selector for wooden bobbins */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.pickupWoodTypeOptions?.map((opt) => (
+                      <VisualCard
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.pickupWoodType === opt.value}
+                        onClick={() => updateConfig({ pickupWoodType: opt.value })}
+                        previewImage={opt.preview}
+                        imageHeight="h-12"
+                        fit="contain"
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Pole Piece Color - hidden when Active (Fluence pickups use fixed poles) */}
+              {!isActive && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pole Piece Color</h3>
+                  {/* Responsible for rendering pole piece color selector (black, chrome, gold) */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.pickupPoleColorOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.pickupPoleColor === opt.value}
+                        onClick={() => updateConfig({ pickupPoleColor: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </AccordionSection>
+
+            {/* Controls */}
+            <AccordionSection title="Controls" icon={Cog} defaultOpen={true}>
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Controls</h3>
+                {/* Responsible for rendering controls layout selector (Off, DTC, DTMV) */}
+                <div className="grid grid-cols-2 gap-2">
+                  {options.controlsOptions?.map((opt) => (
+                    <OptionButton
+                      key={opt.value}
+                      option={opt}
+                      isSelected={config.controls === opt.value}
+                      onClick={() => updateConfig({ controls: opt.value })}
+                    />
+                  ))}
+                </div>
+              </div>
+            </AccordionSection>
+
+            {/* Pickup Info */}
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#14b8a6]/10">
+                  <Info className="h-4 w-4 text-[#14b8a6]" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
+                    About Pickups
+                  </h4>
+                  <p className="mt-1 text-xs text-[var(--text-muted)] leading-relaxed">
+                    <strong>HH:</strong> Dual humbuckers - warm, high output<br />
+                    <strong>H-S-H:</strong> Bridge humbucker, middle single, neck humbucker - versatile<br />
+                    <strong>Fluence:</strong> Modern active pickups - clean, powerful
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+
+    </section>
+  )
+
+  const summaryPanel = (
+    <section aria-label="Build summary" className="builder-summary-panel flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]">
+      {/* Header with current editing label */}
+      <div className="border-b border-[var(--border)] px-5 py-4 flex-shrink-0">
+        <div className="flex items-center gap-2 text-xs text-[#d4af37]">
+          <Sparkles className="h-3.5 w-3.5" />
+          <span>Currently Editing</span>
+        </div>
+        <h2 className="mt-1 text-lg font-semibold tracking-tight">
+          {getCategoryInfo()?.label || 'Select a Category'}
+        </h2>
+        <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+          {getCategoryInfo()?.tooltip || 'Choose from the left panel'}
+        </p>
+      </div>
+
+      {/* Current selection summary */}
+      <div className="builder-summary-scroll min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
+        <BuilderConfigurationPanel
+          lineItems={configurationLineItems}
+          configurationTotal={totalPrice}
+          loadingPrices={loadingPrices}
+        />
+      </div>
+
+      <BuilderCheckoutSection
+        price={totalPrice}
+      />
+
+      {/* Help section */}
+      <div className="border-t border-[var(--border)] p-4 flex-shrink-0">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#d4af37]/10">
+              <Info className="h-4 w-4 text-[#d4af37]" />
+            </div>
+            <div>
+              <h4 className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
+                Need Help?
+              </h4>
+              <p className="mt-1 text-xs text-[var(--text-muted)] leading-relaxed">
+                Each option is carefully crafted to deliver premium quality. Hover over category names for more details, or{' '}
+                <a
+                  href="https://www.facebook.com/messages/t/CosmosGuitars"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-[#d4af37] hover:text-[#ffe270] transition-colors"
+                >
+                  contact our support team
+                </a>
+                .
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  )
+
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] pt-16 text-[var(--text-light)] relative xl:h-screen xl:overflow-hidden">
+    <div className="builder-page relative flex min-h-screen flex-col bg-[var(--bg-primary)] pt-16 text-[var(--text-light)] 2xl:h-screen 2xl:overflow-hidden">
       <AnimatePresence>
         {toastMessage && (
           <motion.div
             initial={{ opacity: 0, y: -20, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
             exit={{ opacity: 0, y: -20, x: '-50%' }}
-            className="fixed top-24 left-1/2 z-[100] bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] px-6 py-3 rounded-xl font-bold shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center gap-2"
+            className="fixed top-24 left-1/2 z-[100] w-[calc(100%-2rem)] max-w-md bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] px-6 py-3 rounded-xl font-bold shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center gap-2"
           >
-            <CheckCircle className="w-5 h-5" />
+            <CheckCircle className="h-5 w-5 shrink-0" />
             {toastMessage}
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="mx-auto flex h-full max-w-[2000px] flex-col px-3 pb-3 sm:px-4 lg:px-6 lg:pb-6">
+      <div className="builder-workspace mx-auto flex min-h-0 w-full max-w-[2000px] flex-1 flex-col px-3 py-3 sm:px-4 lg:px-6 lg:pb-6">
 
         {/* Main layout: Left panel - Center guitar - Right panel */}
-        <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)_400px]">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 2xl:grid-cols-[340px_minmax(0,1fr)_400px]">
 
           {/* LEFT PANEL - Configuration Categories */}
-          <aside className="min-h-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] overflow-hidden flex flex-col">
-            <div className="border-b border-[var(--border)] px-4 py-4">
-              <h2 className="text-lg font-semibold tracking-tight">Build Your Guitar</h2>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">Select a category to customize</p>
-            </div>
-
-            {/* Combined dropdown - Guitar Type + Categories */}
-            <div className="p-3 flex-shrink-0" ref={categoryDropdownRef}>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all duration-200 border border-[var(--border)] bg-[var(--surface-elevated)]"
-                >
-                  <div
-                    className="flex h-9 w-9 items-center justify-center rounded-lg"
-                    style={{
-                      backgroundColor: CATEGORIES.find(c => c.id === activeCategory)?.color + '20',
-                    }}
-                  >
-                    {(() => {
-                      const CatIcon = CATEGORIES.find(c => c.id === activeCategory)?.icon
-                      return CatIcon ? <CatIcon className="h-4 w-4" style={{ color: CATEGORIES.find(c => c.id === activeCategory)?.color }} /> : null
-                    })()}
-                  </div>
-                  <span className="text-sm font-medium text-[var(--text-light)] flex-1">
-                    {CATEGORIES.find(c => c.id === activeCategory)?.label}
-                  </span>
-                  <ChevronDown className={`h-4 w-4 text-[var(--text-muted)] transition-transform duration-200 ${categoryDropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-
-                {/* Dropdown menu */}
-                {categoryDropdownOpen && (
-                  <div className="absolute top-full left-0 right-0 mt-1 z-50 border border-[var(--border)] rounded-xl bg-[var(--surface-elevated)] shadow-lg overflow-hidden">
-                    {/* Categories Section */}
-                    <div className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] border-b border-[var(--border)]">
-                      Category
-                    </div>
-                    {CATEGORIES.map((category) => {
-                      const Icon = category.icon
-                      const isActive = activeCategory === category.id
-
-                      return (
-                        <button
-                          key={category.id}
-                          type="button"
-                          onClick={() => {
-                            setActiveCategory(category.id)
-                            setCategoryDropdownOpen(false)
-                          }}
-                          className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-all duration-200 ${isActive
-                              ? 'bg-gradient-to-r from-[#d4af37]/20 border-l-2 border-[#d4af37]'
-                              : 'hover:bg-[var(--surface-dark)] border-l-2 border-transparent'
-                            }`}
-                        >
-                          <div
-                            className="flex h-9 w-9 items-center justify-center rounded-lg"
-                            style={{
-                              backgroundColor: isActive ? `${category.color}20` : 'var(--surface-dark)',
-                            }}
-                          >
-                            <Icon className="h-4 w-4" style={{ color: isActive ? category.color : 'var(--text-muted)' }} />
-                          </div>
-                          <span className={`text-sm font-medium ${isActive ? 'text-[var(--text-light)]' : 'text-[var(--text-muted)]'}`}>
-                            {category.label}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Category-specific options */}
-            <div className="flex-1 overflow-y-auto border-t border-[var(--border)]">
-
-              {/* GENERAL OPTIONS */}
-              {activeCategory === 'general' && (
-                <div className="p-4 space-y-5">
-                  {/* Dexterity */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Dexterity</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.dexterityOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.dexterity === opt.value}
-                          onClick={() => updateConfig({ dexterity: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Strings */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Number of Strings</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.stringCountOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.strings === opt.value}
-                          onClick={() => updateConfig({ strings: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Multiscale */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Multiscale</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.multiscaleOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.multiscale === opt.value}
-                          onClick={() => updateConfig({ multiscale: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Scale Length */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Scale Length</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.scaleLengthOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.scaleLength === opt.value}
-                          onClick={() => updateConfig({ scaleLength: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Case */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Case</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.caseOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.case === opt.value}
-                          onClick={() => updateConfig({ case: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* BODY OPTIONS */}
-              {activeCategory === 'body' && (
-                <div className="p-4 space-y-5">
-                  {/* Body Shape */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Body Shape</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.bodyOptions?.map((opt) => (
-                        <VisualCard
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.body === opt.value}
-                          onClick={() => updateConfig({ body: opt.value })}
-                          previewImage={opt.previewImageUrl}
-                          fallbackImage={opt.bodySrc}
-                          imageHeight="h-24"
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Beveled Body Edges */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Bevel</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.bevelOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.bevel === opt.value}
-                          onClick={() => updateConfig({ bevel: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Body Wood */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Body Wood</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.bodyWoodOptions?.map((opt) => (
-                        <VisualCard
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.bodyWood === opt.value}
-                          onClick={() => updateConfig({ bodyWood: opt.value })}
-                          previewImage={opt.texture}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Top Wood */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Top Wood</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.topWoodOptions?.map((opt) => (
-                        <VisualCard
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.topWood === opt.value}
-                          onClick={() => updateConfig({ topWood: opt.value })}
-                          previewImage={opt.preview || opt.texture}
-                          imageHeight="h-16"
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Finish Type */}
-                  {showDcFinish && (
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Finish Type</h3>
-                      <div className="grid grid-cols-2 gap-2">
-                        {options.finishTypeOptions?.map((opt) => (
-                          <OptionButton
-                            key={opt.value}
-                            option={opt}
-                            isSelected={config.finishType === opt.value}
-                            onClick={() => updateConfig({ finishType: opt.value, finishColor: opt.value === 'metallic' ? 'black' : opt.value === 'translucent' ? 'black' : opt.value === 'sparkle' ? 'black' : config.finishColor })}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Finish Color - dynamically discovered from selected finish folder */}
-                  {showDcFinish && config.finishType && config.finishType !== 'solid' && (
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Finish Color</h3>
-                      <div className="grid grid-cols-2 gap-2">
-                        {options.finishColorOptions?.map((opt) => (
-                          <VisualCard
-                            key={opt.value}
-                            option={opt}
-                            isSelected={config.finishColor === opt.value}
-                            onClick={() => updateConfig({ finishColor: opt.value })}
-                            previewImage={opt.preview}
-                            imageHeight="h-14"
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Top Coat */}
-                  {showDcTopCoat && (
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Top Coat</h3>
-                      <div className="grid grid-cols-2 gap-2">
-                        {visibleTopCoatOptions?.map((opt) => (
-                          <VisualCard
-                            key={opt.value}
-                            option={opt}
-                            isSelected={config.topCoat === opt.value}
-                            onClick={() => updateConfig({ topCoat: opt.value })}
-                            previewImage={opt.preview}
-                            imageHeight="h-14"
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Additional Finish Options (Burst Finish) - depends on Top Coat */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Additional Finish Options</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.burstFinishOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.burstFinish === opt.value}
-                          onClick={() => updateConfig({ burstFinish: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Body Finish - Solid color picker, shown when finishType is 'solid' or not set */}
-                  {showDcFinish && (!config.finishType || config.finishType === 'solid') && (
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-3">Body Finish Color</h3>
-                      <RGBColorPicker
-                        value={config.bodyFinish && config.bodyFinish !== 'none' ? config.bodyFinish : '#1a1a1a'}
-                        onChange={(color) => updateConfig({ bodyFinish: color })}
-                        label="Select Guitar Body Color"
-                      />
-                      <p className="text-xs text-[var(--text-muted)] mt-3">Choose any custom color for your guitar body using the RGB picker or enter a hex value.</p>
-                    </div>
-                  )}
-
-                  {/* Pickguard */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pickguard</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {pickguardOptions.map((opt) => (
-                        config.body === 'delos' ? (
-                          <VisualCard
-                            key={opt.value}
-                            option={opt}
-                            isSelected={config.pickguard === opt.value}
-                            onClick={() => updateConfig({ pickguard: opt.value })}
-                            previewImage={opt.preview}
-                            imageHeight="h-16"
-                            fit="contain"
-                            imageZoom={1.4}
-                            imagePosition="30%"
-                          />
-                        ) : (
-                          <OptionButton
-                            key={opt.value}
-                            option={opt}
-                            isSelected={config.pickguard === opt.value}
-                            onClick={() => updateConfig({ pickguard: opt.value })}
-                          />
-                        )
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* NECK OPTIONS */}
-              {activeCategory === 'neck' && (
-                <div className="p-4 space-y-5">
-                  {/* Neck Construction */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Neck Construction</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.neckConstructionOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.neckConstruction === opt.value}
-                          onClick={() => updateConfig({ neckConstruction: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Neck */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Neck Wood</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.neckOptions?.filter(opt => opt.construction === config.neckConstruction).map((opt) => (
-                        <VisualCard
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.neck === opt.value}
-                          onClick={() => updateConfig({ neck: opt.value })}
-                          previewImage={opt.preview}
-                          imageHeight="h-16"
-                          fit="contain"
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Fretboard */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Fingerboard Wood</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.fretboardOptions?.map((opt) => (
-                        <VisualCard
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.fretboard === opt.value}
-                          onClick={() => updateConfig({ fretboard: opt.value })}
-                          previewImage={opt.preview}
-                          imageHeight="h-16"
-                          fit="contain"
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Frets */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Frets</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.fretOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.frets === opt.value}
-                          onClick={() => updateConfig({ frets: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Neck Rear Finish */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Neck Rear Finish</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.neckRearFinishOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.neckRearFinish === opt.value}
-                          onClick={() => updateConfig({ neckRearFinish: opt.value })}
-                          disabled={config.topCoat === 'tungOil'}
-                        />
-                      ))}
-                    </div>
-                    {config.neckRearFinish && (() => {
-                      const opt = options.neckRearFinishOptions?.find(o => o.value === config.neckRearFinish)
-                      return opt?.disclaimer ? (
-                        <p className="mt-2 text-[10px] leading-tight text-amber-300/80">{opt.disclaimer}</p>
-                      ) : null
-                    })()}
-                  </div>
-
-                  {/* Headstock Shape */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Headstock Shape</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.headstockShapeOptions?.map((opt) => (
-                        <VisualCard
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.headstockShape === opt.value}
-                          onClick={() => updateConfig({ headstockShape: opt.value })}
-                          previewImage={opt.preview}
-                          imageHeight="h-16"
-                          fit="contain"
-                          imageZoom={7}
-                          imagePosition="88% 50%"
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Headstock Wood */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Headstock Overlay</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.headstockWoodOptions?.map((opt) => (
-                        <VisualCard
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.headstockWood === opt.value}
-                          onClick={() => updateConfig({ headstockWood: opt.value })}
-                          previewImage={opt.preview}
-                          imageHeight="h-16"
-                          fit="contain"
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Truss Rod Cover */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Truss Rod Cover</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.trussRodCoverOptions?.map((opt) => (
-                        <VisualCard
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.trussRodCover === opt.value}
-                          onClick={() => updateConfig({ trussRodCover: opt.value })}
-                          previewImage={opt.preview}
-                          imageHeight="h-16"
-                          fit="contain"
-                          imageZoom={20}
-                          imagePosition="80% 50%"
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Inlay Shape */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Inlay Shape</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.inlayShapeOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.inlayShape === opt.value}
-                          onClick={() => updateConfig({ inlayShape: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Inlay Material</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.inlayMaterialOptions?.map((opt) => (
-                        <VisualCard
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.inlayMaterial === opt.value}
-                          onClick={() => updateConfig({ inlayMaterial: opt.value })}
-                          previewImage={opt.preview}
-                          imageHeight="h-16"
-                          fit="contain"
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* HARDWARE OPTIONS */}
-              {activeCategory === 'hardware' && (
-                <div className="p-4 space-y-5">
-                  {/* Hardware Color */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Hardware Color</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.hardwareOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.hardware === opt.value}
-                          onClick={() => updateConfig({ hardware: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Bridge */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Bridge</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.bridgeOptions?.map((opt) => (
-                        <VisualCard
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.bridge === opt.value}
-                          onClick={() => updateConfig({ bridge: opt.value })}
-                          previewImage={opt.preview}
-                          imageHeight="h-16"
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Knobs */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Control Knobs</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {knobOptions.map((opt) => (
-                        <VisualCard
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.knobs === opt.value}
-                          onClick={() => updateConfig({ knobs: opt.value })}
-                          previewImage={opt.preview}
-                          imageHeight="h-16"
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Nut */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Nut</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.nutOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.nut === opt.value}
-                          onClick={() => updateConfig({ nut: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Tuning */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Tuning</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.tuningOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.tuning === opt.value}
-                          onClick={() => updateConfig({ tuning: opt.value })}
-                        />
-                      ))}
-                    </div>
-                    {options.tuningDisclaimer && (
-                      <p className="mt-2 text-[10px] leading-relaxed text-[var(--text-muted)] italic">{options.tuningDisclaimer}</p>
-                    )}
-                  </div>
-
-                  {/* String Brand */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">String Brand</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.stringBrandOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.stringBrand === opt.value}
-                          onClick={() => updateConfig({ stringBrand: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Output Jack */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Output Jack</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.outputJackOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.outputJack === opt.value}
-                          onClick={() => updateConfig({ outputJack: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Strap Buttons */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Strap Buttons</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.strapButtonOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.strapButtons === opt.value}
-                          onClick={() => updateConfig({ strapButtons: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Tuner Buttons */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Tuner Buttons</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.tunerButtonOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.tunerButtons === opt.value}
-                          onClick={() => updateConfig({ tunerButtons: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Electronics Cavity Cover */}
-                  {config.body !== 'delos' && (
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Electronics Cavity Cover</h3>
-                      <div className="grid grid-cols-2 gap-2">
-                        {options.electronicsCavityCoverOptions?.map((opt) => (
-                          <VisualCard
-                            key={opt.value}
-                            option={opt}
-                            isSelected={config.electronicsCavityCover === opt.value}
-                            onClick={() => updateConfig({ electronicsCavityCover: opt.value })}
-                            previewImage={opt.preview}
-                            imageHeight="h-16"
-                            fit="contain"
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Tremolo Cover - only for bridges with a tremolo */}
-                  {(config.bridge === 'hipshotTremolo' || config.bridge === 'floydRoseTremolo') && (
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Tremolo Cover</h3>
-                      <div className="grid grid-cols-2 gap-2">
-                        {options.tremoloCoverOptions?.map((opt) => (
-                          <VisualCard
-                            key={opt.value}
-                            option={opt}
-                            isSelected={config.tremoloCover === opt.value}
-                            onClick={() => updateConfig({ tremoloCover: opt.value })}
-                            previewImage={opt.preview}
-                            imageHeight="h-16"
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ELECTRONICS OPTIONS */}
-              {activeCategory === 'electronics' && (
-                <div className="p-4 space-y-4">
-                  {/* Pickup Configuration */}
-                  <AccordionSection title="Pickup Configuration" icon={Zap} defaultOpen={true}>
-                    {/* Electronics Type */}
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Electronics Type</h3>
-                      {/* Responsible for rendering electronics type selector (passive/active) */}
-                      <div className="grid grid-cols-2 gap-2">
-                        {options.electronicsTypeOptions?.map((opt) => (
-                          <OptionButton
-                            key={opt.value}
-                            option={opt}
-                            isSelected={config.electronicsType === opt.value}
-                            onClick={() => updateConfig({ electronicsType: opt.value })}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Pickup Configuration - hidden when Active (Fluence locks the layout) */}
-                    {!isActive && (
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pickup Configuration</h3>
-                        {/* Responsible for rendering pickup configuration selector (HH / H-S-H) */}
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.pickupConfigurationOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.pickupConfiguration === opt.value}
-                              onClick={() => updateConfig({ pickupConfiguration: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Bridge Pickup Model - hidden when Active */}
-                    {!isActive && (
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Bridge Pickup</h3>
-                        {/* Responsible for rendering bridge humbucker model selector */}
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.bridgePickupModelOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.bridgePickupModel === opt.value}
-                              onClick={() => updateConfig({ bridgePickupModel: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Middle Pickup Model - only for H-S-H - hidden when Active */}
-                    {!isActive && ['hss'].includes(config.pickupConfiguration || config.pickups) && (
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Middle Pickup</h3>
-                        {/* Responsible for rendering middle single coil model selector */}
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.middlePickupModelOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.middlePickupModel === opt.value}
-                              onClick={() => updateConfig({ middlePickupModel: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Neck Pickup Model - hidden when Active */}
-                    {!isActive && (
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Neck Pickup</h3>
-                        {/* Responsible for rendering neck humbucker model selector */}
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.neckPickupModelOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.neckPickupModel === opt.value}
-                              onClick={() => updateConfig({ neckPickupModel: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </AccordionSection>
-
-                  {/* Pickup Appearance */}
-                  <AccordionSection title="Pickup Appearance" icon={Palette} defaultOpen={true}>
-                    {/* Pickup Color - hidden when Active (Painted Bobbin RGB is used instead) */}
-                    {!isActive && (
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pickup Color</h3>
-                        {/* Responsible for rendering pickup color/style selector (bobbins, painted, wooden, covers) */}
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.pickupColorOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.pickupColor === opt.value}
-                              onClick={() => updateConfig({ pickupColor: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Pickup Color Variant - hidden when Active */}
-                    {!isActive && config.pickupColor === 'bobbins' && (
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Bobbin Color</h3>
-                        {/* Responsible for rendering bobbin color variant selector */}
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.pickupColorVariantOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.pickupColorVariant === opt.value}
-                              onClick={() => updateConfig({ pickupColorVariant: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Cover Color - hidden when Active */}
-                    {!isActive && config.pickupColor === 'covers' && (
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Cover Color</h3>
-                        {/* Responsible for rendering cover color variant selector */}
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.pickupColorVariantOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.pickupColorVariant === opt.value}
-                              onClick={() => updateConfig({ pickupColorVariant: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Painted Color (RGB) - visible in Active mode (Fluence mask tint) */}
-                    {(config.pickupColor === 'painted' || isActive) && (
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Painted Color (RGB)</h3>
-                        {/* Responsible for rendering RGB color picker for painted bobbins */}
-                        <RGBColorPicker
-                          value={config.pickupPaintedColor || '#000000'}
-                          onChange={(color) => updateConfig({ pickupPaintedColor: color })}
-                        />
-                      </div>
-                    )}
-
-                    {/* Wood Type - hidden when Active */}
-                    {!isActive && config.pickupColor === 'wooden' && (
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Wood Type</h3>
-                        {/* Responsible for rendering wood type selector for wooden bobbins */}
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.pickupWoodTypeOptions?.map((opt) => (
-                            <VisualCard
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.pickupWoodType === opt.value}
-                              onClick={() => updateConfig({ pickupWoodType: opt.value })}
-                              previewImage={opt.preview}
-                              imageHeight="h-12"
-                              fit="contain"
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Pole Piece Color - hidden when Active (Fluence pickups use fixed poles) */}
-                    {!isActive && (
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pole Piece Color</h3>
-                        {/* Responsible for rendering pole piece color selector (black, chrome, gold) */}
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.pickupPoleColorOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.pickupPoleColor === opt.value}
-                              onClick={() => updateConfig({ pickupPoleColor: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </AccordionSection>
-
-                  {/* Controls */}
-                  <AccordionSection title="Controls" icon={Cog} defaultOpen={true}>
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Controls</h3>
-                      {/* Responsible for rendering controls layout selector (Off, DTC, DTMV) */}
-                      <div className="grid grid-cols-2 gap-2">
-                        {options.controlsOptions?.map((opt) => (
-                          <OptionButton
-                            key={opt.value}
-                            option={opt}
-                            isSelected={config.controls === opt.value}
-                            onClick={() => updateConfig({ controls: opt.value })}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </AccordionSection>
-
-                  {/* Pickup Info */}
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#14b8a6]/10">
-                        <Info className="h-4 w-4 text-[#14b8a6]" />
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
-                          About Pickups
-                        </h4>
-                        <p className="mt-1 text-xs text-[var(--text-muted)] leading-relaxed">
-                          <strong>HH:</strong> Dual humbuckers - warm, high output<br />
-                          <strong>H-S-H:</strong> Bridge humbucker, middle single, neck humbucker - versatile<br />
-                          <strong>Fluence:</strong> Modern active pickups - clean, powerful
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-          </aside>
+          {isDesktopBuilder && (
+            <aside aria-label="Customization options" className="hidden min-h-0 min-w-0 flex-col 2xl:flex">
+              {optionsPanel}
+            </aside>
+          )}
 
           {/* CENTER - Guitar Preview */}
-          <main className="min-h-0 flex flex-col">
-            <div ref={previewRef} className="relative flex-1 min-h-[320px] rounded-2xl border border-[var(--border)] bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
+          <main aria-label="Instrument preview" className="relative flex min-h-0 min-w-0 flex-col 2xl:overflow-y-auto">
+            {!isDesktopBuilder && <BuilderConfiguratorDrawer optionsPanel={optionsPanel} summaryPanel={summaryPanel} price={totalPrice} loadingPrices={loadingPrices} />}
+            <div ref={previewRef} data-builder-preview-card className="builder-preview-card relative h-[320px] min-h-[320px] shrink-0 rounded-2xl sm:h-[380px] md:h-auto md:flex-1 md:min-h-[380px] 2xl:min-h-[320px] border border-[var(--border)] bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
               {/* Spotlight effects */}
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute -top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-gradient-radial from-[#d4af37]/10 via-transparent to-transparent opacity-60" />
@@ -2176,7 +2249,8 @@ export function CustomizePage() {
               {/* Guitar container */}
               <div
                 ref={previewViewportRef}
-                className={`relative h-full flex items-center justify-center p-6 ${zoomLevel > 1 ? 'cursor-grab' : 'cursor-default'} ${isDraggingPreview ? 'cursor-grabbing' : ''}`}
+                className={`builder-preview-viewport relative flex h-full items-center justify-center px-3 py-16 sm:px-6 ${zoomLevel > 1 ? 'cursor-grab' : 'cursor-default'} ${isDraggingPreview ? 'cursor-grabbing' : ''}`}
+                style={{ containerType: 'size', touchAction: zoomLevel > 1 ? 'none' : 'pan-y' }}
                 onMouseDown={(e) => beginDrag(e.clientX, e.clientY)}
                 onMouseMove={(e) => {
                   if (isDraggingSticker) {
@@ -2211,10 +2285,15 @@ export function CustomizePage() {
                   endDrag()
                   endStickerDrag()
                 }}
+                onTouchCancel={() => {
+                  endDrag()
+                  endStickerDrag()
+                }}
               >
                 <div
-                  className="relative w-full max-w-[1100px] transition-transform duration-200 ease-out"
+                  className="builder-preview-stage relative w-full max-w-[1100px] transition-transform duration-200 ease-out"
                   style={{
+                    maxWidth: 'min(1100px, calc(100cqh * 16 / 7))',
                     transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
                     transformOrigin: 'center center',
                     willChange: 'transform',
@@ -2238,11 +2317,12 @@ export function CustomizePage() {
               <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-8 bg-gradient-to-b from-transparent to-black/40 blur-xl" />
 
               {/* View toggle */}
-              <div className="absolute top-4 left-4 z-10 flex gap-2">
+              <div className="builder-view-controls absolute left-3 top-3 z-10 flex gap-2 sm:left-4 sm:top-4">
                 <button
                   type="button"
                   onClick={() => setView('front')}
-                  className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all duration-200 ${view === 'front'
+                  aria-pressed={view === 'front'}
+                  className={`min-h-[44px] rounded-lg px-3 py-2 text-xs font-semibold sm:px-4 transition-all duration-200 ${view === 'front'
                       ? 'bg-[#d4af37] text-black'
                       : 'bg-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]'
                     }`}
@@ -2252,7 +2332,8 @@ export function CustomizePage() {
                 <button
                   type="button"
                   onClick={() => setView('rear')}
-                  className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all duration-200 ${view === 'rear'
+                  aria-pressed={view === 'rear'}
+                  className={`min-h-[44px] rounded-lg px-3 py-2 text-xs font-semibold sm:px-4 transition-all duration-200 ${view === 'rear'
                       ? 'bg-[#d4af37] text-black'
                       : 'bg-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]'
                     }`}
@@ -2262,12 +2343,12 @@ export function CustomizePage() {
               </div>
 
               {/* Zoom controls */}
-              <div className="absolute bottom-4 right-4 flex items-center gap-2 rounded-lg border border-[var(--border)] bg-black/35 p-1.5 backdrop-blur-sm">
+              <div className="builder-zoom-controls absolute bottom-3 right-3 z-10 flex items-center gap-1 sm:bottom-4 sm:right-4 sm:gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-1.5 backdrop-blur-sm">
                 <button
                   type="button"
                   onClick={handleZoomOut}
                   disabled={zoomLevel <= 0.7}
-                  className="rounded-md bg-[var(--border)] px-2.5 py-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="min-h-[44px] min-w-[44px] rounded-md bg-[var(--border)] px-2.5 py-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
                   aria-label="Zoom out"
                   title="Zoom out"
                 >
@@ -2276,7 +2357,7 @@ export function CustomizePage() {
                 <button
                   type="button"
                   onClick={handleZoomReset}
-                  className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-[var(--text-light)] transition-colors hover:bg-[var(--surface-elevated)]"
+                  className="min-h-[44px] min-w-[44px] rounded-md px-2.5 py-1.5 text-xs font-semibold text-[var(--text-light)] transition-colors hover:bg-[var(--surface-elevated)]"
                   aria-label="Reset zoom"
                   title="Reset zoom"
                 >
@@ -2286,7 +2367,7 @@ export function CustomizePage() {
                   type="button"
                   onClick={handleZoomIn}
                   disabled={zoomLevel >= 2}
-                  className="rounded-md bg-[var(--border)] px-2.5 py-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="min-h-[44px] min-w-[44px] rounded-md bg-[var(--border)] px-2.5 py-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
                   aria-label="Zoom in"
                   title="Zoom in"
                 >
@@ -2295,7 +2376,7 @@ export function CustomizePage() {
               </div>
 
               {/* Saved status */}
-              <div className="absolute bottom-4 left-4 z-10">
+              <div className="builder-preview-status absolute bottom-20 left-3 z-10 sm:bottom-4 sm:left-4">
                 <BuilderSavedBadge
                   hasUnsavedChanges={hasUnsavedChanges}
                   hasBeenSaved={hasBeenSaved && isAuthenticated}
@@ -2304,117 +2385,118 @@ export function CustomizePage() {
                 />
               </div>
 
-              <input
-                ref={stickerFileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleStickerUpload}
-                className="hidden"
-              />
-
-              <StickerPanel
-                stickerCount={stickers.length}
-                maxStickers={MAX_STICKERS}
-                onAddClick={() => stickerFileInputRef.current?.click()}
-                addDisabled={stickers.length >= MAX_STICKERS}
-              >
-                {selectedSticker && (selectedSticker.side || 'front') === view && (
-                  <div className="space-y-2 rounded-md border border-[var(--border)] bg-black/25 p-2">
-                    <div className="grid grid-cols-4 gap-1.5">
-                      <button type="button" onClick={() => moveLayer('back')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Back</button>
-                      <button type="button" onClick={() => moveLayer('down')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Down</button>
-                      <button type="button" onClick={() => moveLayer('up')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Up</button>
-                      <button type="button" onClick={() => moveLayer('front')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Front</button>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => updateSelectedSticker(prev => ({ ...prev, size: Math.max(6, prev.size - 2) }))}
-                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
-                        title="Shrink sticker"
-                      >
-                        -
-                      </button>
-                      <span className="text-[10px] text-[var(--text-light)] min-w-10 text-center">{Math.round(selectedSticker.size)}%</span>
-                      <button
-                        type="button"
-                        onClick={() => updateSelectedSticker(prev => ({ ...prev, size: Math.min(50, prev.size + 2) }))}
-                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
-                        title="Enlarge sticker"
-                      >
-                        +
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => updateSelectedSticker(prev => ({ ...prev, rotation: (prev.rotation - 15 + 360) % 360 }))}
-                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
-                        title="Rotate left"
-                      >
-                        -15°
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateSelectedSticker(prev => ({ ...prev, rotation: (prev.rotation + 15) % 360 }))}
-                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
-                        title="Rotate right"
-                      >
-                        +15°
-                      </button>
-                    </div>
-
-                    <input
-                      type="range"
-                      min="0"
-                      max="359"
-                      value={selectedSticker.rotation || 0}
-                      onChange={(e) => updateSelectedSticker({ rotation: Number(e.target.value) })}
-                      className="w-full accent-[#d4af37]"
-                    />
-
-                    <div className="flex items-center justify-between gap-1.5">
-                      <button
-                        type="button"
-                        onClick={duplicateSelectedSticker}
-                        disabled={currentViewStickers.length >= MAX_STICKERS}
-                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-[10px] font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        Duplicate
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeStickerById(selectedSticker.id)}
-                        className="rounded-md bg-red-500/20 px-2 py-1.5 text-red-300 hover:bg-red-500/30"
-                        title="Remove sticker"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {currentViewStickers.length > 0 && (
-                  <div className="max-h-24 overflow-y-auto space-y-1 rounded-md border border-[var(--border)] bg-black/20 p-1.5">
-                    {currentViewStickers.map((stickerItem, index) => (
-                      <button
-                        key={stickerItem.id}
-                        type="button"
-                        onClick={() => setSelectedStickerId(stickerItem.id)}
-                        className={`w-full flex items-center gap-2 rounded px-1.5 py-1 text-left text-[10px] ${selectedStickerId === stickerItem.id
-                            ? 'bg-[#d4af37]/20 text-[#d4af37]'
-                            : 'bg-[var(--surface-elevated)] text-[var(--text-light)] hover:bg-[var(--surface-elevated)]'
-                          }`}
-                      >
-                        <img src={stickerItem.src} alt={`Sticker ${index + 1}`} className="h-5 w-5 rounded object-cover" />
-                        <span>{view === 'front' ? 'Front' : 'Rear'} Sticker {index + 1}</span>
-                        <span className="ml-auto">z:{index + 1}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </StickerPanel>
             </div>
+
+            <input
+              ref={stickerFileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleStickerUpload}
+              className="hidden"
+            />
+
+            <StickerPanel
+              stickerCount={stickers.length}
+              maxStickers={MAX_STICKERS}
+              onAddClick={() => stickerFileInputRef.current?.click()}
+              addDisabled={stickers.length >= MAX_STICKERS}
+            >
+              {selectedSticker && (selectedSticker.side || 'front') === view && (
+                <div className="space-y-2 rounded-md border border-[var(--border)] bg-black/25 p-2">
+                  <div className="grid grid-cols-4 gap-1.5">
+                    <button type="button" onClick={() => moveLayer('back')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Back</button>
+                    <button type="button" onClick={() => moveLayer('down')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Down</button>
+                    <button type="button" onClick={() => moveLayer('up')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Up</button>
+                    <button type="button" onClick={() => moveLayer('front')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Front</button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => updateSelectedSticker(prev => ({ ...prev, size: Math.max(6, prev.size - 2) }))}
+                      className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                      title="Shrink sticker"
+                    >
+                      -
+                    </button>
+                    <span className="text-[10px] text-[var(--text-light)] min-w-10 text-center">{Math.round(selectedSticker.size)}%</span>
+                    <button
+                      type="button"
+                      onClick={() => updateSelectedSticker(prev => ({ ...prev, size: Math.min(50, prev.size + 2) }))}
+                      className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                      title="Enlarge sticker"
+                    >
+                      +
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => updateSelectedSticker(prev => ({ ...prev, rotation: (prev.rotation - 15 + 360) % 360 }))}
+                      className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                      title="Rotate left"
+                    >
+                      -15°
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateSelectedSticker(prev => ({ ...prev, rotation: (prev.rotation + 15) % 360 }))}
+                      className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                      title="Rotate right"
+                    >
+                      +15°
+                    </button>
+                  </div>
+
+                  <input
+                    type="range"
+                    min="0"
+                    max="359"
+                    value={selectedSticker.rotation || 0}
+                    onChange={(e) => updateSelectedSticker({ rotation: Number(e.target.value) })}
+                    className="w-full accent-[#d4af37]"
+                  />
+
+                  <div className="flex items-center justify-between gap-1.5">
+                    <button
+                      type="button"
+                      onClick={duplicateSelectedSticker}
+                      disabled={currentViewStickers.length >= MAX_STICKERS}
+                      className="rounded-md bg-[var(--border)] px-2 py-1.5 text-[10px] font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Duplicate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeStickerById(selectedSticker.id)}
+                      className="rounded-md bg-red-500/20 px-2 py-1.5 text-red-300 hover:bg-red-500/30"
+                      title="Remove sticker"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {currentViewStickers.length > 0 && (
+                <div className="max-h-24 overflow-y-auto space-y-1 rounded-md border border-[var(--border)] bg-black/20 p-1.5">
+                  {currentViewStickers.map((stickerItem, index) => (
+                    <button
+                      key={stickerItem.id}
+                      type="button"
+                      onClick={() => setSelectedStickerId(stickerItem.id)}
+                      className={`w-full flex items-center gap-2 rounded px-1.5 py-1 text-left text-[10px] ${selectedStickerId === stickerItem.id
+                          ? 'bg-[#d4af37]/20 text-[#d4af37]'
+                          : 'bg-[var(--surface-elevated)] text-[var(--text-light)] hover:bg-[var(--surface-elevated)]'
+                        }`}
+                    >
+                      <img src={stickerItem.src} alt={`Sticker ${index + 1}`} className="h-5 w-5 rounded object-cover" />
+                      <span>{view === 'front' ? 'Front' : 'Rear'} Sticker {index + 1}</span>
+                      <span className="ml-auto">z:{index + 1}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </StickerPanel>
 
             <BuilderActionBar
               onReset={resetConfig}
@@ -2426,7 +2508,7 @@ export function CustomizePage() {
               <button
                 type="button"
                 onClick={handleSaveImage}
-                className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-transparent px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:border-[var(--border)] hover:text-[var(--text-light)]"
+                className="builder-export-button mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-transparent px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:border-[var(--border)] hover:text-[var(--text-light)]"
               >
                 <Image className="h-3.5 w-3.5" />
                 Save preview image
@@ -2435,68 +2517,17 @@ export function CustomizePage() {
           </main>
 
           {/* RIGHT PANEL - Summary & Actions */}
-          <aside className="min-h-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] overflow-hidden flex flex-col">
-            {/* Header with current editing label */}
-            <div className="border-b border-[var(--border)] px-5 py-4 flex-shrink-0">
-              <div className="flex items-center gap-2 text-xs text-[#d4af37]">
-                <Sparkles className="h-3.5 w-3.5" />
-                <span>Currently Editing</span>
-              </div>
-              <h2 className="mt-1 text-lg font-semibold tracking-tight">
-                {getCategoryInfo()?.label || 'Select a Category'}
-              </h2>
-              <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                {getCategoryInfo()?.tooltip || 'Choose from the left panel'}
-              </p>
-            </div>
-
-            {/* Current selection summary */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <BuilderConfigurationPanel
-                lineItems={configurationLineItems}
-                configurationTotal={totalPrice}
-                loadingPrices={loadingPrices}
-              />
-            </div>
-
-            <BuilderCheckoutSection
-              price={totalPrice}
-            />
-
-            {/* Help section */}
-            <div className="border-t border-[var(--border)] p-4 flex-shrink-0">
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#d4af37]/10">
-                    <Info className="h-4 w-4 text-[#d4af37]" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
-                      Need Help?
-                    </h4>
-                    <p className="mt-1 text-xs text-[var(--text-muted)] leading-relaxed">
-                      Each option is carefully crafted to deliver premium quality. Hover over category names for more details, or{' '}
-                      <a
-                        href="https://www.facebook.com/messages/t/CosmosGuitars"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-semibold text-[#d4af37] hover:text-[#ffe270] transition-colors"
-                      >
-                        contact our support team
-                      </a>
-                      .
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </aside>
+          {isDesktopBuilder && (
+            <aside aria-label="Build summary" className="hidden min-h-0 min-w-0 flex-col 2xl:flex">
+              {summaryPanel}
+            </aside>
+          )}
         </div>
       </div>
 
       {/* Disclaimer */}
-      <p className="mt-2 text-center text-[10px] uppercase tracking-[0.15em] text-[var(--text-muted)]">
-        Graphic representation only. Actual product may differ slightly due to natural wood variations.
+      <p className="builder-disclaimer shrink-0 px-4 pb-3 text-center text-[10px] uppercase tracking-[0.15em] text-[var(--text-muted)]">
+        Graphic representation only. Actual product may differ.
       </p>
 
       {isWalkInMode && walkInBuild && (
@@ -2530,7 +2561,7 @@ export function CustomizePage() {
               <p className="mt-1 text-xs text-white/50">Select a previous guitar build to continue editing</p>
             </div>
 
-            <div className="flex-1 space-y-3 overflow-y-auto p-6">
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 sm:p-6">
               {savedBuilds.length === 0 ? (
                 <div className="flex items-center justify-center py-8 text-white/50">
                   <p>No saved builds yet. Create one using the Save Build button!</p>
@@ -2546,8 +2577,8 @@ export function CustomizePage() {
                       className="group relative cursor-pointer rounded-xl border border-white/10 bg-white/[0.02] p-4 transition-colors duration-200 hover:bg-white/[0.04]"
                       onClick={() => handleLoadBuild(build.id)}
                     >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-white/10 bg-gradient-to-b from-[#141414] to-[#0a0a0a]">
+                      <div className="flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap sm:gap-4">
+                        <div className="relative h-16 w-16 flex-shrink-0 sm:h-20 sm:w-20 overflow-hidden rounded-lg border border-white/10 bg-gradient-to-b from-[#141414] to-[#0a0a0a]">
                           <div
                             className="absolute top-1/2 left-1/2"
                             style={{
@@ -2617,14 +2648,14 @@ export function CustomizePage() {
               <button
                 type="button"
                 onClick={handleCreateNewBuild}
-                className="flex-1 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-[var(--text-dark)] transition-all hover:brightness-110"
+                className="min-w-0 flex-1 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-[var(--text-dark)] transition-all hover:brightness-110"
               >
                 Create New Build
               </button>
               <button
                 type="button"
                 onClick={() => setShowLoadModal(false)}
-                className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium text-[var(--text-muted)] transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium text-[var(--text-muted)] transition-all duration-200 hover:bg-[var(--surface-dark)]"
               >
                 Cancel
               </button>
@@ -2640,11 +2671,11 @@ export function CustomizePage() {
             <p className="text-sm text-[var(--text-muted)]">
               You have unsaved changes. Please save your build before leaving this page.
             </p>
-            <div className="mt-6 flex gap-3">
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
                 onClick={handleStayOnPage}
-                className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--surface-elevated)] transition-colors"
+                className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--surface-elevated)] transition-colors"
               >
                 Stay
               </button>
@@ -2654,7 +2685,7 @@ export function CustomizePage() {
                   onClick={() => {
                     handleSaveAndLeave()
                   }}
-                  className="flex-1 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-bold text-[var(--text-dark)]"
+                  className="min-w-0 flex-1 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-bold text-[var(--text-dark)]"
                 >
                   Save Build
                 </button>
@@ -2664,7 +2695,7 @@ export function CustomizePage() {
               <button
                 type="button"
                 onClick={handleConfirmLeave}
-                className="flex-1 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-300 hover:bg-red-500/20 transition-colors"
+                className="min-w-0 flex-1 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-300 hover:bg-red-500/20 transition-colors"
               >
                 Leave Anyway
               </button>

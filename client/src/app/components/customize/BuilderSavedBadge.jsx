@@ -43,7 +43,7 @@ export function BuilderSavedBadge({
       <button
         type="button"
         onClick={() => setShowHint((prev) => !prev)}
-        className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] font-semibold shadow-lg transition-colors ${badgeClass}`}
+        className={`inline-flex min-h-[44px] items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] font-semibold shadow-lg transition-colors ${badgeClass}`}
         title={showHint ? 'Hide info' : 'What does this mean?'}
       >
         <span className="h-1.5 w-1.5 rounded-full bg-white" />
@@ -53,7 +53,7 @@ export function BuilderSavedBadge({
       </button>
 
       {showHint && (
-        <div className="relative max-w-[300px] rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3.5 py-2.5 pr-8 text-[11px] leading-relaxed text-[var(--text-light)] shadow-2xl">
+        <div className="absolute bottom-full left-0 mb-2 w-64 max-w-[calc(100vw-4rem)] rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3.5 py-2.5 pr-8 text-[11px] leading-relaxed text-[var(--text-light)] shadow-2xl">
           <button
             type="button"
             onClick={() => setShowHint(false)}

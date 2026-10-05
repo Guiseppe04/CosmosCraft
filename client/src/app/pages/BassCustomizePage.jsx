@@ -1,5 +1,6 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
 import { useStickerDraft } from '../hooks/useStickerDraft'
+import { useBuilderDesktop } from '../hooks/useBuilderDesktop.js'
 import { motion, AnimatePresence } from 'motion/react'
 import { useSearchParams, useNavigate, useBlocker } from 'react-router'
 import {
@@ -33,6 +34,7 @@ import { BuilderCheckoutSection } from '../components/customize/BuilderCheckoutS
 import { BuilderSavedBadge } from '../components/customize/BuilderSavedBadge.jsx'
 import { StickerPanel } from '../components/customize/StickerPanel.jsx'
 import { BuilderConfigurationPanel } from '../components/customize/BuilderConfigurationPanel.jsx'
+import { BuilderConfiguratorDrawer } from '../components/customize/BuilderConfiguratorDrawer.jsx'
 import {
   buildConfigurationLineItems,
   BASS_CONFIGURATION_ITEMS,
@@ -719,6 +721,7 @@ function NeckAccordion({ config, updateConfig, options }) {
 }
 
 export function BassCustomizePage() {
+  const isDesktopBuilder = useBuilderDesktop()
   const [searchParams, setSearchParams] = useSearchParams()
   const editBuildId = searchParams.get('edit')
   const [activeBuildId, setActiveBuildId] = useState(editBuildId)
@@ -1540,807 +1543,875 @@ export function BassCustomizePage() {
     [summary, pricingBreakdown],
   )
 
+  const optionsPanel = (
+    <section aria-label="Customization options" className="builder-options-panel flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]">
+      <div className="border-b border-white/10 px-4 py-4">
+        <h2 className="text-lg font-semibold tracking-tight">Build Your Bass</h2>
+        <p className="mt-1 text-xs text-[var(--text-muted)]">Select a category to customize</p>
+      </div>
+
+      <div className="p-3 flex-shrink-0" ref={categoryDropdownRef}>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all duration-200 border border-[var(--border)] bg-[var(--surface-elevated)]"
+          >
+            <div
+              className="flex h-9 w-9 items-center justify-center rounded-lg"
+              style={{
+                backgroundColor: CATEGORIES.find(c => c.id === activeCategory)?.color + '20',
+              }}
+            >
+              {(() => {
+                const CatIcon = CATEGORIES.find(c => c.id === activeCategory)?.icon
+                return CatIcon ? <CatIcon className="h-4 w-4" style={{ color: CATEGORIES.find(c => c.id === activeCategory)?.color }} /> : null
+              })()}
+            </div>
+            <span className="text-sm font-medium text-[var(--text-light)] flex-1">
+              {CATEGORIES.find(c => c.id === activeCategory)?.label}
+            </span>
+            <ChevronDown className={`h-4 w-4 text-[var(--text-muted)] transition-transform duration-200 ${categoryDropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {categoryDropdownOpen && (
+            <div className="absolute top-full left-0 right-0 mt-1 z-50 border border-[var(--border)] rounded-xl bg-[var(--surface-elevated)] shadow-lg overflow-hidden">
+              <div className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] border-b border-[var(--border)]">
+                Category
+              </div>
+              {CATEGORIES.map((category) => {
+                const Icon = category.icon
+                const isActive = activeCategory === category.id
+
+                return (
+                  <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveCategory(category.id)
+                      setCategoryDropdownOpen(false)
+                    }}
+                    className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-all duration-200 ${isActive
+                        ? 'bg-gradient-to-r from-[#d4af37]/20 border-l-2 border-[#d4af37]'
+                        : 'hover:bg-[var(--surface-dark)] border-l-2 border-transparent'
+                      }`}
+                  >
+                    <div
+                      className="flex h-9 w-9 items-center justify-center rounded-lg"
+                      style={{
+                        backgroundColor: isActive ? `${category.color}20` : 'var(--surface-dark)',
+                      }}
+                    >
+                      <Icon className="h-4 w-4" style={{ color: isActive ? category.color : 'var(--text-muted)' }} />
+                    </div>
+                    <span className={`text-sm font-medium ${isActive ? 'text-[var(--text-light)]' : 'text-[var(--text-muted)]'}`}>
+                      {category.label}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="builder-options-scroll min-h-0 flex-1 overflow-y-auto border-t border-white/10">
+
+        {/* GENERAL OPTIONS */}
+        {activeCategory === 'general' && (
+          <div className="p-4 space-y-5">
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Dexterity</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.dexterityOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.dexterity === opt.value}
+                    onClick={() => updateConfig({ dexterity: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Scale Length</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.scaleLengthOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.scaleLength === opt.value}
+                    onClick={() => updateConfig({ scaleLength: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Case</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.caseOptions?.map((opt) => (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.case === opt.value}
+                    onClick={() => updateConfig({ case: opt.value })}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeCategory === 'body' && (
+          <div className="p-4 space-y-5">
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bass Model</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {options.bodyOptions?.map((opt) => (
+                  <VisualCard
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config.bassType === opt.value}
+                    onClick={() => updateConfig({ bassType: opt.value })}
+                    previewImage={opt.previewImageUrl}
+                    fallbackImage={opt.bodySrc}
+                    imageHeight="h-24"
+                  />
+                ))}
+              </div>
+            </div>
+
+            <VaderBodyAccordion
+              config={config}
+              updateConfig={updateConfig}
+              options={options}
+              isCustomBodyColor={isCustomBodyColor}
+            />
+          </div>
+        )}
+
+        {/* NECK OPTIONS */}
+        {activeCategory === 'neck' && (
+          <div className="p-4 space-y-5">
+            <NeckAccordion
+              config={config}
+              updateConfig={updateConfig}
+              options={options}
+            />
+          </div>
+        )}
+
+        {/* HARDWARE OPTIONS */}
+        {activeCategory === 'hardware' && (
+          <div className="p-4 space-y-5">
+            {config.bassType !== 'vader' && (
+              <>
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Hardware Color</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.hardwareOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.hardware === opt.value}
+                        onClick={() => updateConfig({ hardware: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bridge</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.bridgeOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.bridge === opt.value}
+                        onClick={() => updateConfig({ bridge: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {options.pickguardOptions?.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickguard</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.pickguardOptions.map((opt) => (
+                        <VisualCard
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.pickguard === opt.value}
+                          onClick={() => updateConfig({ pickguard: opt.value })}
+                          previewImage={opt.preview || opt.src || opt.texture}
+                          fit="contain"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Control Knobs</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {knobOptions.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.knobs === opt.value}
+                        onClick={() => updateConfig({ knobs: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {options.backplateOptions?.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Back Plate</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.backplateOptions.map((opt) => (
+                        <OptionButton
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.backplate === opt.value}
+                          onClick={() => updateConfig({ backplate: opt.value })}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Nut</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.nutOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.nut === opt.value}
+                        onClick={() => updateConfig({ nut: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Strap Buttons</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.strapButtonOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.strapButtons === opt.value}
+                        onClick={() => updateConfig({ strapButtons: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {options.tremoloCoverOptions?.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tremolo Cover</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.tremoloCoverOptions.map((opt) => (
+                        <OptionButton
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.tremoloCover === opt.value}
+                          onClick={() => updateConfig({ tremoloCover: opt.value })}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {config.bassType === 'vader' && (
+              <>
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Hardware Color</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.vaderHardwareOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.hardware === opt.value}
+                        onClick={() => updateConfig({ hardware: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Knobs</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.vaderKnobsOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.vaderKnobs === opt.value}
+                        onClick={() => updateConfig({ vaderKnobs: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Strap Buttons</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.vaderStrapButtonOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.vaderStrapButtons === opt.value}
+                        onClick={() => updateConfig({ vaderStrapButtons: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Electronics Cavity Cover</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.vaderElectronicsCavityCoverOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.vaderElectronicsCavityCover === opt.value}
+                        onClick={() => updateConfig({ vaderElectronicsCavityCover: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ELECTRONICS OPTIONS */}
+        {activeCategory === 'electronics' && (
+          <div className="p-4 space-y-5">
+            {config.bassType !== 'vader' && (
+              <>
+                {/* Pickup Type, Style, Config - only for non-PB/JB basses */}
+                {config.bassType !== 'pb' && config.bassType !== 'jb' && (
+                  <>
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Type</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {options.pickupOptions?.map((opt) => (
+                          <OptionButton
+                            key={opt.value}
+                            option={opt}
+                            isSelected={config.pickups === opt.value}
+                            onClick={() => updateConfig({ pickups: opt.value })}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Style</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {options.pickupTypeStyleOptions?.map((opt) => (
+                          <OptionButton
+                            key={opt.value}
+                            option={opt}
+                            isSelected={config.pickupTypeStyle === opt.value}
+                            onClick={() => updateConfig({ pickupTypeStyle: opt.value })}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Configuration</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {options.pickupConfigOptions?.map((opt) => (
+                          <OptionButton
+                            key={opt.value}
+                            option={opt}
+                            isSelected={config.pickupConfig === opt.value}
+                            onClick={() => updateConfig({ pickupConfig: opt.value })}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+
+              </>
+            )}
+
+            {options.electronicsTypeOptions?.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Electronics Type</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {options.electronicsTypeOptions?.map((opt) => (
+                    <OptionButton
+                      key={opt.value}
+                      option={opt}
+                      isSelected={config.electronicsType === opt.value}
+                      onClick={() => updateConfig({ electronicsType: opt.value })}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Three-way branch: PB, JB, Other */}
+            {config.bassType === 'pb' && (
+              <>
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bridge Pickup Model</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.pbBridgePickupModelOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.pbBridgePickupModel === opt.value}
+                        onClick={() => updateConfig({ pbBridgePickupModel: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Pickup Model</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.pbNeckPickupModelOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.pbNeckPickupModel === opt.value}
+                        onClick={() => updateConfig({ pbNeckPickupModel: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Color</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.pbPickupColorOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.pbPickupColor === opt.value}
+                        onClick={() => updateConfig({ pbPickupColor: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {config.pbPickupColor === 'custom' && (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup RGB Color</h3>
+                    <RGBColorPicker
+                      value={config.pbPickupColorRgb || '#000000'}
+                      onChange={(color) => updateConfig({ pbPickupColorRgb: color })}
+                      label="Select Pickup RGB Color"
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
+            {config.bassType === 'jb' && (
+              <>
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bridge Pickup Model</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.jbBridgePickupModelOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.jbBridgePickupModel === opt.value}
+                        onClick={() => updateConfig({ jbBridgePickupModel: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Pickup Model</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.jbNeckPickupModelOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.jbNeckPickupModel === opt.value}
+                        onClick={() => updateConfig({ jbNeckPickupModel: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Color</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.jbPickupColorOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.jbPickupColor === opt.value}
+                        onClick={() => updateConfig({ jbPickupColor: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {config.jbPickupColor === 'custom' && (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup RGB Color</h3>
+                    <RGBColorPicker
+                      value={config.jbPickupColorRgb || '#000000'}
+                      onChange={(color) => updateConfig({ jbPickupColorRgb: color })}
+                      label="Select Pickup RGB Color"
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
+            {!['vader', 'pb', 'jb'].includes(config.bassType) && (
+              <>
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Layout</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.pickupConfigurationOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.pickupConfiguration === opt.value}
+                        onClick={() => updateConfig({ pickupConfiguration: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bridge Pickup Model</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.bridgePickupModelOptions?.map((opt) => (
+                      <VisualCard
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.bridgePickupModel === opt.value}
+                        onClick={() => updateConfig({ bridgePickupModel: opt.value })}
+                        previewImage={opt.texture}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Middle Pickup Model</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.middlePickupModelOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.middlePickupModel === opt.value}
+                        onClick={() => updateConfig({ middlePickupModel: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Pickup Model</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.neckPickupModelOptions?.map((opt) => (
+                      <VisualCard
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.neckPickupModel === opt.value}
+                        onClick={() => updateConfig({ neckPickupModel: opt.value })}
+                        previewImage={opt.texture}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Color</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.pickupColorOptions?.map((opt) => (
+                      <VisualCard
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.pickupColor === opt.value}
+                        onClick={() => updateConfig({ pickupColor: opt.value })}
+                        previewImage={opt.texture}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {(config.pickupColor === 'bobbins' || config.pickupColor === 'covers') && (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Color Variant</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.pickupColorVariantOptions?.map((opt) => (
+                        <OptionButton
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.pickupColorVariant === opt.value}
+                          onClick={() => updateConfig({ pickupColorVariant: opt.value })}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {config.pickupColor === 'painted' && (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Painted Color (RGB)</h3>
+                    <RGBColorPicker
+                      value={config.pickupPaintedColor || '#000000'}
+                      onChange={(color) => updateConfig({ pickupPaintedColor: color })}
+                      label="Select Pickup Paint"
+                    />
+                  </div>
+                )}
+
+                {config.pickupColor === 'wooden' && (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Wood Type</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.pickupWoodTypeOptions?.map((opt) => (
+                        <OptionButton
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.pickupWoodType === opt.value}
+                          onClick={() => updateConfig({ pickupWoodType: opt.value })}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pole Piece Color</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.pickupPoleColorOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.pickupPoleColor === opt.value}
+                        onClick={() => updateConfig({ pickupPoleColor: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Controls</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.controlsOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.controls === opt.value}
+                        onClick={() => updateConfig({ controls: opt.value })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {config.bassType === 'vader' && (
+              <>
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Model</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {options.vaderBridgePickupOptions?.map((opt) => (
+                      <OptionButton
+                        key={opt.value}
+                        option={opt}
+                        isSelected={config.vaderBridgePickup === opt.value}
+                        onClick={() => {
+                          const neckMap = {
+                            radiumHumbucker: 'radiumHumbucker',
+                            radiumSingle: 'radiumHumbucker',
+                            singleHbSweetSpot: 'none',
+                            hbAlnico: 'jvaSingleCoil',
+                            fishmanFluence: 'fishmanFluence',
+                          }
+                          updateConfig({
+                            vaderBridgePickup: opt.value,
+                            vaderNeckPickup: neckMap[opt.value] || config.vaderNeckPickup,
+                          })
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {config.vaderBridgePickup !== 'singleHbSweetSpot' && (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Pickup</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.vaderNeckPickupOptions?.map((opt) => (
+                        <OptionButton
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.vaderNeckPickup === opt.value}
+                          onClick={() => updateConfig({ vaderNeckPickup: opt.value })}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {(config.vaderBridgePickup === 'radiumHumbucker' || config.vaderBridgePickup === 'radiumSingle' || config.vaderNeckPickup === 'radiumHumbucker' || config.vaderNeckPickup === 'scpSplitCoil' || config.vaderNeckPickup === 'jvaSingleCoil') && (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Color</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.vaderPickupColorOptions?.map((opt) => (
+                        <OptionButton
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.vaderPickupColor === opt.value}
+                          onClick={() => updateConfig({ vaderPickupColor: opt.value })}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {config.vaderPickupColor === 'custom' && (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup RGB Color</h3>
+                    <RGBColorPicker
+                      value={config.vaderPickupColorRgb || '#000000'}
+                      onChange={(color) => updateConfig({ vaderPickupColorRgb: color })}
+                      label="Select Pickup RGB Color"
+                    />
+                  </div>
+                )}
+              </>
+            )}
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#14b8a6]/10">
+                  <Info className="h-4 w-4 text-[#14b8a6]" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold uppercase tracking-[0.1em] text-white/60">
+                    About Bass Pickups</h4>
+                  <p className="mt-1 text-xs text-white/40 leading-relaxed">
+                    <strong>Split:</strong> Noise-free modern pickup<br />
+                    <strong>Single:</strong> Classic vintage tone<br />
+                    <strong>Humbucker:</strong> Warm, high output<br />
+                    <strong>Active:</strong> Preamp equipped for more power
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+    </section>
+  )
+
+  const summaryPanel = (
+    <section aria-label="Build summary" className="builder-summary-panel flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]">
+      <div className="border-b border-white/10 px-5 py-4 flex-shrink-0">
+        <div className="flex items-center gap-2 text-xs text-[#d4af37]">
+          <Sparkles className="h-3.5 w-3.5" />
+          <span>Currently Editing</span>
+        </div>
+        <h2 className="mt-1 text-lg font-semibold tracking-tight">
+          {getCategoryInfo()?.label || 'Select a Category'}
+        </h2>
+        <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+          {getCategoryInfo()?.tooltip || 'Choose from the left panel'}
+        </p>
+      </div>
+
+      <div className="builder-summary-scroll min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
+        <BuilderConfigurationPanel
+          lineItems={configurationLineItems}
+          configurationTotal={price}
+          loadingPrices={loadingPrices}
+        />
+      </div>
+
+      <BuilderCheckoutSection
+        price={price}
+        basePrice={options.basePrice}
+      />
+
+      <div className="border-t border-white/10 p-4 flex-shrink-0">
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#d4af37]/10">
+              <Info className="h-4 w-4 text-[#d4af37]" />
+            </div>
+            <div>
+              <h4 className="text-xs font-semibold uppercase tracking-[0.1em] text-white/60">
+                Need Help?
+              </h4>
+              <p className="mt-1 text-xs text-white/40 leading-relaxed">
+                Each option is carefully crafted to deliver premium quality. Hover over category names for more details, or{' '}
+                <a
+                  href="https://www.facebook.com/messages/t/CosmosGuitars"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-[#d4af37] hover:text-[#ffe270] transition-colors"
+                >
+                  contact our support team
+                </a>
+                .
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  )
+
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] pt-16 text-[var(--text-light)] relative xl:h-screen xl:overflow-hidden">
+    <div className="builder-page relative flex min-h-screen flex-col bg-[var(--bg-primary)] pt-16 text-[var(--text-light)] 2xl:h-screen 2xl:overflow-hidden">
       <AnimatePresence>
         {toastMessage && (
           <motion.div
             initial={{ opacity: 0, y: -20, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
             exit={{ opacity: 0, y: -20, x: '-50%' }}
-            className="fixed top-24 left-1/2 z-[100] bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] px-6 py-3 rounded-xl font-bold shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center gap-2"
+            className="fixed top-24 left-1/2 z-[100] w-[calc(100%-2rem)] max-w-md bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] px-6 py-3 rounded-xl font-bold shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center gap-2"
           >
-            <CheckCircle className="w-5 h-5" />
+            <CheckCircle className="h-5 w-5 shrink-0" />
             {toastMessage}
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="mx-auto flex h-full max-w-[2000px] flex-col px-3 pb-3 sm:px-4 lg:px-6 lg:pb-6">
+      <div className="builder-workspace mx-auto flex min-h-0 w-full max-w-[2000px] flex-1 flex-col px-3 py-3 sm:px-4 lg:px-6 lg:pb-6">
 
-        <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)_400px]">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 2xl:grid-cols-[340px_minmax(0,1fr)_400px]">
 
           {/* LEFT PANEL - Configuration Categories */}
-          <aside className="min-h-0 rounded-2xl border border-white/10 bg-[var(--bg-primary)] overflow-hidden flex flex-col">
-            <div className="border-b border-white/10 px-4 py-4">
-              <h2 className="text-lg font-semibold tracking-tight">Build Your Bass</h2>
-              <p className="mt-1 text-xs text-white/50">Select a category to customize</p>
-            </div>
-
-            <div className="p-3 flex-shrink-0" ref={categoryDropdownRef}>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all duration-200 border border-[var(--border)] bg-[var(--surface-elevated)]"
-                >
-                  <div
-                    className="flex h-9 w-9 items-center justify-center rounded-lg"
-                    style={{
-                      backgroundColor: CATEGORIES.find(c => c.id === activeCategory)?.color + '20',
-                    }}
-                  >
-                    {(() => {
-                      const CatIcon = CATEGORIES.find(c => c.id === activeCategory)?.icon
-                      return CatIcon ? <CatIcon className="h-4 w-4" style={{ color: CATEGORIES.find(c => c.id === activeCategory)?.color }} /> : null
-                    })()}
-                  </div>
-                  <span className="text-sm font-medium text-[var(--text-light)] flex-1">
-                    {CATEGORIES.find(c => c.id === activeCategory)?.label}
-                  </span>
-                  <ChevronDown className={`h-4 w-4 text-[var(--text-muted)] transition-transform duration-200 ${categoryDropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-
-                {categoryDropdownOpen && (
-                  <div className="absolute top-full left-0 right-0 mt-1 z-50 border border-[var(--border)] rounded-xl bg-[var(--surface-elevated)] shadow-lg overflow-hidden">
-                    <div className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] border-b border-[var(--border)]">
-                      Category
-                    </div>
-                    {CATEGORIES.map((category) => {
-                      const Icon = category.icon
-                      const isActive = activeCategory === category.id
-
-                      return (
-                        <button
-                          key={category.id}
-                          type="button"
-                          onClick={() => {
-                            setActiveCategory(category.id)
-                            setCategoryDropdownOpen(false)
-                          }}
-                          className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-all duration-200 ${isActive
-                              ? 'bg-gradient-to-r from-[#d4af37]/20 border-l-2 border-[#d4af37]'
-                              : 'hover:bg-[var(--surface-dark)] border-l-2 border-transparent'
-                            }`}
-                        >
-                          <div
-                            className="flex h-9 w-9 items-center justify-center rounded-lg"
-                            style={{
-                              backgroundColor: isActive ? `${category.color}20` : 'var(--surface-dark)',
-                            }}
-                          >
-                            <Icon className="h-4 w-4" style={{ color: isActive ? category.color : 'var(--text-muted)' }} />
-                          </div>
-                          <span className={`text-sm font-medium ${isActive ? 'text-[var(--text-light)]' : 'text-[var(--text-muted)]'}`}>
-                            {category.label}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto border-t border-white/10">
-
-              {/* GENERAL OPTIONS */}
-              {activeCategory === 'general' && (
-                <div className="p-4 space-y-5">
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Dexterity</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.dexterityOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.dexterity === opt.value}
-                          onClick={() => updateConfig({ dexterity: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Scale Length</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.scaleLengthOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.scaleLength === opt.value}
-                          onClick={() => updateConfig({ scaleLength: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Case</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.caseOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.case === opt.value}
-                          onClick={() => updateConfig({ case: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeCategory === 'body' && (
-                <div className="p-4 space-y-5">
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bass Model</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.bodyOptions?.map((opt) => (
-                        <VisualCard
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.bassType === opt.value}
-                          onClick={() => updateConfig({ bassType: opt.value })}
-                          previewImage={opt.previewImageUrl}
-                          fallbackImage={opt.bodySrc}
-                          imageHeight="h-24"
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <VaderBodyAccordion
-                    config={config}
-                    updateConfig={updateConfig}
-                    options={options}
-                    isCustomBodyColor={isCustomBodyColor}
-                  />
-                </div>
-              )}
-
-              {/* NECK OPTIONS */}
-              {activeCategory === 'neck' && (
-                <div className="p-4 space-y-5">
-                  <NeckAccordion
-                    config={config}
-                    updateConfig={updateConfig}
-                    options={options}
-                  />
-                </div>
-              )}
-
-              {/* HARDWARE OPTIONS */}
-              {activeCategory === 'hardware' && (
-                <div className="p-4 space-y-5">
-                  {config.bassType !== 'vader' && (
-                    <>
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Hardware Color</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.hardwareOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.hardware === opt.value}
-                              onClick={() => updateConfig({ hardware: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bridge</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.bridgeOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.bridge === opt.value}
-                              onClick={() => updateConfig({ bridge: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      {options.pickguardOptions?.length > 0 && (
-                        <div>
-                          <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickguard</h3>
-                          <div className="grid grid-cols-2 gap-2">
-                            {options.pickguardOptions.map((opt) => (
-                              <VisualCard
-                                key={opt.value}
-                                option={opt}
-                                isSelected={config.pickguard === opt.value}
-                                onClick={() => updateConfig({ pickguard: opt.value })}
-                                previewImage={opt.preview || opt.src || opt.texture}
-                                fit="contain"
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Control Knobs</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {knobOptions.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.knobs === opt.value}
-                              onClick={() => updateConfig({ knobs: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      {options.backplateOptions?.length > 0 && (
-                        <div>
-                          <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Back Plate</h3>
-                          <div className="grid grid-cols-2 gap-2">
-                            {options.backplateOptions.map((opt) => (
-                              <OptionButton
-                                key={opt.value}
-                                option={opt}
-                                isSelected={config.backplate === opt.value}
-                                onClick={() => updateConfig({ backplate: opt.value })}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Nut</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.nutOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.nut === opt.value}
-                              onClick={() => updateConfig({ nut: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Strap Buttons</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.strapButtonOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.strapButtons === opt.value}
-                              onClick={() => updateConfig({ strapButtons: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      {options.tremoloCoverOptions?.length > 0 && (
-                        <div>
-                          <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tremolo Cover</h3>
-                          <div className="grid grid-cols-2 gap-2">
-                            {options.tremoloCoverOptions.map((opt) => (
-                              <OptionButton
-                                key={opt.value}
-                                option={opt}
-                                isSelected={config.tremoloCover === opt.value}
-                                onClick={() => updateConfig({ tremoloCover: opt.value })}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {config.bassType === 'vader' && (
-                    <>
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Hardware Color</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.vaderHardwareOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.hardware === opt.value}
-                              onClick={() => updateConfig({ hardware: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Knobs</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.vaderKnobsOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.vaderKnobs === opt.value}
-                              onClick={() => updateConfig({ vaderKnobs: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Strap Buttons</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.vaderStrapButtonOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.vaderStrapButtons === opt.value}
-                              onClick={() => updateConfig({ vaderStrapButtons: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Electronics Cavity Cover</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.vaderElectronicsCavityCoverOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.vaderElectronicsCavityCover === opt.value}
-                              onClick={() => updateConfig({ vaderElectronicsCavityCover: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* ELECTRONICS OPTIONS */}
-              {activeCategory === 'electronics' && (
-                <div className="p-4 space-y-5">
-                  {config.bassType !== 'vader' && (
-                    <>
-                      {/* Pickup Type, Style, Config - only for non-PB/JB basses */}
-                      {config.bassType !== 'pb' && config.bassType !== 'jb' && (
-                        <>
-                          <div>
-                            <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Type</h3>
-                            <div className="grid grid-cols-2 gap-2">
-                              {options.pickupOptions?.map((opt) => (
-                                <OptionButton
-                                  key={opt.value}
-                                  option={opt}
-                                  isSelected={config.pickups === opt.value}
-                                  onClick={() => updateConfig({ pickups: opt.value })}
-                                />
-                              ))}
-                            </div>
-                          </div>
-
-                          <div>
-                            <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Style</h3>
-                            <div className="grid grid-cols-2 gap-2">
-                              {options.pickupTypeStyleOptions?.map((opt) => (
-                                <OptionButton
-                                  key={opt.value}
-                                  option={opt}
-                                  isSelected={config.pickupTypeStyle === opt.value}
-                                  onClick={() => updateConfig({ pickupTypeStyle: opt.value })}
-                                />
-                              ))}
-                            </div>
-                          </div>
-
-                          <div>
-                            <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Configuration</h3>
-                            <div className="grid grid-cols-2 gap-2">
-                              {options.pickupConfigOptions?.map((opt) => (
-                                <OptionButton
-                                  key={opt.value}
-                                  option={opt}
-                                  isSelected={config.pickupConfig === opt.value}
-                                  onClick={() => updateConfig({ pickupConfig: opt.value })}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-
-                    </>
-                  )}
-
-                  {options.electronicsTypeOptions?.length > 0 && (
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Electronics Type</h3>
-                      <div className="grid grid-cols-2 gap-2">
-                        {options.electronicsTypeOptions?.map((opt) => (
-                          <OptionButton
-                            key={opt.value}
-                            option={opt}
-                            isSelected={config.electronicsType === opt.value}
-                            onClick={() => updateConfig({ electronicsType: opt.value })}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Three-way branch: PB, JB, Other */}
-                  {config.bassType === 'pb' && (
-                    <>
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bridge Pickup Model</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.pbBridgePickupModelOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.pbBridgePickupModel === opt.value}
-                              onClick={() => updateConfig({ pbBridgePickupModel: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Pickup Model</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.pbNeckPickupModelOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.pbNeckPickupModel === opt.value}
-                              onClick={() => updateConfig({ pbNeckPickupModel: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Color</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.pbPickupColorOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.pbPickupColor === opt.value}
-                              onClick={() => updateConfig({ pbPickupColor: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      {config.pbPickupColor === 'custom' && (
-                        <div>
-                          <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup RGB Color</h3>
-                          <RGBColorPicker
-                            value={config.pbPickupColorRgb || '#000000'}
-                            onChange={(color) => updateConfig({ pbPickupColorRgb: color })}
-                            label="Select Pickup RGB Color"
-                          />
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {config.bassType === 'jb' && (
-                    <>
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bridge Pickup Model</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.jbBridgePickupModelOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.jbBridgePickupModel === opt.value}
-                              onClick={() => updateConfig({ jbBridgePickupModel: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Pickup Model</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.jbNeckPickupModelOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.jbNeckPickupModel === opt.value}
-                              onClick={() => updateConfig({ jbNeckPickupModel: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Color</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.jbPickupColorOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.jbPickupColor === opt.value}
-                              onClick={() => updateConfig({ jbPickupColor: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      {config.jbPickupColor === 'custom' && (
-                        <div>
-                          <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup RGB Color</h3>
-                          <RGBColorPicker
-                            value={config.jbPickupColorRgb || '#000000'}
-                            onChange={(color) => updateConfig({ jbPickupColorRgb: color })}
-                            label="Select Pickup RGB Color"
-                          />
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {!['vader', 'pb', 'jb'].includes(config.bassType) && (
-                    <>
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Layout</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.pickupConfigurationOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.pickupConfiguration === opt.value}
-                              onClick={() => updateConfig({ pickupConfiguration: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bridge Pickup Model</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.bridgePickupModelOptions?.map((opt) => (
-                            <VisualCard
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.bridgePickupModel === opt.value}
-                              onClick={() => updateConfig({ bridgePickupModel: opt.value })}
-                              previewImage={opt.texture}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Middle Pickup Model</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.middlePickupModelOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.middlePickupModel === opt.value}
-                              onClick={() => updateConfig({ middlePickupModel: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Pickup Model</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.neckPickupModelOptions?.map((opt) => (
-                            <VisualCard
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.neckPickupModel === opt.value}
-                              onClick={() => updateConfig({ neckPickupModel: opt.value })}
-                              previewImage={opt.texture}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Color</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.pickupColorOptions?.map((opt) => (
-                            <VisualCard
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.pickupColor === opt.value}
-                              onClick={() => updateConfig({ pickupColor: opt.value })}
-                              previewImage={opt.texture}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      {(config.pickupColor === 'bobbins' || config.pickupColor === 'covers') && (
-                        <div>
-                          <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Color Variant</h3>
-                          <div className="grid grid-cols-2 gap-2">
-                            {options.pickupColorVariantOptions?.map((opt) => (
-                              <OptionButton
-                                key={opt.value}
-                                option={opt}
-                                isSelected={config.pickupColorVariant === opt.value}
-                                onClick={() => updateConfig({ pickupColorVariant: opt.value })}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {config.pickupColor === 'painted' && (
-                        <div>
-                          <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Painted Color (RGB)</h3>
-                          <RGBColorPicker
-                            value={config.pickupPaintedColor || '#000000'}
-                            onChange={(color) => updateConfig({ pickupPaintedColor: color })}
-                            label="Select Pickup Paint"
-                          />
-                        </div>
-                      )}
-
-                      {config.pickupColor === 'wooden' && (
-                        <div>
-                          <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Wood Type</h3>
-                          <div className="grid grid-cols-2 gap-2">
-                            {options.pickupWoodTypeOptions?.map((opt) => (
-                              <OptionButton
-                                key={opt.value}
-                                option={opt}
-                                isSelected={config.pickupWoodType === opt.value}
-                                onClick={() => updateConfig({ pickupWoodType: opt.value })}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pole Piece Color</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.pickupPoleColorOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.pickupPoleColor === opt.value}
-                              onClick={() => updateConfig({ pickupPoleColor: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Controls</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.controlsOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.controls === opt.value}
-                              onClick={() => updateConfig({ controls: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {config.bassType === 'vader' && (
-                    <>
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Model</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.vaderBridgePickupOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.vaderBridgePickup === opt.value}
-                              onClick={() => {
-                                const neckMap = {
-                                  radiumHumbucker: 'radiumHumbucker',
-                                  radiumSingle: 'radiumHumbucker',
-                                  singleHbSweetSpot: 'none',
-                                  hbAlnico: 'jvaSingleCoil',
-                                  fishmanFluence: 'fishmanFluence',
-                                }
-                                updateConfig({
-                                  vaderBridgePickup: opt.value,
-                                  vaderNeckPickup: neckMap[opt.value] || config.vaderNeckPickup,
-                                })
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      {config.vaderBridgePickup !== 'singleHbSweetSpot' && (
-                        <div>
-                          <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Pickup</h3>
-                          <div className="grid grid-cols-2 gap-2">
-                            {options.vaderNeckPickupOptions?.map((opt) => (
-                              <OptionButton
-                                key={opt.value}
-                                option={opt}
-                                isSelected={config.vaderNeckPickup === opt.value}
-                                onClick={() => updateConfig({ vaderNeckPickup: opt.value })}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {(config.vaderBridgePickup === 'radiumHumbucker' || config.vaderBridgePickup === 'radiumSingle' || config.vaderNeckPickup === 'radiumHumbucker' || config.vaderNeckPickup === 'scpSplitCoil' || config.vaderNeckPickup === 'jvaSingleCoil') && (
-                        <div>
-                          <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Color</h3>
-                          <div className="grid grid-cols-2 gap-2">
-                            {options.vaderPickupColorOptions?.map((opt) => (
-                              <OptionButton
-                                key={opt.value}
-                                option={opt}
-                                isSelected={config.vaderPickupColor === opt.value}
-                                onClick={() => updateConfig({ vaderPickupColor: opt.value })}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {config.vaderPickupColor === 'custom' && (
-                        <div>
-                          <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup RGB Color</h3>
-                          <RGBColorPicker
-                            value={config.vaderPickupColorRgb || '#000000'}
-                            onChange={(color) => updateConfig({ vaderPickupColorRgb: color })}
-                            label="Select Pickup RGB Color"
-                          />
-                        </div>
-                      )}
-                    </>
-                  )}
-                  <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#14b8a6]/10">
-                        <Info className="h-4 w-4 text-[#14b8a6]" />
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-semibold uppercase tracking-[0.1em] text-white/60">
-                          About Bass Pickups</h4>
-                        <p className="mt-1 text-xs text-white/40 leading-relaxed">
-                          <strong>Split:</strong> Noise-free modern pickup<br />
-                          <strong>Single:</strong> Classic vintage tone<br />
-                          <strong>Humbucker:</strong> Warm, high output<br />
-                          <strong>Active:</strong> Preamp equipped for more power
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </aside>
+          {isDesktopBuilder && (
+            <aside aria-label="Customization options" className="hidden min-h-0 min-w-0 flex-col 2xl:flex">
+              {optionsPanel}
+            </aside>
+          )}
 
 
           {/* CENTER - Bass Preview */}
-          <main className="min-h-0 flex flex-col">
-            <div ref={previewRef} className="relative flex-1 min-h-[320px] rounded-2xl border border-white/10 bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
+          <main aria-label="Instrument preview" className="relative flex min-h-0 min-w-0 flex-col 2xl:overflow-y-auto">
+            {!isDesktopBuilder && <BuilderConfiguratorDrawer optionsPanel={optionsPanel} summaryPanel={summaryPanel} price={price} loadingPrices={loadingPrices} />}
+            <div ref={previewRef} data-builder-preview-card className="builder-preview-card relative h-[320px] min-h-[320px] shrink-0 rounded-2xl sm:h-[380px] md:h-auto md:flex-1 md:min-h-[380px] 2xl:min-h-[320px] border border-white/10 bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute -top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-gradient-radial from-[#d4af37]/10 via-transparent to-transparent opacity-60" />
                 <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-gradient-radial from-white/5 via-transparent to-transparent rounded-full" />
@@ -2349,7 +2420,8 @@ export function BassCustomizePage() {
 
               <div
                 ref={previewViewportRef}
-                className={`relative h-full flex items-center justify-center p-6 ${zoomLevel > 1 ? 'cursor-grab' : 'cursor-default'} ${isDraggingPreview ? 'cursor-grabbing' : ''}`}
+                className={`builder-preview-viewport relative flex h-full items-center justify-center px-3 py-16 sm:px-6 ${zoomLevel > 1 ? 'cursor-grab' : 'cursor-default'} ${isDraggingPreview ? 'cursor-grabbing' : ''}`}
+                style={{ containerType: 'size', touchAction: zoomLevel > 1 ? 'none' : 'pan-y' }}
                 onMouseDown={(e) => beginDrag(e.clientX, e.clientY)}
                 onMouseMove={(e) => {
                   if (isDraggingSticker) {
@@ -2384,10 +2456,15 @@ export function BassCustomizePage() {
                   endDrag()
                   endStickerDrag()
                 }}
+                onTouchCancel={() => {
+                  endDrag()
+                  endStickerDrag()
+                }}
               >
                 <div
-                  className="relative w-full max-w-[1100px] transition-transform duration-200 ease-out"
+                  className="builder-preview-stage relative w-full max-w-[1100px] transition-transform duration-200 ease-out"
                   style={{
+                    maxWidth: 'min(1100px, calc(100cqh * 16 / 7))',
                     transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
                     transformOrigin: 'center center',
                     willChange: 'transform',
@@ -2409,11 +2486,12 @@ export function BassCustomizePage() {
 
               <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-8 bg-gradient-to-b from-transparent to-black/40 blur-xl" />
 
-              <div className="absolute top-4 left-4 z-10 flex gap-2">
+              <div className="builder-view-controls absolute left-3 top-3 z-10 flex gap-2 sm:left-4 sm:top-4">
                 <button
                   type="button"
                   onClick={() => setView('front')}
-                  className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all duration-200 ${view === 'front'
+                  aria-pressed={view === 'front'}
+                  className={`min-h-[44px] rounded-lg px-3 py-2 text-xs font-semibold sm:px-4 transition-all duration-200 ${view === 'front'
                       ? 'bg-[#d4af37] text-black'
                       : 'bg-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]'
                     }`}
@@ -2423,7 +2501,8 @@ export function BassCustomizePage() {
                 <button
                   type="button"
                   onClick={() => setView('rear')}
-                  className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all duration-200 ${view === 'rear'
+                  aria-pressed={view === 'rear'}
+                  className={`min-h-[44px] rounded-lg px-3 py-2 text-xs font-semibold sm:px-4 transition-all duration-200 ${view === 'rear'
                       ? 'bg-[#d4af37] text-black'
                       : 'bg-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]'
                     }`}
@@ -2432,12 +2511,12 @@ export function BassCustomizePage() {
                 </button>
               </div>
 
-              <div className="absolute bottom-4 right-4 flex items-center gap-2 rounded-lg border border-white/10 bg-black/35 p-1.5 backdrop-blur-sm">
+              <div className="builder-zoom-controls absolute bottom-3 right-3 z-10 flex items-center gap-1 sm:bottom-4 sm:right-4 sm:gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-1.5 backdrop-blur-sm">
                 <button
                   type="button"
                   onClick={handleZoomOut}
                   disabled={zoomLevel <= 0.7}
-                  className="rounded-md bg-[var(--border)] px-2.5 py-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="min-h-[44px] min-w-[44px] rounded-md bg-[var(--border)] px-2.5 py-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
                   aria-label="Zoom out"
                   title="Zoom out"
                 >
@@ -2446,7 +2525,7 @@ export function BassCustomizePage() {
                 <button
                   type="button"
                   onClick={handleZoomReset}
-                  className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10"
+                  className="min-h-[44px] min-w-[44px] rounded-md px-2.5 py-1.5 text-xs font-semibold text-[var(--text-light)] transition-colors hover:bg-[var(--surface-elevated)]"
                   aria-label="Reset zoom"
                   title="Reset zoom"
                 >
@@ -2456,7 +2535,7 @@ export function BassCustomizePage() {
                   type="button"
                   onClick={handleZoomIn}
                   disabled={zoomLevel >= 2}
-                  className="rounded-md bg-[var(--border)] px-2.5 py-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="min-h-[44px] min-w-[44px] rounded-md bg-[var(--border)] px-2.5 py-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
                   aria-label="Zoom in"
                   title="Zoom in"
                 >
@@ -2465,7 +2544,7 @@ export function BassCustomizePage() {
               </div>
 
               {/* Saved status */}
-              <div className="absolute bottom-4 left-4 z-10">
+              <div className="builder-preview-status absolute bottom-20 left-3 z-10 sm:bottom-4 sm:left-4">
                 <BuilderSavedBadge
                   hasUnsavedChanges={hasUnsavedChanges}
                   hasBeenSaved={hasBeenSaved && isAuthenticated}
@@ -2473,117 +2552,118 @@ export function BassCustomizePage() {
                 />
               </div>
 
-              <input
-                ref={stickerFileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleStickerUpload}
-                className="hidden"
-              />
-
-              <StickerPanel
-                stickerCount={stickers.length}
-                maxStickers={MAX_STICKERS}
-                onAddClick={() => stickerFileInputRef.current?.click()}
-                addDisabled={stickers.length >= MAX_STICKERS}
-              >
-                {selectedSticker && (selectedSticker.side || 'front') === view && (
-                  <div className="space-y-2 rounded-md border border-white/10 bg-black/25 p-2">
-                    <div className="grid grid-cols-4 gap-1.5">
-                      <button type="button" onClick={() => moveLayer('back')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Back</button>
-                      <button type="button" onClick={() => moveLayer('down')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Down</button>
-                      <button type="button" onClick={() => moveLayer('up')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Up</button>
-                      <button type="button" onClick={() => moveLayer('front')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Front</button>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => updateSelectedSticker((prev) => ({ ...prev, size: Math.max(6, prev.size - 2) }))}
-                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
-                        title="Shrink sticker"
-                      >
-                        -
-                      </button>
-                      <span className="text-[10px] text-white/70 min-w-10 text-center">{Math.round(selectedSticker.size)}%</span>
-                      <button
-                        type="button"
-                        onClick={() => updateSelectedSticker((prev) => ({ ...prev, size: Math.min(50, prev.size + 2) }))}
-                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
-                        title="Enlarge sticker"
-                      >
-                        +
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => updateSelectedSticker((prev) => ({ ...prev, rotation: (prev.rotation - 15 + 360) % 360 }))}
-                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
-                        title="Rotate left"
-                      >
-                        -15°
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateSelectedSticker((prev) => ({ ...prev, rotation: (prev.rotation + 15) % 360 }))}
-                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
-                        title="Rotate right"
-                      >
-                        +15°
-                      </button>
-                    </div>
-
-                    <input
-                      type="range"
-                      min="0"
-                      max="359"
-                      value={selectedSticker.rotation || 0}
-                      onChange={(e) => updateSelectedSticker({ rotation: Number(e.target.value) })}
-                      className="w-full accent-[#d4af37]"
-                    />
-
-                    <div className="flex items-center justify-between gap-1.5">
-                      <button
-                        type="button"
-                        onClick={duplicateSelectedSticker}
-                        disabled={currentViewStickers.length >= MAX_STICKERS}
-                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-[10px] font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        Duplicate
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeStickerById(selectedSticker.id)}
-                        className="rounded-md bg-red-500/20 px-2 py-1.5 text-red-300 hover:bg-red-500/30"
-                        title="Remove sticker"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {currentViewStickers.length > 0 && (
-                  <div className="max-h-24 overflow-y-auto space-y-1 rounded-md border border-white/10 bg-black/20 p-1.5">
-                    {currentViewStickers.map((stickerItem, index) => (
-                      <button
-                        key={stickerItem.id}
-                        type="button"
-                        onClick={() => setSelectedStickerId(stickerItem.id)}
-                        className={`w-full flex items-center gap-2 rounded px-1.5 py-1 text-left text-[10px] ${selectedStickerId === stickerItem.id
-                            ? 'bg-[#d4af37]/20 text-[#d4af37]'
-                            : 'bg-white/5 text-white/70 hover:bg-white/10'
-                          }`}
-                      >
-                        <img src={stickerItem.src} alt={`Sticker ${index + 1}`} className="h-5 w-5 rounded object-cover" />
-                        <span>{view === 'front' ? 'Front' : 'Rear'} Sticker {index + 1}</span>
-                        <span className="ml-auto">z:{index + 1}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </StickerPanel>
             </div>
+
+            <input
+              ref={stickerFileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleStickerUpload}
+              className="hidden"
+            />
+
+            <StickerPanel
+              stickerCount={stickers.length}
+              maxStickers={MAX_STICKERS}
+              onAddClick={() => stickerFileInputRef.current?.click()}
+              addDisabled={stickers.length >= MAX_STICKERS}
+            >
+              {selectedSticker && (selectedSticker.side || 'front') === view && (
+                <div className="space-y-2 rounded-md border border-white/10 bg-black/25 p-2">
+                  <div className="grid grid-cols-4 gap-1.5">
+                    <button type="button" onClick={() => moveLayer('back')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Back</button>
+                    <button type="button" onClick={() => moveLayer('down')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Down</button>
+                    <button type="button" onClick={() => moveLayer('up')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Up</button>
+                    <button type="button" onClick={() => moveLayer('front')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Front</button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => updateSelectedSticker((prev) => ({ ...prev, size: Math.max(6, prev.size - 2) }))}
+                      className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                      title="Shrink sticker"
+                    >
+                      -
+                    </button>
+                    <span className="text-[10px] text-white/70 min-w-10 text-center">{Math.round(selectedSticker.size)}%</span>
+                    <button
+                      type="button"
+                      onClick={() => updateSelectedSticker((prev) => ({ ...prev, size: Math.min(50, prev.size + 2) }))}
+                      className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                      title="Enlarge sticker"
+                    >
+                      +
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => updateSelectedSticker((prev) => ({ ...prev, rotation: (prev.rotation - 15 + 360) % 360 }))}
+                      className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                      title="Rotate left"
+                    >
+                      -15°
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateSelectedSticker((prev) => ({ ...prev, rotation: (prev.rotation + 15) % 360 }))}
+                      className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                      title="Rotate right"
+                    >
+                      +15°
+                    </button>
+                  </div>
+
+                  <input
+                    type="range"
+                    min="0"
+                    max="359"
+                    value={selectedSticker.rotation || 0}
+                    onChange={(e) => updateSelectedSticker({ rotation: Number(e.target.value) })}
+                    className="w-full accent-[#d4af37]"
+                  />
+
+                  <div className="flex items-center justify-between gap-1.5">
+                    <button
+                      type="button"
+                      onClick={duplicateSelectedSticker}
+                      disabled={currentViewStickers.length >= MAX_STICKERS}
+                      className="rounded-md bg-[var(--border)] px-2 py-1.5 text-[10px] font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Duplicate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeStickerById(selectedSticker.id)}
+                      className="rounded-md bg-red-500/20 px-2 py-1.5 text-red-300 hover:bg-red-500/30"
+                      title="Remove sticker"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {currentViewStickers.length > 0 && (
+                <div className="max-h-24 overflow-y-auto space-y-1 rounded-md border border-white/10 bg-black/20 p-1.5">
+                  {currentViewStickers.map((stickerItem, index) => (
+                    <button
+                      key={stickerItem.id}
+                      type="button"
+                      onClick={() => setSelectedStickerId(stickerItem.id)}
+                      className={`w-full flex items-center gap-2 rounded px-1.5 py-1 text-left text-[10px] ${selectedStickerId === stickerItem.id
+                          ? 'bg-[#d4af37]/20 text-[#d4af37]'
+                          : 'bg-white/5 text-white/70 hover:bg-white/10'
+                        }`}
+                    >
+                      <img src={stickerItem.src} alt={`Sticker ${index + 1}`} className="h-5 w-5 rounded object-cover" />
+                      <span>{view === 'front' ? 'Front' : 'Rear'} Sticker {index + 1}</span>
+                      <span className="ml-auto">z:{index + 1}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </StickerPanel>
 
             <BuilderActionBar
               onReset={resetConfig}
@@ -2594,7 +2674,7 @@ export function BassCustomizePage() {
             <button
               type="button"
               onClick={handleSaveImage}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-transparent px-3 py-1.5 text-xs font-medium text-white/40 transition-colors hover:border-[var(--border)] hover:text-[var(--text-muted)]"
+              className="builder-export-button mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-transparent px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:border-[var(--border)] hover:text-[var(--text-muted)]"
             >
               <Image className="h-3.5 w-3.5" />
               Save preview image
@@ -2602,60 +2682,11 @@ export function BassCustomizePage() {
           </main>
 
           {/* RIGHT PANEL - Summary & Actions */}
-          <aside className="min-h-0 rounded-2xl border border-white/10 bg-[var(--bg-primary)] overflow-hidden flex flex-col">
-            <div className="border-b border-white/10 px-5 py-4 flex-shrink-0">
-              <div className="flex items-center gap-2 text-xs text-[#d4af37]">
-                <Sparkles className="h-3.5 w-3.5" />
-                <span>Currently Editing</span>
-              </div>
-              <h2 className="mt-1 text-lg font-semibold tracking-tight">
-                {getCategoryInfo()?.label || 'Select a Category'}
-              </h2>
-              <p className="mt-0.5 text-xs text-white/50">
-                {getCategoryInfo()?.tooltip || 'Choose from the left panel'}
-              </p>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <BuilderConfigurationPanel
-                lineItems={configurationLineItems}
-                configurationTotal={price}
-                loadingPrices={loadingPrices}
-              />
-            </div>
-
-            <BuilderCheckoutSection
-              price={price}
-              basePrice={options.basePrice}
-            />
-
-            <div className="border-t border-white/10 p-4 flex-shrink-0">
-              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#d4af37]/10">
-                    <Info className="h-4 w-4 text-[#d4af37]" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-semibold uppercase tracking-[0.1em] text-white/60">
-                      Need Help?
-                    </h4>
-                    <p className="mt-1 text-xs text-white/40 leading-relaxed">
-                      Each option is carefully crafted to deliver premium quality. Hover over category names for more details, or{' '}
-                      <a
-                        href="https://www.facebook.com/messages/t/CosmosGuitars"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-semibold text-[#d4af37] hover:text-[#ffe270] transition-colors"
-                      >
-                        contact our support team
-                      </a>
-                      .
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </aside>
+          {isDesktopBuilder && (
+            <aside aria-label="Build summary" className="hidden min-h-0 min-w-0 flex-col 2xl:flex">
+              {summaryPanel}
+            </aside>
+          )}
         </div>
       </div>
 
@@ -2689,11 +2720,11 @@ export function BassCustomizePage() {
             {/* Header */}
             <div className="border-b border-white/10 px-6 py-4 flex-shrink-0">
               <h3 className="text-lg font-semibold">Load Saved Build</h3>
-              <p className="mt-1 text-xs text-white/50">Select a previous build to continue editing</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Select a previous build to continue editing</p>
             </div>
 
             {/* Builds List */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-3">
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 space-y-3 sm:p-6">
               {savedBuilds.length === 0 ? (
                 <div className="flex items-center justify-center py-8 text-white/50">
                   <p>No saved builds yet. Create one using the Save Build button!</p>
@@ -2709,10 +2740,10 @@ export function BassCustomizePage() {
                       className="group relative rounded-xl border border-white/10 bg-white/[0.02] p-4 hover:bg-white/[0.04] transition-colors duration-200 cursor-pointer"
                       onClick={() => handleLoadBuild(build.id)}
                     >
-                      <div className="flex items-start justify-between gap-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap sm:gap-4">
                         <div className="flex-1 min-w-0">
                           <h4 className="font-medium truncate">{build.name}</h4>
-                          <div className="mt-1 space-y-1 text-xs text-white/50">
+                          <div className="mt-1 space-y-1 text-xs text-[var(--text-muted)]">
                             <p>{build.config?.bassType || 'Bass'} / {build.config?.bodyWood || 'Custom body'} / {build.config?.pickups || 'Custom pickups'}</p>
                             {savedDate && <p>Saved: {new Date(savedDate).toLocaleDateString('en-PH')}</p>}
                           </div>
@@ -2742,14 +2773,14 @@ export function BassCustomizePage() {
               <button
                 type="button"
                 onClick={handleCreateNewBuild}
-                className="flex-1 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-[var(--text-dark)] transition-all hover:brightness-110"
+                className="min-w-0 flex-1 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-[var(--text-dark)] transition-all hover:brightness-110"
               >
                 Create New Build
               </button>
               <button
                 type="button"
                 onClick={() => setShowLoadModal(false)}
-                className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
                 style={{ color: 'var(--text-muted)' }}
               >
                 Cancel
@@ -2759,8 +2790,8 @@ export function BassCustomizePage() {
         </div>
       )}
 
-      <p className="mt-2 text-center text-[10px] uppercase tracking-[0.15em] text-white/30">
-        Graphic representation only. Actual product may differ slightly due to natural wood variations.
+      <p className="builder-disclaimer shrink-0 px-4 pb-3 text-center text-[10px] uppercase tracking-[0.15em] text-[var(--text-muted)]">
+        Graphic representation only. Actual product may differ.
       </p>
 
       {showUnsavedModal && (
@@ -2770,11 +2801,11 @@ export function BassCustomizePage() {
             <p className="text-sm text-[var(--text-muted)]">
               You have unsaved changes. Please save your build before leaving this page.
             </p>
-            <div className="mt-6 flex gap-3">
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
                 onClick={handleStayOnPage}
-                className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/5 transition-colors"
+                className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/5 transition-colors"
               >
                 Stay
               </button>
@@ -2783,14 +2814,14 @@ export function BassCustomizePage() {
                 onClick={() => {
                   handleSaveAndLeave()
                 }}
-                className="flex-1 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-bold text-[var(--text-dark)]"
+                className="min-w-0 flex-1 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-bold text-[var(--text-dark)]"
               >
                 Save Build
               </button>
               <button
                 type="button"
                 onClick={handleConfirmLeave}
-                className="flex-1 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-300 hover:bg-red-500/20 transition-colors"
+                className="min-w-0 flex-1 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-300 hover:bg-red-500/20 transition-colors"
               >
                 Leave Anyway
               </button>

@@ -952,12 +952,12 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, bodyWoodImag
       {/* Main guitar container */}
       <div className="relative mx-auto w-full">
         {/* Guitar display area */}
-        <div className="relative overflow-hidden rounded-xl">
+        <div className="instrument-preview-frame relative overflow-hidden rounded-xl">
           {/* Background gradient for depth */}
 
           
           {/* Guitar image */}
-          <div className="relative flex items-center justify-center py-8">
+          <div className="instrument-preview-canvas relative flex items-center justify-center py-8">
             <div
               data-export-stage="true"
               ref={stageRef}
