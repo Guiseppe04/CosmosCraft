@@ -916,7 +916,7 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider">Daily Revenue Trend</h3>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">{REPORT_TABS.find(tab => tab.key === reportType)?.label} ? {reportType === "refunds" ? "daily refunds and adjustments" : "daily revenue"}</p>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">{REPORT_TABS.find(tab => tab.key === reportType)?.label} {reportType === "refunds" ? "daily refunds and adjustments" : "daily revenue"}</p>
             </div>
             <button
               onClick={() => setShowTrendChart((v) => !v)}
