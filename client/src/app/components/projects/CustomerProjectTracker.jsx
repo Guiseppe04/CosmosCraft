@@ -636,8 +636,6 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   const [userAddresses, setUserAddresses] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [fulfillmentMethod, setFulfillmentMethod] = useState('pickup');
-  const [pickupDate, setPickupDate] = useState('');
-  const [pickupTime, setPickupTime] = useState('');
   const [fulfillmentNotes, setFulfillmentNotes] = useState('');
   const [fulfillmentSaving, setFulfillmentSaving] = useState(false);
   const [fulfillmentMessage, setFulfillmentMessage] = useState(null);
@@ -874,19 +872,12 @@ export default function CustomerProjectTracker({ projectId, projectName, project
       }
     }
 
-    if (fulfillmentMethod === 'pickup' && (pickupDate || pickupTime) && (!pickupDate || !pickupTime)) {
-      setFulfillmentMessage({ type: 'error', text: 'Choose both a pickup date and time if scheduling an appointment.' });
-      return;
-    }
-
     try {
       setFulfillmentSaving(true);
       setFulfillmentMessage(null);
       await adminApi.submitProjectFulfillment(projectId, {
         method: fulfillmentMethod,
-        notes: fulfillmentNotes,
         delivery_address_id: selectedAddressId || undefined,
-        ...(fulfillmentMethod === 'pickup' && pickupDate && pickupTime ? { scheduled_at: `${pickupDate}T${pickupTime}:00` } : {}),
       });
       setFulfillmentMessage({
         type: 'success',
@@ -1019,7 +1010,6 @@ export default function CustomerProjectTracker({ projectId, projectName, project
     })[character]);
     const customerName = [fulfillmentData.first_name, fulfillmentData.last_name].filter(Boolean).join(' ') || 'Customer';
     const projectTitle = fulfillmentData.project_title || projectName || hierarchy?.name || hierarchy?.title || 'Custom Guitar Build';
-    const pickupSchedule = formatDate(fulfillmentData.pickup_scheduled_at) || 'To be arranged with the workshop';
     const generatedDate = formatDate(new Date()) || '';
     const storageFeeNotice = pickupStorageFee > 0
       ? `If you do not collect the guitar by the scheduled pickup time, a storage fee of ${formatCurrency(pickupStorageFee)} per day will be charged.`
@@ -1047,8 +1037,6 @@ export default function CustomerProjectTracker({ projectId, projectName, project
           <div><dt>Email</dt><dd>${escapeHtml(fulfillmentData.email || '—')}</dd></div>
           <div><dt>Phone</dt><dd>${escapeHtml(fulfillmentData.phone || '—')}</dd></div>
           <div><dt>Pickup location</dt><dd>${escapeHtml(pickupBranch.address)}</dd></div>
-          <div><dt>Pickup schedule</dt><dd>${escapeHtml(pickupSchedule)}</dd></div>
-          <div><dt>Fulfillment status</dt><dd>${escapeHtml(formatLabel(fulfillmentData.status))}</dd></div>
         </dl>
         <div class="notice">Bring this receipt and a valid government-issued photo ID. The name on your ID must match the claimant name printed above. Staff will verify the ID before releasing the guitar. ${escapeHtml(storageFeeNotice)}</div>
         <div class="signatures">
@@ -1261,9 +1249,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
         const selectedAddress = userAddresses.find((a) => a.address_id === selectedAddressId) || userAddresses[0] || fulfillmentData?.delivery_address_snapshot || null;
         const scheduledPickup = fulfillmentData?.pickup_scheduled_at
           ? formatDate(fulfillmentData.pickup_scheduled_at)
-          : pickupDate
-            ? `${pickupDate}${pickupTime ? ` at ${pickupTime}` : ''}`
-            : null;
+          : null;
 
         return (
           <div className="rounded-3xl border border-[var(--gold-primary)]/40 bg-[var(--surface-dark)] p-6 shadow-2xl space-y-6">
@@ -1541,7 +1527,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                       <p className="font-bold text-white">Pickup at Shop</p>
                     </div>
                     <p className="mt-2 text-xs text-[var(--text-muted)] leading-relaxed">
-                      Collect your custom guitar directly from our workshop. Book an optional pickup time.
+                      Collect your custom guitar directly from our workshop.
                     </p>
                   </button>
 
@@ -1559,7 +1545,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                       <p className="font-bold text-white">Shop Delivery</p>
                     </div>
                     <p className="mt-2 text-xs text-[var(--text-muted)] leading-relaxed">
-                      We will safely ship your custom guitar to your saved Luzon delivery address.
+                      We will safely ship your custom guitar to your saved delivery address.
                     </p>
                   </button>
                 </div>
@@ -1614,38 +1600,6 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                     )}
                   </div>
                 )}
-
-                {/* Optional pickup scheduling */}
-                {fulfillmentMethod === 'pickup' && (
-                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 space-y-2">
-                    <span className="text-xs uppercase tracking-wider font-bold text-[var(--text-muted)]">
-                      Preferred Pickup Schedule (Optional)
-                    </span>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <input
-                        type="date"
-                        value={pickupDate}
-                        onChange={(e) => setPickupDate(e.target.value)}
-                        className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)]"
-                      />
-                      <input
-                        type="time"
-                        value={pickupTime}
-                        onChange={(e) => setPickupTime(e.target.value)}
-                        className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)]"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Optional notes */}
-                <textarea
-                  value={fulfillmentNotes}
-                  onChange={(e) => setFulfillmentNotes(e.target.value)}
-                  rows={2}
-                  placeholder="Optional delivery or pickup notes for our luthier team"
-                  className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)]"
-                />
 
                 {fulfillmentMessage && (
                   <p className={`text-sm font-semibold ${fulfillmentMessage.type === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>
