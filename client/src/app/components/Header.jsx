@@ -18,6 +18,7 @@ import { ThemeToggle } from './ThemeToggle.jsx'
 import { ConfirmModal } from './ui/ConfirmModal.jsx'
 import { GUITAR_TYPE_OPTIONS } from '../lib/guitarBuilderData.js'
 import { hasRole } from '../utils/roles.js'
+import { scrollToHomeSection } from '../utils/sectionNavigation.js'
 
 export function Header() {
   const location = useLocation()
@@ -168,12 +169,6 @@ export function Header() {
     return location.pathname === to
   }
 
-  const scrollToSection = (id) => {
-    const target = document.getElementById(id)
-    if (!target) return
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
   const handleNavClick = (event, to) => {
     if (to === '/') {
       setActiveHomeSection('')
@@ -192,14 +187,12 @@ export function Header() {
     setMobileMenuOpen(false)
 
     if (location.pathname === '/') {
-      scrollToSection(id)
+      if (location.hash === `#${id}`) requestAnimationFrame(() => scrollToHomeSection(id))
+      else navigate(to)
       return
     }
 
-    navigate('/')
-    window.setTimeout(() => {
-      scrollToSection(id)
-    }, 80)
+    navigate(to)
   }
 
   const handleConfirmLogout = () => {
@@ -225,7 +218,7 @@ export function Header() {
           : 'bg-transparent'
       }`}
     >
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div data-navigation-bar className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
 
         {/* --- MOBILE/TABLET HEADER --- */}
         <button
