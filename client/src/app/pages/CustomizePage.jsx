@@ -6,7 +6,7 @@ import { useSearchParams, useNavigate, useBlocker } from 'react-router'
 import {
   ChevronDown, Info,
   Check, CheckCircle,
-  Sparkles, Layers, Palette, Cog, Zap, Image, ZoomIn, ZoomOut, Trash2
+  Sparkles, Layers, Palette, Cog, Zap, Image
 } from 'lucide-react'
 import { downloadPreviewImages } from '../utils/exportMaskedPreview.js'
 import { captureBuildViews } from '../utils/captureBuildViews.jsx'
@@ -15,7 +15,6 @@ import { adminApi } from '../utils/adminApi.js'
 import { API, getAuthHeaders } from '../utils/apiConfig'
 import { optimizeCloudinaryImage } from '../utils/cloudinary.js'
 import {
-  BASE_STICKER_Z_INDEX,
   buildStickerPlacementContext,
   getStickerAspectRatioFromMeta,
   getStickerImageMeta,
@@ -30,7 +29,11 @@ import { BuilderActionBar } from '../components/customize/BuilderActionBar.jsx'
 import { WalkInAssignmentModal } from '../components/customize/WalkInAssignmentModal.jsx'
 import { BuilderCheckoutSection } from '../components/customize/BuilderCheckoutSection.jsx'
 import { BuilderSavedBadge } from '../components/customize/BuilderSavedBadge.jsx'
+import { PreviewViewControls, PreviewZoomControls } from '../components/customize/PreviewControls.jsx'
+import { usePreviewWheelZoom } from '../hooks/usePreviewWheelZoom.js'
 import { StickerPanel } from '../components/customize/StickerPanel.jsx'
+import { StickerCanvasItem } from '../components/customize/StickerCanvasItem.jsx'
+import { useStickerSelection } from '../hooks/useStickerSelection.js'
 import { BuilderConfigurationPanel } from '../components/customize/BuilderConfigurationPanel.jsx'
 import { BuilderConfiguratorDrawer } from '../components/customize/BuilderConfiguratorDrawer.jsx'
 import {
@@ -318,12 +321,15 @@ export function CustomizePage() {
   const [isDraggingPreview, setIsDraggingPreview] = useState(false)
   const { stickers, setStickers, selectedStickerId, setSelectedStickerId } = useStickerDraft('electricBuild')
   const [isDraggingSticker, setIsDraggingSticker] = useState(false)
+  useStickerSelection(setSelectedStickerId)
   const stickerFileInputRef = useRef(null)
   const stickersRef = useRef([])
   const stickerPlacementContextRef = useRef(null)
   const panStartRef = useRef({ pointerX: 0, pointerY: 0, originX: 0, originY: 0 })
   const previewViewportRef = useRef(null)
   const previewStageRef = useRef(null)
+  usePreviewWheelZoom(previewViewportRef, { zoomLevel, setZoomLevel, panOffset, setPanOffset,
+    isManipulating: isDraggingSticker, isPanning: isDraggingPreview })
   const [activeCategory, setActiveCategory] = useState('body')
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false)
   const [guitarTypeDropdownOpen, setGuitarTypeDropdownOpen] = useState(false)
@@ -400,7 +406,7 @@ export function CustomizePage() {
     const file = event.target.files?.[0]
     if (!file) return
     if (!file.type.startsWith('image/')) return
-    if (currentViewStickers.length >= MAX_STICKERS) {
+    if (stickers.length >= MAX_STICKERS) {
       alert(`You can upload up to ${MAX_STICKERS} stickers.`)
       event.target.value = ''
       return
@@ -438,67 +444,6 @@ export function CustomizePage() {
     () => stickers.find(s => s.id === selectedStickerId) || null,
     [stickers, selectedStickerId]
   )
-  const currentStickerOverlay = useMemo(
-    () => currentViewStickers.map((stickerItem, index) => {
-      const renderPosition = getStickerRenderPosition(stickerItem, previewStageRef.current, stickerPlacementContextRef.current)
-      const left = `${renderPosition.x}%`
-      const top = `${renderPosition.y}%`
-      return (
-        <img
-          key={stickerItem.id}
-          src={stickerItem.src}
-          data-export-sticker="true"
-          data-sticker-x={renderPosition.x}
-          data-sticker-y={renderPosition.y}
-          data-sticker-size={stickerItem.size}
-          data-sticker-rotation={stickerItem.rotation || 0}
-          alt={`Custom sticker ${index + 1}`}
-          className={`absolute select-none ${isDraggingSticker && selectedStickerId === stickerItem.id ? 'cursor-grabbing' : 'cursor-grab'} ${selectedStickerId === stickerItem.id ? 'ring-2 ring-inset ring-[#d4af37]/80' : ''}`}
-          style={{
-            zIndex: BASE_STICKER_Z_INDEX + index,
-            left,
-            top,
-            width: `${stickerItem.size}%`,
-            transform: `translate(-50%, -50%) rotate(${stickerItem.rotation || 0}deg)`,
-            transformOrigin: 'center center',
-            touchAction: 'none',
-            userSelect: 'none',
-            pointerEvents: 'auto',
-          }}
-          draggable={false}
-          onMouseDown={(e) => {
-            e.stopPropagation()
-            beginStickerDrag(e.clientX, e.clientY, stickerItem.id)
-          }}
-          onTouchStart={(e) => {
-            e.stopPropagation()
-            const touch = e.touches[0]
-            if (!touch) return
-            beginStickerDrag(touch.clientX, touch.clientY, stickerItem.id)
-          }}
-          onClick={(e) => {
-            e.stopPropagation()
-            setSelectedStickerId(stickerItem.id)
-          }}
-        />
-      )
-    }),
-    [currentViewStickers, isDraggingSticker, selectedStickerId, previewStageRef.current, stickerPlacementContextRef.current]
-  )
-
-  const updateSelectedSticker = (patchOrUpdater, options = {}) => {
-    if (!selectedStickerId) return
-    markDesignChanged()
-    setStickers(prev =>
-      prev.map(stickerItem => {
-        if (stickerItem.id !== selectedStickerId) return stickerItem
-        const nextSticker = typeof patchOrUpdater === 'function'
-          ? patchOrUpdater(stickerItem)
-          : { ...stickerItem, ...patchOrUpdater }
-        return normalizeStickerPlacement(nextSticker, previewStageRef.current, stickerPlacementContextRef.current, options)
-      })
-    )
-  }
 
   const updateStickerById = (id, patchOrUpdater, options = {}) => {
     if (!id) return
@@ -526,8 +471,18 @@ export function CustomizePage() {
     setSelectedStickerId(prev => (prev === id ? null : prev))
   }
 
+  const clearAllStickers = () => {
+    markDesignChanged()
+    stickers.forEach(sticker => {
+      if (sticker.src?.startsWith('blob:')) URL.revokeObjectURL(sticker.src)
+    })
+    setStickers([])
+    setSelectedStickerId(null)
+    setIsDraggingSticker(false)
+  }
+
   const duplicateSelectedSticker = () => {
-    if (!selectedSticker || (selectedSticker.side || 'front') !== view || currentViewStickers.length >= MAX_STICKERS) return
+    if (!selectedSticker || (selectedSticker.side || 'front') !== view || stickers.length >= MAX_STICKERS) return
     const duplicate = normalizeStickerPlacement({
       ...selectedSticker,
       id: `sticker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -562,38 +517,12 @@ export function CustomizePage() {
     })
   }
 
-  const clampSticker = (x, y) => ({
-    x,
-    y,
-  })
-
-  const moveStickerToClientPoint = (clientX, clientY, stickerId = selectedStickerId) => {
-    const stage = previewStageRef.current
-    if (!stage || !stickerId) return
-    const rect = stage.getBoundingClientRect()
-    if (rect.width <= 0 || rect.height <= 0) return
-    let px = ((clientX - rect.left) / rect.width) * 100
-    if (view === 'rear') {
-      px = 100 - px
-    }
-    const py = ((clientY - rect.top) / rect.height) * 100
-    const clamped = clampSticker(px, py)
-    updateStickerById(stickerId, clamped)
-  }
-
-  const beginStickerDrag = (clientX, clientY, stickerId) => {
-    if (!stickerId) return
-    setSelectedStickerId(stickerId)
-    setIsDraggingSticker(true)
-    moveStickerToClientPoint(clientX, clientY, stickerId)
-  }
-
-  const updateStickerDrag = (clientX, clientY) => {
-    if (!isDraggingSticker) return
-    moveStickerToClientPoint(clientX, clientY)
-  }
-
-  const endStickerDrag = () => setIsDraggingSticker(false)
+  const currentStickerOverlay = currentViewStickers.map((stickerItem, index) => (
+    <StickerCanvasItem key={stickerItem.id} sticker={stickerItem} index={index}
+      position={getStickerRenderPosition(stickerItem, previewStageRef.current, stickerPlacementContextRef.current)}
+      selected={selectedStickerId === stickerItem.id} stageRef={previewStageRef} mirrored={view === 'rear'}
+      onSelect={setSelectedStickerId} onUpdate={updateStickerById} onManipulating={setIsDraggingSticker} />
+  ))
 
   const clampPan = (x, y, scale = zoomLevel) => {
     const viewport = previewViewportRef.current
@@ -714,15 +643,10 @@ export function CustomizePage() {
   }, [currentBodyMaskSrc, view])
 
   useEffect(() => {
-    if (!selectedStickerId) {
-      if (currentViewStickers[0]) setSelectedStickerId(currentViewStickers[0].id)
-      return
+    if (selectedStickerId && !stickers.some(s => s.id === selectedStickerId && (s.side || 'front') === view)) {
+      setSelectedStickerId(null)
     }
-    const selectedInView = stickers.find(s => s.id === selectedStickerId && (s.side || 'front') === view)
-    if (!selectedInView) {
-      setSelectedStickerId(currentViewStickers[0]?.id || null)
-    }
-  }, [view, stickers, selectedStickerId, currentViewStickers])
+  }, [view, stickers, selectedStickerId])
 
   useEffect(() => {
     return () => {
@@ -2238,13 +2162,8 @@ export function CustomizePage() {
           {/* CENTER - Guitar Preview */}
           <main aria-label="Instrument preview" className="relative flex min-h-0 min-w-0 flex-col 2xl:overflow-y-auto">
             {!isDesktopBuilder && <BuilderConfiguratorDrawer optionsPanel={optionsPanel} summaryPanel={summaryPanel} price={totalPrice} loadingPrices={loadingPrices} />}
-            <div ref={previewRef} data-builder-preview-card className="builder-preview-card relative h-[320px] min-h-[320px] shrink-0 rounded-2xl sm:h-[380px] md:h-auto md:flex-1 md:min-h-[380px] 2xl:min-h-[320px] border border-[var(--border)] bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
-              {/* Spotlight effects */}
-              <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute -top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-gradient-radial from-[#d4af37]/10 via-transparent to-transparent opacity-60" />
-                <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-gradient-radial from-white/5 via-transparent to-transparent rounded-full" />
-                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[800px] h-[200px] bg-gradient-to-t from-[#d4af37]/5 via-transparent to-transparent" />
-              </div>
+            <div ref={previewRef} data-builder-preview-card className="builder-preview-card relative h-[320px] min-h-[320px] shrink-0 rounded-2xl sm:h-[380px] md:h-auto md:flex-1 md:min-h-[380px] 2xl:min-h-[320px] border border-[var(--border)] bg-black overflow-hidden">
+
 
               {/* Guitar container */}
               <div
@@ -2253,19 +2172,13 @@ export function CustomizePage() {
                 style={{ containerType: 'size', touchAction: zoomLevel > 1 ? 'none' : 'pan-y' }}
                 onMouseDown={(e) => beginDrag(e.clientX, e.clientY)}
                 onMouseMove={(e) => {
-                  if (isDraggingSticker) {
-                    updateStickerDrag(e.clientX, e.clientY)
-                    return
-                  }
                   updateDrag(e.clientX, e.clientY)
                 }}
                 onMouseUp={() => {
                   endDrag()
-                  endStickerDrag()
                 }}
                 onMouseLeave={() => {
                   endDrag()
-                  endStickerDrag()
                 }}
                 onTouchStart={(e) => {
                   const touch = e.touches[0]
@@ -2275,19 +2188,13 @@ export function CustomizePage() {
                 onTouchMove={(e) => {
                   const touch = e.touches[0]
                   if (!touch) return
-                  if (isDraggingSticker) {
-                    updateStickerDrag(touch.clientX, touch.clientY)
-                    return
-                  }
                   updateDrag(touch.clientX, touch.clientY)
                 }}
                 onTouchEnd={() => {
                   endDrag()
-                  endStickerDrag()
                 }}
                 onTouchCancel={() => {
                   endDrag()
-                  endStickerDrag()
                 }}
               >
                 <div
@@ -2313,70 +2220,14 @@ export function CustomizePage() {
                 </div>
               </div>
 
-              {/* Subtle reflection/shadow beneath guitar */}
-              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-8 bg-gradient-to-b from-transparent to-black/40 blur-xl" />
 
               {/* View toggle */}
-              <div className="builder-view-controls absolute left-3 top-3 z-10 flex gap-2 sm:left-4 sm:top-4">
-                <button
-                  type="button"
-                  onClick={() => setView('front')}
-                  aria-pressed={view === 'front'}
-                  className={`min-h-[44px] rounded-lg px-3 py-2 text-xs font-semibold sm:px-4 transition-all duration-200 ${view === 'front'
-                      ? 'bg-[#d4af37] text-black'
-                      : 'bg-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]'
-                    }`}
-                >
-                  Front View
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView('rear')}
-                  aria-pressed={view === 'rear'}
-                  className={`min-h-[44px] rounded-lg px-3 py-2 text-xs font-semibold sm:px-4 transition-all duration-200 ${view === 'rear'
-                      ? 'bg-[#d4af37] text-black'
-                      : 'bg-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]'
-                    }`}
-                >
-                  Rear View
-                </button>
-              </div>
-
-              {/* Zoom controls */}
-              <div className="builder-zoom-controls absolute bottom-3 right-3 z-10 flex items-center gap-1 sm:bottom-4 sm:right-4 sm:gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-1.5 backdrop-blur-sm">
-                <button
-                  type="button"
-                  onClick={handleZoomOut}
-                  disabled={zoomLevel <= 0.7}
-                  className="min-h-[44px] min-w-[44px] rounded-md bg-[var(--border)] px-2.5 py-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Zoom out"
-                  title="Zoom out"
-                >
-                  <ZoomOut className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleZoomReset}
-                  className="min-h-[44px] min-w-[44px] rounded-md px-2.5 py-1.5 text-xs font-semibold text-[var(--text-light)] transition-colors hover:bg-[var(--surface-elevated)]"
-                  aria-label="Reset zoom"
-                  title="Reset zoom"
-                >
-                  {Math.round(zoomLevel * 100)}%
-                </button>
-                <button
-                  type="button"
-                  onClick={handleZoomIn}
-                  disabled={zoomLevel >= 2}
-                  className="min-h-[44px] min-w-[44px] rounded-md bg-[var(--border)] px-2.5 py-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Zoom in"
-                  title="Zoom in"
-                >
-                  <ZoomIn className="h-4 w-4" />
-                </button>
-              </div>
+              <PreviewViewControls view={view} onViewChange={setView} />
+              <PreviewZoomControls zoomLevel={zoomLevel} onZoomOut={handleZoomOut}
+                onZoomIn={handleZoomIn} onReset={handleZoomReset} />
 
               {/* Saved status */}
-              <div className="builder-preview-status absolute bottom-20 left-3 z-10 sm:bottom-4 sm:left-4">
+              <div className="builder-preview-status">
                 <BuilderSavedBadge
                   hasUnsavedChanges={hasUnsavedChanges}
                   hasBeenSaved={hasBeenSaved && isAuthenticated}
@@ -2400,103 +2251,14 @@ export function CustomizePage() {
               maxStickers={MAX_STICKERS}
               onAddClick={() => stickerFileInputRef.current?.click()}
               addDisabled={stickers.length >= MAX_STICKERS}
-            >
-              {selectedSticker && (selectedSticker.side || 'front') === view && (
-                <div className="space-y-2 rounded-md border border-[var(--border)] bg-black/25 p-2">
-                  <div className="grid grid-cols-4 gap-1.5">
-                    <button type="button" onClick={() => moveLayer('back')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Back</button>
-                    <button type="button" onClick={() => moveLayer('down')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Down</button>
-                    <button type="button" onClick={() => moveLayer('up')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Up</button>
-                    <button type="button" onClick={() => moveLayer('front')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Front</button>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => updateSelectedSticker(prev => ({ ...prev, size: Math.max(6, prev.size - 2) }))}
-                      className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
-                      title="Shrink sticker"
-                    >
-                      -
-                    </button>
-                    <span className="text-[10px] text-[var(--text-light)] min-w-10 text-center">{Math.round(selectedSticker.size)}%</span>
-                    <button
-                      type="button"
-                      onClick={() => updateSelectedSticker(prev => ({ ...prev, size: Math.min(50, prev.size + 2) }))}
-                      className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
-                      title="Enlarge sticker"
-                    >
-                      +
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => updateSelectedSticker(prev => ({ ...prev, rotation: (prev.rotation - 15 + 360) % 360 }))}
-                      className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
-                      title="Rotate left"
-                    >
-                      -15°
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => updateSelectedSticker(prev => ({ ...prev, rotation: (prev.rotation + 15) % 360 }))}
-                      className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
-                      title="Rotate right"
-                    >
-                      +15°
-                    </button>
-                  </div>
-
-                  <input
-                    type="range"
-                    min="0"
-                    max="359"
-                    value={selectedSticker.rotation || 0}
-                    onChange={(e) => updateSelectedSticker({ rotation: Number(e.target.value) })}
-                    className="w-full accent-[#d4af37]"
-                  />
-
-                  <div className="flex items-center justify-between gap-1.5">
-                    <button
-                      type="button"
-                      onClick={duplicateSelectedSticker}
-                      disabled={currentViewStickers.length >= MAX_STICKERS}
-                      className="rounded-md bg-[var(--border)] px-2 py-1.5 text-[10px] font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      Duplicate
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeStickerById(selectedSticker.id)}
-                      className="rounded-md bg-red-500/20 px-2 py-1.5 text-red-300 hover:bg-red-500/30"
-                      title="Remove sticker"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {currentViewStickers.length > 0 && (
-                <div className="max-h-24 overflow-y-auto space-y-1 rounded-md border border-[var(--border)] bg-black/20 p-1.5">
-                  {currentViewStickers.map((stickerItem, index) => (
-                    <button
-                      key={stickerItem.id}
-                      type="button"
-                      onClick={() => setSelectedStickerId(stickerItem.id)}
-                      className={`w-full flex items-center gap-2 rounded px-1.5 py-1 text-left text-[10px] ${selectedStickerId === stickerItem.id
-                          ? 'bg-[#d4af37]/20 text-[#d4af37]'
-                          : 'bg-[var(--surface-elevated)] text-[var(--text-light)] hover:bg-[var(--surface-elevated)]'
-                        }`}
-                    >
-                      <img src={stickerItem.src} alt={`Sticker ${index + 1}`} className="h-5 w-5 rounded object-cover" />
-                      <span>{view === 'front' ? 'Front' : 'Rear'} Sticker {index + 1}</span>
-                      <span className="ml-auto">z:{index + 1}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </StickerPanel>
+              stickers={currentViewStickers}
+              selectedStickerId={selectedStickerId}
+              onSelect={setSelectedStickerId}
+              onDuplicate={duplicateSelectedSticker}
+              onDelete={() => selectedStickerId && removeStickerById(selectedStickerId)}
+              onMoveLayer={moveLayer}
+              onClearAll={clearAllStickers}
+            />
 
             <BuilderActionBar
               onReset={resetConfig}

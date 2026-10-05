@@ -3376,7 +3376,7 @@ export function AdminPage() {
                 <button
                   onClick={() => {
                     setShowGuitarTypeSelector(false)
-                    navigate('/customize-bass?mode=walk-in')
+                    navigate('/customize?type=bass&mode=walk-in')
                   }}
                   className="p-6 rounded-2xl border-2 border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] hover:bg-[var(--gold-primary)]/5 transition-all group"
                 >

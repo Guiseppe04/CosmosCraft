@@ -1,63 +1,48 @@
 import { useState } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
-import { ChevronDown, Upload } from 'lucide-react'
+import { ChevronDown, Upload, Copy, Trash2, ArrowUp, ArrowDown } from 'lucide-react'
 
-export function StickerPanel({
-  stickerCount = 0,
-  maxStickers = 10,
-  defaultExpanded = false,
-  onAddClick,
-  addDisabled = false,
-  children,
-}) {
+export function StickerPanel({ stickerCount = 0, maxStickers = 10, defaultExpanded = false,
+  onAddClick, addDisabled = false, stickers = [], selectedStickerId, onSelect,
+  onDuplicate, onDelete, onMoveLayer, onClearAll }) {
   const [expanded, setExpanded] = useState(defaultExpanded)
-
-  return (
-    <div className="builder-sticker-panel relative mt-3 w-full shrink-0 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-dark)]">
-      <div className="builder-sticker-toolbar flex items-center justify-between gap-2 p-2">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <button
-            type="button"
-            onClick={onAddClick}
-            disabled={addDisabled}
-            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md bg-[var(--border)] px-2.5 py-2 text-xs font-semibold text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:cursor-not-allowed disabled:opacity-40"
-            title="Upload sticker image"
-          >
-            <Upload className="h-3.5 w-3.5 shrink-0" />
-            Add Sticker
-          </button>
-          <span className="text-[10px] text-[var(--text-muted)] whitespace-nowrap">
-            {stickerCount}/{maxStickers} items
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={() => setExpanded((prev) => !prev)}
-          className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-md bg-[var(--border)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)]"
-          aria-expanded={expanded}
-          aria-label={expanded ? 'Collapse sticker panel' : 'Expand sticker panel'}
-          title={expanded ? 'Collapse' : 'Expand'}
-        >
-          <ChevronDown
-            className={`h-4 w-4 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`}
-          />
+  const selectedIndex = stickers.findIndex(sticker => sticker.id === selectedStickerId)
+  const selected = selectedIndex >= 0
+  return <div className="builder-sticker-panel sticker-management">
+    <div className="builder-sticker-toolbar">
+      <button type="button" onClick={onAddClick} disabled={addDisabled} className="sticker-add-button"
+        title="Upload sticker image"><Upload size={15} />Add Sticker</button>
+      <span className="sticker-count" aria-label={`${stickerCount} of ${maxStickers} stickers`}>{stickerCount} / {maxStickers}</span>
+      <div className="sticker-context-actions">
+        {selected && <>
+          <button type="button" onClick={onDuplicate} disabled={addDisabled} aria-label="Duplicate sticker" title="Duplicate sticker"><Copy size={16} /></button>
+          <button type="button" onClick={onDelete} aria-label="Delete sticker" title="Delete sticker" className="sticker-delete-button"><Trash2 size={16} /></button>
+        </>}
+        {stickerCount > 3 && <button type="button" onClick={onClearAll}
+          className="sticker-clear-button sticker-delete-button" title="Remove all stickers from both views">
+          Clear All
+        </button>}
+        <button type="button" onClick={() => setExpanded(prev => !prev)} aria-expanded={expanded}
+          aria-label={expanded ? 'Collapse sticker panel' : 'Expand sticker panel'} title="Sticker library">
+          <ChevronDown size={16} style={{ transform: expanded ? 'rotate(180deg)' : undefined }} />
         </button>
       </div>
-
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            key="sticker-panel-content"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-            className="overflow-hidden"
-          >
-            <div className="max-h-60 space-y-2 overflow-y-auto border-t border-[var(--border)] p-2 [&_button]:min-h-[44px]">{children}</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
-  )
+    {expanded && <div className="sticker-library">
+      {stickers.length ? <div className="sticker-thumbnails" aria-label="Stickers on this view">
+        {stickers.map((sticker, index) => <button type="button" key={sticker.id}
+          onClick={() => onSelect(sticker.id)} aria-label={`Select sticker ${index + 1} from library`}
+          aria-pressed={sticker.id === selectedStickerId} title={`Sticker ${index + 1}`}>
+          <img src={sticker.src} alt="" />
+        </button>)}
+      </div> : <p>Add an image, then drag it on the guitar.</p>}
+      {selected && stickers.length > 1 && <div className="sticker-layer-actions">
+        <span>Layer {selectedIndex + 1} / {stickers.length}</span>
+        <button type="button" onClick={() => onMoveLayer('down')} disabled={selectedIndex === 0}
+          aria-label="Lower sticker layer" title="Move behind another sticker"><ArrowDown size={16} /></button>
+        <button type="button" onClick={() => onMoveLayer('up')} disabled={selectedIndex === stickers.length - 1}
+          aria-label="Raise sticker layer" title="Move above another sticker"><ArrowUp size={16} /></button>
+      </div>}
+      {selected && <p>Drag to move ? Corners to resize ? Circle to rotate</p>}
+    </div>}
+  </div>
 }

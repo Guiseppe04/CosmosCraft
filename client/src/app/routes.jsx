@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router'
+import { createBrowserRouter, redirect, useSearchParams } from 'react-router'
 import { RootLayout } from './components/layouts/RootLayout.jsx'
 import { LandingPage } from './pages/LandingPage.jsx'
 import { CustomizePage } from './pages/CustomizePage.jsx'
@@ -23,6 +23,17 @@ import { ErrorPage } from './pages/ErrorPage.jsx'
 import CloudinaryAssetsPage from './pages/CloudinaryAssetsPage.jsx'
 import { ProtectedRoute } from './components/auth/ProtectedRoute.jsx'
 
+function CustomizeRoute() {
+  const [searchParams] = useSearchParams()
+  return searchParams.get('type') === 'bass' ? <BassCustomizePage /> : <CustomizePage />
+}
+
+function redirectLegacyBass({ request }) {
+  const url = new URL(request.url)
+  url.searchParams.set('type', 'bass')
+  return redirect(`/customize?${url.searchParams.toString()}`)
+}
+
 /**
  * Application routes configuration
  * Ref: Use Case Diagram aligned routes
@@ -39,8 +50,8 @@ export const router = createBrowserRouter([
     children: [
       // Public routes
       { index: true, Component: LandingPage },
-      { path: 'customize', Component: CustomizePage },
-      { path: 'customize-bass', Component: BassCustomizePage },
+      { path: 'customize', Component: CustomizeRoute },
+      { path: 'customize-bass', loader: redirectLegacyBass },
       { path: 'shop', Component: ShopPage },
       { path: 'appointments', Component: AppointmentPage },
 

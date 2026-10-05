@@ -3491,7 +3491,7 @@ const filteredOrders = myOrders.filter(order => {
                           <button
                             type="button"
                             disabled={buildLockState.isLocked}
-                            onClick={() => navigate(build.isBass ? `/customize-bass?edit=${build.id}` : `/customize?edit=${build.id}`)}
+                            onClick={() => navigate(build.isBass ? `/customize?type=bass&edit=${build.id}` : `/customize?edit=${build.id}`)}
                             className={`flex-1 py-1.5 px-2 rounded-lg border text-xs transition-all text-center font-medium ${buildLockState.isLocked
                               ? 'border-blue-500/20 text-blue-200/40 cursor-not-allowed'
                               : 'border-blue-500/30 text-blue-400 hover:bg-blue-500/10'
@@ -5855,7 +5855,7 @@ const filteredOrders = myOrders.filter(order => {
                 <span className="block font-bold text-white mb-1">Custom Guitar</span>
                 <span className="block text-xs text-[var(--text-muted)]">Design your own electric or acoustic guitar</span>
               </button>
-              <button type="button" onClick={() => navigate('/customize-bass')} className="w-full p-4 rounded-xl border border-[var(--border)] hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 text-left transition-colors">
+              <button type="button" onClick={() => navigate('/customize?type=bass')} className="w-full p-4 rounded-xl border border-[var(--border)] hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 text-left transition-colors">
                 <span className="block font-bold text-white mb-1">Custom Bass</span>
                 <span className="block text-xs text-[var(--text-muted)]">Build your perfect bass configuration</span>
               </button>

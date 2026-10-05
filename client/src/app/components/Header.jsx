@@ -95,11 +95,7 @@ export function Header() {
   }, [location.pathname, location.hash])
 
   const handleSelectGuitarType = (guitarType) => {
-    if (guitarType === 'bass') {
-      navigate('/customize-bass')
-    } else {
-      navigate(`/customize?type=${guitarType}`)
-    }
+    navigate(`/customize?type=${guitarType}`)
     setCustomizeOpen(false)
     setMobileMenuOpen(false)
   }

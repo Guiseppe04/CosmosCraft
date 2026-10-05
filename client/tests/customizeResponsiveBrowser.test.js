@@ -188,10 +188,11 @@ test('electric and bass builders fit phones, tablets and desktops with usable pr
         }
         const controls = ['Front View', 'Rear View', 'Zoom in', 'Zoom out', 'Reset zoom', 'Sign in to save']
         const boxes = []
+        const desktopPointer = await page.evaluate(() => matchMedia('(min-width: 1280px) and (hover: hover) and (pointer: fine)').matches)
         for (const name of controls) {
           const box = await preview.getByRole('button', { name, exact: true }).boundingBox()
-          const compactZoom = width >= 1280 && ['Zoom in', 'Zoom out', 'Reset zoom'].includes(name)
-          const minSize = compactZoom ? 32 : 44
+          const compactZoom = desktopPointer
+          const minSize = compactZoom ? 28 : 44
           assert.ok(box.width >= minSize && box.height >= minSize, `${label}: ${name} target size`)
           if (compactZoom) assert.ok(box.height < 44, `${label}: compact desktop zoom`)
           assert.ok(box.x >= 0 && box.x + box.width <= width, `${label}: ${name} stays on screen`)
@@ -208,6 +209,12 @@ test('electric and bass builders fit phones, tablets and desktops with usable pr
         await preview.getByRole('button', { name: 'Zoom in', exact: true }).tap()
         assert.equal(await preview.getByRole('button', { name: 'Reset zoom' }).textContent(), '110%')
         await preview.getByRole('button', { name: 'Reset zoom' }).tap()
+        assert.equal(await preview.getByRole('button', { name: 'Reset zoom' }).textContent(), '100%')
+        const touchWheel = await preview.locator('.builder-preview-viewport').evaluate(node => {
+          const event = new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true })
+          node.dispatchEvent(event); return event.defaultPrevented
+        })
+        assert.equal(touchWheel, false, `${label}: touch layouts retain normal scrolling`)
         assert.equal(await preview.getByRole('button', { name: 'Reset zoom' }).textContent(), '100%')
         await preview.getByRole('button', { name: 'Expand sticker panel' }).tap()
         await preview.getByRole('button', { name: 'Collapse sticker panel' }).waitFor()
@@ -234,6 +241,90 @@ test('electric and bass builders fit phones, tablets and desktops with usable pr
         }
       }
     }
+    const desktop = await browser.newPage({ viewport: { width: 1920, height: 1080 } })
+    desktop.setDefaultTimeout(10000)
+    desktop.on('pageerror', error => errors.push(error.message))
+    for (const bass of [false, true]) {
+      await desktop.goto(`http://127.0.0.1:${server.address().port}`)
+      await desktop.waitForFunction(() => window.mount)
+      await desktop.evaluate(bass => window.mount(bass, true), bass)
+      const viewport = desktop.locator('.builder-preview-viewport')
+      await viewport.waitFor()
+      const percent = desktop.getByRole('button', { name: 'Reset zoom', exact: true })
+      const viewBox = await desktop.getByRole('button', { name: 'Front View', exact: true }).boundingBox()
+      assert.ok(viewBox.height === 28 && viewBox.width <= 52, 'desktop view controls are compact')
+      const rect = await viewport.boundingBox(), x = rect.x + rect.width / 2 + 40, y = rect.y + rect.height / 2 - 20
+      await desktop.mouse.move(x, y)
+      const scrollBefore = await desktop.evaluate(() => scrollY)
+      await desktop.mouse.wheel(0, -100)
+      await expect(percent).toHaveText('105%')
+      assert.equal(await desktop.evaluate(() => scrollY), scrollBefore, 'wheel zoom does not scroll the page')
+      await desktop.waitForTimeout(250)
+      const before = await desktop.locator('.builder-preview-stage').boundingBox()
+      await desktop.mouse.wheel(0, -10000)
+      await expect(percent).toHaveText('110%')
+      await desktop.waitForTimeout(250)
+      const after = await desktop.locator('.builder-preview-stage').boundingBox()
+      const localX = (x - before.x) / before.width
+      const localY = (y - before.y) / before.height
+      assert.ok(Math.abs(after.x + localX * after.width - x) < 1, 'wheel zoom anchors horizontally to the cursor')
+      assert.ok(Math.abs(after.y + localY * after.height - y) < 1, 'wheel zoom anchors vertically to the cursor')
+      await desktop.mouse.down()
+      await desktop.mouse.wheel(0, -100)
+      await desktop.waitForTimeout(100)
+      await expect(percent).toHaveText('110%')
+      await desktop.mouse.up()
+      const ctrlWheel = await viewport.evaluate(node => {
+        const event = new WheelEvent('wheel', { deltaY: -100, ctrlKey: true, cancelable: true })
+        node.dispatchEvent(event); return event.defaultPrevented
+      })
+      assert.equal(ctrlWheel, true, 'browser zoom gestures are intercepted inside the canvas')
+      await expect(percent).toHaveText('110%')
+      const zoomToLimit = deltaY => viewport.evaluate(async (node, deltaY) => {
+        const rect = node.getBoundingClientRect()
+        for (let index = 0; index < 30; index++) {
+          node.dispatchEvent(new WheelEvent('wheel', { deltaY, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2, cancelable: true }))
+          await new Promise(resolve => setTimeout(resolve, 75))
+        }
+      }, deltaY)
+      await zoomToLimit(-10000)
+      await expect(percent).toHaveText('200%')
+      assert.equal(await desktop.getByRole('button', { name: 'Zoom in', exact: true }).isDisabled(), true)
+      await zoomToLimit(10000)
+      await expect(percent).toHaveText('70%')
+      assert.equal(await desktop.getByRole('button', { name: 'Zoom out', exact: true }).isDisabled(), true)
+      await percent.click(); await expect(percent).toHaveText('100%')
+      await desktop.locator('input[type=file]').setInputFiles({ name: 'wheel-sticker.png', mimeType: 'image/png',
+        buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==', 'base64') })
+      const selection = desktop.locator('.sticker-selection-box')
+      await selection.waitFor()
+      await desktop.waitForTimeout(250)
+      const stickerBefore = await desktop.evaluate(bass => JSON.parse(sessionStorage.getItem(`cosmoscraft.${bass ? 'bassBuild' : 'electricBuild'}.stickerDraft`)).stickers, bass)
+      const selectedBox = await selection.boundingBox()
+      await desktop.mouse.move(selectedBox.x + selectedBox.width / 2, selectedBox.y + selectedBox.height / 2)
+      await desktop.mouse.wheel(0, -100)
+      await expect(percent).toHaveText('105%')
+      await desktop.waitForTimeout(250)
+      const movedBox = await selection.boundingBox()
+      await desktop.mouse.move(movedBox.x + movedBox.width / 2, movedBox.y + movedBox.height / 2)
+      await desktop.mouse.down()
+      await desktop.mouse.wheel(0, -100)
+      await desktop.waitForTimeout(100)
+      await expect(percent).toHaveText('105%')
+      await desktop.mouse.up()
+      const stickerAfter = await desktop.evaluate(bass => JSON.parse(sessionStorage.getItem(`cosmoscraft.${bass ? 'bassBuild' : 'electricBuild'}.stickerDraft`)).stickers, bass)
+      assert.deepEqual(stickerAfter, stickerBefore, 'wheel zoom does not edit sticker geometry or interfere with captured sticker gestures')
+      await percent.click(); await expect(percent).toHaveText('100%')
+      await desktop.setViewportSize({ width: 1024, height: 768 })
+      const smallWheel = await viewport.evaluate(node => {
+        const event = new WheelEvent('wheel', { deltaY: -100, cancelable: true })
+        node.dispatchEvent(event); return event.defaultPrevented
+      })
+      assert.equal(smallWheel, false, 'tablet layouts do not capture wheel scrolling, even with a mouse')
+      await expect(percent).toHaveText('100%')
+      await desktop.setViewportSize({ width: 1920, height: 1080 })
+    }
+    await desktop.close()
     assert.deepEqual(errors, [])
   } finally {
     await browser?.close()

@@ -364,7 +364,7 @@ const resolveNutColor = (nut) => {
   return aliases[raw] || 'black'
 }
 
-function BassPreview({ config, view, onViewChange, modelImageSrc, bodyWoodImageSrc = null, topWoodImageSrc = null, stickerOverlay = null, stickerMaskSrc = null, stageRef = null }) {
+function BassPreview({ config, view, onViewChange, modelImageSrc, bodyWoodImageSrc = null, topWoodImageSrc = null, stickerOverlay = null, stickerMaskSrc: fallbackStickerMaskSrc = null, stageRef = null }) {
   const previewRef = useRef(null)
 
   const resolvedConfig = useMemo(() => {
@@ -1287,6 +1287,8 @@ if (resolvedConfig.bassType === 'jb' && assets.knobs?.src) {
 
   const previewLayout = bassBuilder.PREVIEW_LAYOUTS[resolvedConfig.bassType] ?? { scale: 0.93, x: 0, y: 26 }
   const previewScale = view === 'rear' ? previewLayout.scale * 0.98 : previewLayout.scale
+  const stickerMaskSrc = (view === 'rear' ? assets.rearBodyMask : assets.bodyMask)
+    || assets.bodyModel?.bodySrc || fallbackStickerMaskSrc
 
   useEffect(() => {
     if (!DEBUG || !previewRef.current) return
@@ -1305,23 +1307,6 @@ if (resolvedConfig.bassType === 'jb' && assets.knobs?.src) {
     <div className="w-full" ref={previewRef}>
       <div className="relative mx-auto w-full">
         <div className="instrument-preview-frame relative rounded-xl" style={{ overflow: 'visible' }}>
-          {/* Background fills only the visible card area */}
-          <div
-            className="absolute rounded-xl"
-            style={{
-              inset: 0,
-              background: 'linear-gradient(to bottom, #1a1a1a, #0f0f0f, #0a0a0a)',
-              zIndex: 0,
-            }}
-          />
-
-          {/* Ambient glow — clipped to card, behind everything */}
-          <div className="absolute inset-0 rounded-xl overflow-hidden pointer-events-none" style={{ zIndex: 0 }}>
-            <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-gradient-radial from-white/10 via-transparent to-transparent opacity-40" />
-            <div className="absolute top-0 left-1/4 w-[300px] h-[300px] bg-gradient-radial from-[#d4af37]/5 via-transparent to-transparent opacity-50" />
-            <div className="absolute top-0 right-1/4 w-[300px] h-[300px] bg-gradient-radial from-white/5 via-transparent to-transparent opacity-30" />
-          </div>
-
           {/*
             KEY FIX: The stage wrapper uses overflow:visible and has horizontal padding
             so the guitar has room to breathe on both sides without being clipped.
@@ -1379,7 +1364,6 @@ if (resolvedConfig.bassType === 'jb' && assets.knobs?.src) {
                 ))}
                 {view === 'front' && stickerOverlay && (
                   <div
-                    aria-hidden="true"
                     className="absolute inset-0 z-[25] pointer-events-none select-none"
                     style={stickerMaskSrc ? {
                       WebkitMaskImage: `url(${stickerMaskSrc})`,
@@ -1411,7 +1395,6 @@ if (resolvedConfig.bassType === 'jb' && assets.knobs?.src) {
                 ))}
                 {view === 'rear' && stickerOverlay && (
                   <div
-                    aria-hidden="true"
                     className="absolute inset-0 z-[25] pointer-events-none select-none"
                     style={stickerMaskSrc ? {
                       WebkitMaskImage: `url(${stickerMaskSrc})`,
@@ -1434,7 +1417,6 @@ if (resolvedConfig.bassType === 'jb' && assets.knobs?.src) {
             </div>
           </div>
 
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-2/3 h-6 bg-gradient-to-b from-transparent via-black/30 to-black/50 blur-xl" style={{ zIndex: 1 }} />
         </div>
       </div>
     </div>

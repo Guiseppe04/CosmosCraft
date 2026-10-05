@@ -99,7 +99,9 @@ export async function exportMaskedPreview(previewRoot, { fileName, background = 
         const centerY = Number.isFinite(y) ? height * y / 100 : node.offsetTop
         buffer.ctx.save()
         buffer.ctx.translate(centerX, centerY)
-        buffer.ctx.rotate((Number(node.getAttribute('data-sticker-rotation')) || 0) * Math.PI / 180)
+        const unmirror = node.getAttribute('data-sticker-unmirror') === 'true'
+        buffer.ctx.rotate((unmirror ? -1 : 1) * (Number(node.getAttribute('data-sticker-rotation')) || 0) * Math.PI / 180)
+        if (unmirror) buffer.ctx.scale(-1, 1)
         buffer.ctx.drawImage(stickerImage, -stickerWidth / 2, -stickerHeight / 2, stickerWidth, stickerHeight)
         buffer.ctx.restore()
         const maskSrc = clip?.getAttribute('data-sticker-clip-mask-src') || parseUrls(clip && getComputedStyle(clip).maskImage)[0]

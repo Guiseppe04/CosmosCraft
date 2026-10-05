@@ -18,10 +18,12 @@ export async function captureBuildViews(Preview, config, stickers, previewProps 
         .filter(sticker => (sticker.side || 'front') === side)
         .map((sticker, index) => {
           const position = getStickerRenderPosition(sticker, contexts[side]?.stage, contexts[side]?.placement)
+          const mirrored = contexts[side]?.mirrored || false
           return <img key={sticker.id || index} src={sticker.src} alt="" data-export-sticker="true"
+            data-sticker-unmirror={mirrored ? 'true' : 'false'}
             data-sticker-x={position.x} data-sticker-y={position.y} data-sticker-rotation={sticker.rotation || 0}
             style={{position:'absolute',zIndex:BASE_STICKER_Z_INDEX + index,left:`${position.x}%`,top:`${position.y}%`,width:`${sticker.size}%`,
-              transform:`translate(-50%, -50%) rotate(${sticker.rotation || 0}deg)`,transformOrigin:'center center'}} />
+              transform:`translate(-50%, -50%) rotate(${(mirrored ? -1 : 1) * (sticker.rotation || 0)}deg)${mirrored ? ' scaleX(-1)' : ''}`,transformOrigin:'center center'}} />
         })} />
     </div>)}
   </>))
@@ -30,8 +32,10 @@ export async function captureBuildViews(Preview, config, stickers, previewProps 
     for (const side of ['front', 'rear']) {
       const stage = host.querySelector(`[data-capture-side="${side}"] [data-export-stage="true"]`)
       stage.style.transition = 'none'
-      const placement = previewProps.stickerMaskSrc ? await buildStickerPlacementContext(stage, previewProps.stickerMaskSrc) : null
-      contexts[side] = {stage,placement}
+      const maskSrc = stage.querySelector('[data-sticker-clip-mask-src]')?.getAttribute('data-sticker-clip-mask-src') || previewProps.stickerMaskSrc
+      const placement = maskSrc ? await buildStickerPlacementContext(stage, maskSrc) : null
+      const mirrored = new DOMMatrix(getComputedStyle(stage).transform).a < 0
+      contexts[side] = {stage,placement,mirrored}
     }
     render()
     await Promise.all([...host.querySelectorAll('img')].map(img => img.decode()))

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Info, X, LogIn } from 'lucide-react'
+import { X } from 'lucide-react'
 
 export function BuilderSavedBadge({
   hasUnsavedChanges,
@@ -33,23 +33,24 @@ export function BuilderSavedBadge({
       : 'Unsaved'
 
   const badgeClass = !isAuthenticated
-    ? 'bg-sky-500/95 text-white border border-sky-400'
+    ? 'preview-status-guest'
     : isSaved
-      ? 'bg-emerald-500/95 text-white border border-emerald-400'
-      : 'bg-amber-500/95 text-white border border-amber-400'
+      ? 'preview-status-saved'
+      : 'preview-status-unsaved'
 
   return (
     <div className="relative flex flex-col items-start gap-2">
       <button
         type="button"
         onClick={() => setShowHint((prev) => !prev)}
-        className={`inline-flex min-h-[44px] items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] font-semibold shadow-lg transition-colors ${badgeClass}`}
+        className={`preview-status-button ${badgeClass}`}
         title={showHint ? 'Hide info' : 'What does this mean?'}
+        aria-expanded={showHint}
       >
-        <span className="h-1.5 w-1.5 rounded-full bg-white" />
-        {!isAuthenticated && <LogIn className="h-3 w-3" />}
-        {label}
-        <Info className="h-3 w-3 opacity-90" />
+        <span className="preview-status-pill">
+          <span className="preview-status-dot" />
+          <span aria-live="polite">{label}</span>
+        </span>
       </button>
 
       {showHint && (

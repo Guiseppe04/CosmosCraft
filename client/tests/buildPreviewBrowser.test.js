@@ -35,6 +35,10 @@ test('export clips multiple rotated stickers, preserves their geometry and layer
     const root=createRoot(document.getElementById('root'));root.render(<SamplePreview view="front" stickerOverlay={overlay}/>);
     window.exportImage=()=>exportMaskedPreview(document.getElementById('root'),{download:false,background:'#141414',scale:1});
     window.exportBoth=async()=>{const images=await captureBuildViews(SamplePreview,{},stickers,{stickerMaskSrc:mask},{scale:1});downloadPreviewImages(images);return images};
+    window.exportReadable=async()=>{
+      const asymmetric=png(ctx=>{ctx.fillStyle='red';ctx.fillRect(0,0,200,200);ctx.fillStyle='white';ctx.fillRect(200,0,200,200);ctx.fillStyle='black';ctx.font='bold 100px sans-serif';ctx.fillText('R',220,140)});
+      return captureBuildViews(SamplePreview,{},['front','rear'].map(side=>({id:side,src:asymmetric,x:50,y:50,size:25,rotation:23,side})),{stickerMaskSrc:mask},{scale:1});
+    };
     window.compare=async(reference,actual)=>{
       const pixels=async(src)=>{const img=new Image();img.src=src;await img.decode();const c=document.createElement('canvas');c.width=img.width;c.height=img.height;const ctx=c.getContext('2d');ctx.drawImage(img,0,0);return {data:ctx.getImageData(0,0,c.width,c.height).data,width:c.width,height:c.height}};
       const a=await pixels(reference),b=await pixels(actual);let differences=0,overflow=0;
@@ -76,6 +80,9 @@ test('export clips multiple rotated stickers, preserves their geometry and layer
     assert.deepEqual(downloads.map(download=>download.suggestedFilename()).sort(),['guitar-design-front.png','guitar-design-rear.png'])
     for(const download of downloads) assert.equal(await download.failure(),null)
     assert.equal(await page.locator('[data-capture-side]').count(),0)
+    const readable=await page.evaluate(()=>window.exportReadable())
+    const readability=await page.evaluate(({front,rear})=>window.compare(front,rear),readable)
+    assert.ok(readability.differences < readability.width * readability.height * 0.001, 'rear stickers keep the original artwork and rotation')
   } finally {await browser.close();await new Promise(resolve=>server.close(resolve))}
 })
 

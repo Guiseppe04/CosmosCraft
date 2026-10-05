@@ -402,6 +402,34 @@ export function normalizeStickerPlacement(sticker, stage, placementContext, opti
     }
   }
 
+  if (options.autoPlaceOnBody) {
+    const { bodyMask, protectedMasks = [] } = placementContext
+    let sumX = 0, sumY = 0, count = 0
+    for (let py = 0; py < bodyMask.height; py += 1) {
+      for (let px = 0; px < bodyMask.width; px += 1) {
+        if (bodyMask.data[(py * bodyMask.width + px) * 4 + 3] < 24) continue
+        sumX += px + 0.5
+        sumY += py + 0.5
+        count += 1
+      }
+    }
+    if (count) {
+      const desiredCenter = {
+        x: bodyBox.x + (sumX / count / bodyMask.width) * bodyBox.width,
+        y: bodyBox.y + (sumY / count / bodyMask.height) * bodyBox.height,
+      }
+      const placement = fitStickerPlacement({ sticker, stageRect, bodyMask, protectedMasks,
+        desiredCenter, desiredSize: size, bodyBox })
+      if (placement) {
+        const bodyPoint = toBodyPointFromStagePoint(placement.center, stageRect, bodyBox)
+        return { ...placement.sticker,
+          x: placement.center.x / stageRect.width * 100,
+          y: placement.center.y / stageRect.height * 100,
+          bodyX: bodyPoint.x, bodyY: bodyPoint.y }
+      }
+    }
+  }
+
   const bodyPoint = toBodyPointFromStagePoint(
     {
       x: ((fallbackX / 100) * stageRect.width),

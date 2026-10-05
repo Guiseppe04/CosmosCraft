@@ -953,9 +953,6 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, bodyWoodImag
       <div className="relative mx-auto w-full">
         {/* Guitar display area */}
         <div className="instrument-preview-frame relative overflow-hidden rounded-xl">
-          {/* Background gradient for depth */}
-
-          
           {/* Guitar image */}
           <div className="instrument-preview-canvas relative flex items-center justify-center py-8">
             <div
@@ -983,7 +980,6 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, bodyWoodImag
                   ))}
                   {stickerOverlay && (
                     <div
-                      aria-hidden="true"
                       className="absolute inset-0 z-[25] pointer-events-none select-none"
                       style={stickerMaskSrc ? {
                         WebkitMaskImage: `url(${stickerMaskSrc})`,
@@ -1054,7 +1050,6 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, bodyWoodImag
                     ))}
                     {stickerOverlay && (
                       <div
-                        aria-hidden="true"
                         className="absolute inset-0 z-[25] pointer-events-none select-none"
                         style={stickerMaskSrc ? {
                           WebkitMaskImage: `url(${stickerMaskSrc})`,
@@ -1134,8 +1129,6 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, bodyWoodImag
             </div>
           </div>
           
-          {/* Reflection/shadow beneath guitar */}
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-2/3 h-6 bg-gradient-to-b from-transparent via-black/30 to-black/50 blur-xl" />
         </div>
       </div>
     </div>
