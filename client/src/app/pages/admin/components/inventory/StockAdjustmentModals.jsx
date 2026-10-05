@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { AlertCircle, ArrowDownCircle, ArrowUpCircle, ArrowUpDown, CheckCircle2, X } from 'lucide-react'
+import { AlertCircle, CheckCircle2, X } from 'lucide-react'
 import { ADJUSTMENT_TYPE_LABELS } from '../../constants/stockAdjustment'
 import { ProductSearchSelector } from './ProductSearchSelector'
 import { QuantityStepper } from './QuantityStepper'
 import { StockVisualizer } from './StockVisualizer'
+import { ConfirmModal } from '../../../../components/ui/ConfirmModal'
 import { formatCurrency } from '../../../../utils/formatCurrency'
 
 // ─── Shared Sub-Components ───────────────────────────────────────────────────
@@ -94,40 +95,65 @@ function ActionButtons({ onCancel, onSubmit, isSaving, canSubmit }) {
 
 function useStockAdjustment({ initialProduct, currentStock: externalCurrentStock, form, setForm, setFormErrors, saveFn }) {
   const adjustmentType = form.change_type
-  const quantity = parseInt(form.quantity, 10) || 0
-  const currentStock = externalCurrentStock ?? 0
+  const rawQuantity = String(form.quantity ?? '').trim()
+  const quantity = rawQuantity === '' ? 0 : (parseInt(rawQuantity, 10) || 0)
+  const currentStock = Number(externalCurrentStock ?? 0)
 
   const calculatedNewStock = useMemo(() => {
-    if (!adjustmentType || !quantity) return null
-    if (adjustmentType === 'stock_in') return currentStock + quantity
-    if (adjustmentType === 'stock_out') return currentStock - quantity
+    if (!adjustmentType) return null
+    // Manual Set uses the quantity field as the absolute new stock level,
+    // so 0 is a valid target (used to mark an item out of stock).
     if (adjustmentType === 'adjustment') return quantity
+    if (!quantity) return null
+    if (adjustmentType === 'stock_in') return currentStock + quantity
+    if (adjustmentType === 'stock_out') return Math.max(currentStock - quantity, 0)
     return currentStock
   }, [adjustmentType, currentStock, quantity])
 
-  const canSubmit = Boolean(initialProduct && adjustmentType && quantity > 0)
+  const canSubmit = useMemo(() => {
+    if (!initialProduct || !adjustmentType) return false
+    if (adjustmentType === 'adjustment') {
+      // A manual set is a no-op when the target equals the current stock.
+      return quantity >= 0 && quantity !== currentStock
+    }
+    return quantity > 0
+  }, [initialProduct, adjustmentType, quantity, currentStock])
 
-  const handleSubmit = useCallback(async () => {
+  const validateForm = useCallback(() => {
     const errors = {}
 
     if (!initialProduct) errors.product_id = 'Please select a product'
     if (!adjustmentType) errors.change_type = 'Please select adjustment type'
-    if (!quantity || quantity < 1) errors.quantity = 'Quantity must be greater than 0'
+
+    if (adjustmentType === 'adjustment') {
+      if (rawQuantity === '' || quantity < 0) {
+        errors.quantity = 'Enter the new stock level (0 or higher)'
+      } else if (quantity === currentStock) {
+        errors.quantity = `Stock is already set to ${currentStock}`
+      }
+    } else if (quantity < 1) {
+      errors.quantity = 'Quantity must be greater than 0'
+    }
+
     if (adjustmentType === 'stock_out' && quantity > currentStock) {
       errors.quantity = `Insufficient stock. Available: ${currentStock}`
     }
-    if (adjustmentType === 'stock_out' && calculatedNewStock < 0) {
-      errors.quantity = 'Stock cannot be negative'
-    }
 
-    if (Object.keys(errors).length > 0) {
-      setFormErrors(errors)
-      return
-    }
+    setFormErrors(errors)
+    return Object.keys(errors).length === 0
+  }, [initialProduct, adjustmentType, quantity, rawQuantity, currentStock, setFormErrors])
 
-    setFormErrors({})
-    await saveFn({ change_type: adjustmentType, quantity })
-  }, [initialProduct, adjustmentType, quantity, currentStock, calculatedNewStock, setFormErrors, saveFn])
+  const handleSubmit = useCallback(async () => {
+    if (!validateForm()) return
+
+    // Pass the authoritative current stock along so the parent's save handler
+    // never derives the manual-set delta from a stale Products-tab list.
+    await saveFn({
+      change_type: adjustmentType,
+      quantity,
+      current_stock: currentStock,
+    })
+  }, [validateForm, adjustmentType, quantity, currentStock, saveFn])
 
   return {
     adjustmentType,
@@ -135,8 +161,21 @@ function useStockAdjustment({ initialProduct, currentStock: externalCurrentStock
     currentStock,
     calculatedNewStock,
     canSubmit,
+    validateForm,
     handleSubmit,
   }
+}
+
+// ─── Confirmation Summary Text ───────────────────────────────────────────────
+
+function buildAdjustmentSummaryText({ itemName, adjustmentType, quantity, currentStock, newStock }) {
+  const typeLabel = ADJUSTMENT_TYPE_LABELS[adjustmentType]?.label || 'Stock Adjustment'
+  const noun = itemName || 'this item'
+  if (adjustmentType === 'adjustment') {
+    return `Manual Set: "${noun}" will be set to exactly ${newStock} unit${newStock === 1 ? '' : 's'}. Current stock: ${currentStock}.`
+  }
+  const action = adjustmentType === 'stock_in' ? 'added to' : 'removed from'
+  return `${typeLabel}: ${quantity} unit${quantity === 1 ? '' : 's'} of "${noun}" will be ${action} stock. Stock will change from ${currentStock} to ${newStock}.`
 }
 
 // ─── Keyboard Shortcuts Hook ─────────────────────────────────────────────────
@@ -153,41 +192,6 @@ function useKeyboardShortcuts({ onEscape, enabled = true }) {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [enabled, onEscape])
-}
-
-// ─── Stock Change Summary ────────────────────────────────────────────────────
-
-function StockChangeSummary({ currentStock, newStock, adjustmentType }) {
-  if (newStock === null || newStock === undefined) return null
-
-  const delta = newStock - currentStock
-  const isIncrease = delta > 0
-  const isDecrease = delta < 0
-  const isSet = adjustmentType === 'adjustment'
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -5 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
-        isIncrease
-          ? 'bg-green-500/10 text-green-400'
-          : isDecrease
-            ? 'bg-red-500/10 text-red-400'
-            : 'bg-amber-500/10 text-amber-400'
-      }`}
-    >
-      {isIncrease && <ArrowUpCircle className="w-4 h-4 min-w-4" />}
-      {isDecrease && <ArrowDownCircle className="w-4 h-4 min-w-4" />}
-      {isSet && <ArrowUpDown className="w-4 h-4 min-w-4" />}
-      <span className="break-words">
-        {isSet
-          ? `Stock set to ${newStock}`
-          : `${currentStock} → ${newStock} (${isIncrease ? '+' : ''}${delta})`
-        }
-      </span>
-    </motion.div>
-  )
 }
 
 // ─── Loading Skeleton ────────────────────────────────────────────────────────
@@ -227,6 +231,7 @@ function ModalSkeleton() {
 export function AdjustStockModal({ visibleProducts, modal, form, setForm, formErrors, setFormErrors, closeModal, isSaving, saveStockAdjust, showToast, formatCurrency: formatCurrencyOverride }) {
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [confirming, setConfirming] = useState(false)
 
   const preSelectedId = modal.data?.product_id
 
@@ -238,19 +243,20 @@ export function AdjustStockModal({ visibleProducts, modal, form, setForm, formEr
   }, [visibleProducts])
 
   useEffect(() => {
-    if (preSelectedId) {
+    if (preSelectedId && !selectedProduct) {
       const product = visibleProducts?.find((item) => item.product_id === preSelectedId)
       if (product) {
         setSelectedProduct(product)
         setForm((next) => ({ ...next, product_id: preSelectedId, current_stock: product.stock }))
       }
     }
-  }, [preSelectedId, setForm, visibleProducts])
+  }, [preSelectedId, selectedProduct, setForm, visibleProducts])
 
   const {
     adjustmentType, quantity,
     currentStock, calculatedNewStock,
     canSubmit,
+    validateForm,
     handleSubmit,
   } = useStockAdjustment({
     initialProduct: selectedProduct,
@@ -272,7 +278,7 @@ export function AdjustStockModal({ visibleProducts, modal, form, setForm, formEr
     setFormErrors((errors) => ({ ...errors, product_id: null }))
   }, [visibleProducts, setForm, setFormErrors])
 
-  useKeyboardShortcuts({ onEscape: closeModal, enabled: true })
+  useKeyboardShortcuts({ onEscape: closeModal, enabled: !confirming })
 
   if (isLoading && !visibleProducts) {
     return <ModalSkeleton />
@@ -314,15 +320,6 @@ export function AdjustStockModal({ visibleProducts, modal, form, setForm, formEr
               threshold={selectedProduct.low_stock_threshold || 10}
               maxStock={selectedProduct.max_stock || 0}
             />
-            {calculatedNewStock !== null && calculatedNewStock !== undefined && (
-              <div className="mt-2">
-                <StockChangeSummary
-                  currentStock={selectedProduct.stock || 0}
-                  newStock={calculatedNewStock}
-                  adjustmentType={adjustmentType}
-                />
-              </div>
-            )}
           </div>
         )}
 
@@ -330,7 +327,13 @@ export function AdjustStockModal({ visibleProducts, modal, form, setForm, formEr
         <AdjustmentTypeSelector
           value={adjustmentType}
           onChange={(value) => {
-            setForm((next) => ({ ...next, change_type: value }))
+            // For Manual Set the quantity field is the target stock, so seed it
+            // with the current stock (a no-op the user then edits up/down).
+            if (value === 'adjustment' && !form.quantity && currentStock !== null && currentStock !== undefined) {
+              setForm((next) => ({ ...next, change_type: value, quantity: currentStock }))
+            } else {
+              setForm((next) => ({ ...next, change_type: value }))
+            }
             setFormErrors((errors) => ({ ...errors, change_type: null }))
           }}
           error={formErrors.change_type}
@@ -344,7 +347,8 @@ export function AdjustStockModal({ visibleProducts, modal, form, setForm, formEr
               setForm((next) => ({ ...next, quantity: value }))
               setFormErrors((errors) => ({ ...errors, quantity: null }))
             }}
-            maxValue={adjustmentType === 'stock_out' ? selectedProduct?.stock : undefined}
+            minValue={adjustmentType === 'adjustment' ? 0 : 1}
+            maxValue={adjustmentType === 'stock_out' ? currentStock : undefined}
             disabled={!selectedProduct || !adjustmentType}
           />
         </FormField>
@@ -352,9 +356,32 @@ export function AdjustStockModal({ visibleProducts, modal, form, setForm, formEr
 
       <ActionButtons
         onCancel={closeModal}
-        onSubmit={handleSubmit}
+        onSubmit={() => {
+          if (validateForm()) setConfirming(true)
+        }}
         isSaving={isSaving}
         canSubmit={canSubmit}
+      />
+
+      <ConfirmModal
+        open={confirming}
+        title="Confirm Stock Adjustment?"
+        description={buildAdjustmentSummaryText({
+          itemName: selectedProduct?.name,
+          adjustmentType,
+          quantity,
+          currentStock,
+          newStock: calculatedNewStock ?? currentStock,
+        })}
+        confirmLabel="Yes, adjust stock"
+        cancelLabel="Go back"
+        variant={adjustmentType === 'stock_in' ? 'info' : 'warning'}
+        isBusy={isSaving}
+        onConfirm={async () => {
+          setConfirming(false)
+          await handleSubmit()
+        }}
+        onCancel={() => setConfirming(false)}
       />
     </motion.div>
   )
@@ -363,6 +390,7 @@ export function AdjustStockModal({ visibleProducts, modal, form, setForm, formEr
 // ─── AdjustPartStockModal ────────────────────────────────────────────────────
 
 export function AdjustPartStockModal({ modal, form, setForm, formErrors, setFormErrors, closeModal, isSaving, savePartStockAdjust, formatCurrency: formatCurrencyOverride }) {
+  const [confirming, setConfirming] = useState(false)
   const selectedPart = modal.data || null
   const currentStock = Number(selectedPart?.stock ?? selectedPart?.quantity ?? form.current_stock ?? 0) || 0
 
@@ -370,6 +398,7 @@ export function AdjustPartStockModal({ modal, form, setForm, formErrors, setForm
     adjustmentType, quantity,
     calculatedNewStock,
     canSubmit,
+    validateForm,
     handleSubmit,
   } = useStockAdjustment({
     initialProduct: selectedPart,
@@ -378,7 +407,7 @@ export function AdjustPartStockModal({ modal, form, setForm, formErrors, setForm
     saveFn: savePartStockAdjust,
   })
 
-  useKeyboardShortcuts({ onEscape: closeModal, enabled: true })
+  useKeyboardShortcuts({ onEscape: closeModal, enabled: !confirming })
 
   return (
     <motion.div
@@ -421,15 +450,6 @@ export function AdjustPartStockModal({ modal, form, setForm, formErrors, setForm
               threshold={10}
               maxStock={0}
             />
-            {calculatedNewStock !== null && calculatedNewStock !== undefined && (
-              <div className="mt-2">
-                <StockChangeSummary
-                  currentStock={currentStock}
-                  newStock={calculatedNewStock}
-                  adjustmentType={adjustmentType}
-                />
-              </div>
-            )}
           </div>
         </div>
 
@@ -437,7 +457,13 @@ export function AdjustPartStockModal({ modal, form, setForm, formErrors, setForm
         <AdjustmentTypeSelector
           value={adjustmentType}
           onChange={(value) => {
-            setForm((next) => ({ ...next, change_type: value }))
+            // For Manual Set the quantity field is the target stock, so seed it
+            // with the current stock (a no-op the user then edits up/down).
+            if (value === 'adjustment' && !form.quantity && currentStock !== null && currentStock !== undefined) {
+              setForm((next) => ({ ...next, change_type: value, quantity: currentStock }))
+            } else {
+              setForm((next) => ({ ...next, change_type: value }))
+            }
             setFormErrors((errors) => ({ ...errors, change_type: null }))
           }}
           error={formErrors.change_type}
@@ -451,6 +477,7 @@ export function AdjustPartStockModal({ modal, form, setForm, formErrors, setForm
               setForm((next) => ({ ...next, quantity: value }))
               setFormErrors((errors) => ({ ...errors, quantity: null }))
             }}
+            minValue={adjustmentType === 'adjustment' ? 0 : 1}
             maxValue={adjustmentType === 'stock_out' ? currentStock : undefined}
             disabled={!selectedPart?.part_id || !adjustmentType}
           />
@@ -459,9 +486,32 @@ export function AdjustPartStockModal({ modal, form, setForm, formErrors, setForm
 
       <ActionButtons
         onCancel={closeModal}
-        onSubmit={handleSubmit}
+        onSubmit={() => {
+          if (validateForm()) setConfirming(true)
+        }}
         isSaving={isSaving}
         canSubmit={canSubmit}
+      />
+
+      <ConfirmModal
+        open={confirming}
+        title="Confirm Stock Adjustment?"
+        description={buildAdjustmentSummaryText({
+          itemName: selectedPart?.name,
+          adjustmentType,
+          quantity,
+          currentStock,
+          newStock: calculatedNewStock ?? currentStock,
+        })}
+        confirmLabel="Yes, adjust stock"
+        cancelLabel="Go back"
+        variant={adjustmentType === 'stock_in' ? 'info' : 'warning'}
+        isBusy={isSaving}
+        onConfirm={async () => {
+          setConfirming(false)
+          await handleSubmit()
+        }}
+        onCancel={() => setConfirming(false)}
       />
     </motion.div>
   )

@@ -1,6 +1,10 @@
 export function QuantityStepper({ value, onChange, maxValue, minValue = 1, disabled = false }) {
+  // NOTE: use ?? (not ||) so a minValue of 0 is respected — manual-set stock
+  // needs to be able to target zero.
+  const min = minValue ?? 1
+
   const handleDecrement = () => {
-    if (!disabled && value > (minValue || 1)) {
+    if (!disabled && value > min) {
       onChange(value - 1)
     }
   }
@@ -13,7 +17,7 @@ export function QuantityStepper({ value, onChange, maxValue, minValue = 1, disab
 
   const handleInputChange = (e) => {
     const val = parseInt(e.target.value, 10) || 0
-    const validVal = Math.max(minValue || 1, Math.min(maxValue || 9999, val))
+    const validVal = Math.max(min, Math.min(maxValue || 9999, val))
     onChange(validVal)
   }
 
@@ -22,7 +26,7 @@ export function QuantityStepper({ value, onChange, maxValue, minValue = 1, disab
       <button
         type="button"
         onClick={handleDecrement}
-        disabled={disabled || value <= (minValue || 1)}
+        disabled={disabled || value <= min}
         className="w-12 h-12 rounded-xl bg-[var(--bg-primary)] border border-[var(--border)] text-white text-xl font-bold hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center"
       >
         −
@@ -32,7 +36,7 @@ export function QuantityStepper({ value, onChange, maxValue, minValue = 1, disab
         value={value}
         onChange={handleInputChange}
         disabled={disabled}
-        min={minValue}
+        min={min}
         max={maxValue}
         className="flex-1 h-12 px-4 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-center font-mono text-lg focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
       />

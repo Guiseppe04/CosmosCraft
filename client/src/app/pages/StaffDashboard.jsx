@@ -979,18 +979,30 @@ export function StaffDashboard() {
   const saveStockAdjust = async (overrideForm = {}) => {
     setIsSaving(true)
     try {
-      const { product_id, change_type, quantity } = { ...form, ...overrideForm }
-      if (!product_id || !change_type || !quantity) {
+      const { product_id, change_type, quantity, current_stock: overrideCurrentStock } = { ...form, ...overrideForm }
+      if (!product_id || !change_type || quantity === undefined || quantity === null || quantity === '') {
         showToast('Please fill all required fields', 'error')
         return
       }
       const existingProduct = visibleProducts.find((p) => p.product_id === product_id)
-      const currentStock = Number(existingProduct?.stock ?? form.current_stock ?? 0) || 0
+      const currentStock = Number(overrideCurrentStock ?? existingProduct?.stock ?? form.current_stock ?? 0) || 0
       const qty = Number(quantity)
-      const payload = {
-        productId: product_id,
-        quantity: change_type === 'adjustment' ? qty - currentStock : qty,
+
+      if (change_type === 'stock_out' && qty > currentStock) {
+        showToast(`Insufficient stock. Available: ${currentStock}`, 'error')
+        return
       }
+      if (change_type === 'adjustment') {
+        if (qty < 0) {
+          showToast('Stock cannot be negative', 'error')
+          return
+        }
+        if (qty === currentStock) {
+          showToast('Stock is already set to that value', 'error')
+          return
+        }
+      }
+
       if (change_type === 'stock_in') await staffApi.addStock({ product_id, quantity: qty })
       else if (change_type === 'stock_out') await staffApi.deductStock({ product_id, quantity: qty })
       else await staffApi.adjustStock({ product_id, quantity: qty - currentStock })
@@ -1007,13 +1019,13 @@ export function StaffDashboard() {
   const savePartStockAdjust = async (overrideForm = {}) => {
     setIsSaving(true)
     try {
-      const { part_id, change_type, quantity } = { ...form, ...overrideForm }
-      if (!part_id || !change_type || !quantity) {
+      const { part_id, change_type, quantity, current_stock: overrideCurrentStock } = { ...form, ...overrideForm }
+      if (!part_id || !change_type || quantity === undefined || quantity === null || quantity === '') {
         showToast('Please fill all required fields', 'error')
         return
       }
       const existingPart = visibleParts.find((part) => part.part_id === part_id)
-      const currentStock = Number(existingPart?.stock ?? existingPart?.quantity ?? form.current_stock ?? 0) || 0
+      const currentStock = Number(overrideCurrentStock ?? existingPart?.stock ?? existingPart?.quantity ?? form.current_stock ?? 0) || 0
       const qty = Number(quantity)
 
       let nextStock = currentStock
@@ -1023,6 +1035,10 @@ export function StaffDashboard() {
 
       if (nextStock < 0) {
         showToast('Stock cannot be negative', 'error')
+        return
+      }
+      if (change_type === 'adjustment' && nextStock === currentStock) {
+        showToast('Stock is already set to that value', 'error')
         return
       }
       await staffApi.updateBuilderPart(part_id, { stock: nextStock })
