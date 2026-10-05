@@ -409,6 +409,7 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
   useSocketEvent("order:updated", handleRealtimeUpdate);
   useSocketEvent("payment:updated", handleRealtimeUpdate);
   useSocketEvent("pos:sale_completed", handleRealtimeUpdate);
+  useSocketEvent("pos:sale_updated", handleRealtimeUpdate);
   useSocketEvent("project:updated", handleRealtimeUpdate);
   useSocketEvent("refund:created", handleRealtimeUpdate);
   useSocketEvent("refund:updated", handleRealtimeUpdate);

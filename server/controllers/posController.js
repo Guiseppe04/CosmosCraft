@@ -7,6 +7,52 @@ const socketService = require('../services/socketService');
  * Handles HTTP requests for Point of Sale transactions
  */
 
+// ─── REAL-TIME HELPERS ────────────────────────────────────────────────────────
+
+/**
+ * Publish the stock levels a POS write left behind.
+ *
+ * Called only after the service resolved, i.e. after COMMIT, so subscribers
+ * never refetch a quantity the database has not accepted yet. It reuses the
+ * events the inventory endpoints already publish (`stock:updated` for every
+ * connected client, `inventory:updated` for the staff inventory screens) so
+ * there is a single real-time contract for stock.
+ */
+const emitStockUpdates = (stockUpdates) => {
+  for (const update of stockUpdates || []) {
+    if (!update?.product_id) continue;
+    const stock = Number(update.stock);
+    if (!Number.isFinite(stock)) continue;
+    socketService.emitBroadcast('stock:updated', {
+      productId: update.product_id,
+      product_id: update.product_id,
+      stock
+    });
+    socketService.emitToStaff('inventory:updated', {
+      productId: update.product_id,
+      stock
+    });
+  }
+};
+
+/**
+ * Announce a POS sale status change (void / return) to the staff channel.
+ *
+ * `stockUpdates` rides along so a POS screen can patch its own catalog straight
+ * from the notification, without waiting for the follow-up stock:updated events.
+ */
+const emitSaleUpdated = (result, action) => {
+  socketService.emitToStaff('pos:sale_updated', {
+    action,
+    sale: result?.sale || null,
+    saleNumber: result?.sale?.sale_number || null,
+    returns: Array.isArray(result?.returns) ? result.returns : [],
+    refundAmount: result?.refundAmount ?? null,
+    stockUpdates: Array.isArray(result?.stockUpdates) ? result.stockUpdates : []
+  });
+  emitStockUpdates(result?.stockUpdates);
+};
+
 // ─── SALE MANAGEMENT ─────────────────────────────────────────────────────────
 
 /**
@@ -45,6 +91,15 @@ exports.createSale = async (req, res, next) => {
       status,
       items
     });
+
+    // Published only once the sale and its stock deductions are committed, so
+    // every other POS terminal and inventory screen can refresh straight away.
+    socketService.emitToStaff('pos:sale_completed', {
+      sale,
+      saleNumber: sale?.sale_number,
+      result: sale
+    });
+    emitStockUpdates(sale?.stockUpdates);
 
     res.status(201).json({
       status: 'success',
@@ -305,6 +360,10 @@ exports.voidSale = async (req, res, next) => {
       reason
     );
 
+    // The sale is already voided and the stock already restored at this point,
+    // so the staff channel learns about it without an extra page refresh.
+    emitSaleUpdated(result, 'voided');
+
     res.json({
       status: 'success',
       message: 'Sale voided successfully',
@@ -327,6 +386,10 @@ exports.returnSale = async (req, res, next) => {
       req.user.user_id,
       { reason, items }
     );
+
+    // Restocked items are already back in `inventory` here, so the notification
+    // carries the post-return quantities for every open POS and inventory view.
+    emitSaleUpdated(result, 'returned');
 
     res.json({
       status: 'success',

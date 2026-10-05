@@ -5,7 +5,7 @@ import { isValidPhoneNumber, PHONE_ERROR_MESSAGE } from '../../utils/phone'
 import { Package, Search, X, Printer, Download, ArrowUpDown, Grid3X3, List, Plus, RotateCcw, AlertTriangle, Trash2, Banknote, CreditCard } from 'lucide-react'
 import { posApi } from '../../utils/posApi'
 import { formatCurrency } from '../../utils/formatCurrency'
-import { useSocketEvent } from '../../context/SocketContext'
+import { useSocketEvent, useSocket } from '../../context/SocketContext'
 import { useAuth } from '../../context/AuthContext'
 import { hasRole } from '../../utils/roles'
 
@@ -39,6 +39,34 @@ function StatusBadge({ label, variant = 'default' }) {
 function normalizeSales(payload) {
   if (Array.isArray(payload?.data)) return payload.data
   return []
+}
+
+/**
+ * Read the authoritative stock level out of a real-time stock payload.
+ *
+ * Every producer of `stock:updated` (inventory endpoints, orders, POS) sends the
+ * product id under a different key, so normalise them all to one shape. Returns
+ * null when the event carries no usable quantity, which keeps a partial payload
+ * from overwriting a known stock level with 0.
+ */
+function readStockUpdate(payload) {
+  const productId = payload?.productId || payload?.product_id || payload?.product?.product_id
+  if (!productId) return null
+  const raw = payload?.stock ?? payload?.product?.stock
+  if (raw === undefined || raw === null || raw === '') return null
+  const stock = Number(raw)
+  if (!Number.isFinite(stock)) return null
+  return { product_id: productId, stock }
+}
+
+/**
+ * Fold the stock levels carried by a POS event into a plain product-id map.
+ */
+function readSaleStockUpdates(payload) {
+  const updates = Array.isArray(payload?.stockUpdates) ? payload.stockUpdates : []
+  return updates
+    .map(readStockUpdate)
+    .filter(Boolean)
 }
 
 function escapeHtml(value) {
@@ -493,6 +521,7 @@ export function PosWorkspace({
   description = 'Create and record walk-in sales.',
 }) {
   const { user } = useAuth()
+  const { isConnected } = useSocket()
   const canVoidReturn = hasRole(user?.role, 'staff', 'admin')
   const [searchQuery, setSearchQuery] = useState('')
   const [voidReturnModal, setVoidReturnModal] = useState({ open: false, mode: null, sale: null })
@@ -525,19 +554,68 @@ export function PosWorkspace({
   const [historyFilters, setHistoryFilters] = useState({ search: '', status: '', paymentStatus: '', startDate: '', endDate: '' })
   const [historyError, setHistoryError] = useState('')
   const [historyRefresh, setHistoryRefresh] = useState(0)
+  // Authoritative stock levels received over the socket, keyed by product id.
+  // They shadow the `inventoryItems` prop only until the parent refetch catches
+  // up, so a void/return is visible in the catalog without waiting for a request.
+  const [liveStock, setLiveStock] = useState({})
 
   const prevSalesRef = useRef(null)
   const prevSummaryRef = useRef(null)
+  // The very first `connect` is covered by the initial load below; only later
+  // ones mean the connection dropped and events may have been missed.
+  const hasConnectedRef = useRef(false)
+
+  const applyStockUpdates = useCallback((updates) => {
+    const normalized = (Array.isArray(updates) ? updates : [updates])
+      .map(readStockUpdate)
+      .filter(Boolean)
+    if (normalized.length === 0) return
+    setLiveStock((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const update of normalized) {
+        const key = String(update.product_id)
+        // Re-applying the same quantity (the local response plus the matching
+        // socket event, or two terminals reporting the same level) must not
+        // produce a new state object and an extra render.
+        if (next[key] === update.stock) continue
+        next[key] = update.stock
+        changed = true
+      }
+      return changed ? next : prev
+    })
+  }, [])
+
+  // Drop an override as soon as the fetched inventory agrees with it, so the
+  // database-backed prop stays the source of truth and nothing lingers.
+  useEffect(() => {
+    setLiveStock((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const item of inventoryItems) {
+        const key = String(item?.product_id || '')
+        if (!key || next[key] === undefined) continue
+        if (Number(item.stock) === next[key]) {
+          delete next[key]
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [inventoryItems])
 
   const visibleInventory = useMemo(
     () => inventoryItems
-      .map((item) => ({
-        ...item,
-        stock: Number(item.stock || 0),
-        price: Number(item.price || 0),
-      }))
+      .map((item) => {
+        const override = liveStock[String(item.product_id)]
+        return {
+          ...item,
+          stock: override !== undefined ? override : Number(item.stock || 0),
+          price: Number(item.price || 0),
+        }
+      })
       .filter((item) => item.product_id && Number(item.stock) > 0),
-    [inventoryItems]
+    [inventoryItems, liveStock]
   )
 
   const categoryOptions = useMemo(() => {
@@ -700,11 +778,84 @@ export function PosWorkspace({
     loadRecentSales({ silent: true })
   }, [loadRecentSales])
 
-  useSocketEvent('pos:sale_completed', (data) => {
+  const refreshRealtimeSales = useCallback(() => {
     loadRecentSales({ silent: true })
-    if (data?.saleNumber) {
+    // The history table keeps its own filters, page and total, so it needs its
+    // own refetch to pick up a status change or a shifted page.
+    setHistoryRefresh((value) => value + 1)
+  }, [loadRecentSales])
+
+  // Apply a sale the socket reported to every list that is already on screen, so
+  // a void/return flips the status badge without waiting for a refetch.
+  const patchSaleLocally = useCallback((sale) => {
+    const saleId = sale?.sale_id
+    if (!saleId) return
+    setRecentSales((prev) => prev.map((entry) => entry.sale_id === saleId ? { ...entry, ...sale } : entry))
+    setHistorySales((prev) => prev.map((entry) => entry.sale_id === saleId ? { ...entry, ...sale } : entry))
+    setSelectedSale((prev) => prev && prev.sale_id === saleId ? { ...prev, ...sale } : prev)
+  }, [])
+
+  // Another terminal can change the stock of a product that is already in this
+  // cart. Re-clamp on the next render so the POS never offers units the database
+  // no longer has, and drop lines that just went out of stock.
+  useEffect(() => {
+    const limits = liveStock
+    if (Object.keys(limits).length === 0) return
+    setCart((prev) => {
+      let changed = false
+      const next = []
+      for (const entry of prev) {
+        const limit = limits[String(entry.product_id)]
+        if (limit === undefined) {
+          next.push(entry)
+          continue
+        }
+        if (limit <= 0) {
+          changed = true
+          continue
+        }
+        if (entry.quantity > limit) {
+          changed = true
+          next.push({ ...entry, quantity: limit, stock: limit })
+          continue
+        }
+        next.push(entry.stock === limit ? entry : { ...entry, stock: limit })
+        if (entry.stock !== limit) changed = true
+      }
+      return changed ? next : prev
+    })
+  }, [liveStock])
+
+  useSocketEvent('pos:sale_completed', (data) => {
+    applyStockUpdates(readSaleStockUpdates(data))
+    refreshRealtimeSales()
+    // The cashier already gets a confirmation from their own request; only other
+    // terminals need the heads-up.
+    const isOwnSale = data?.sale?.staff_id && String(data.sale.staff_id) === String(user?.id)
+    if (data?.saleNumber && !isOwnSale) {
       showToast?.(`New sale: ${data.saleNumber}`, 'info')
     }
+  })
+
+  useSocketEvent('pos:sale_updated', (data) => {
+    // A void/return changes the sale status and gives stock back in one step.
+    applyStockUpdates(readSaleStockUpdates(data))
+    patchSaleLocally(data?.sale)
+    refreshRealtimeSales()
+  })
+
+  useSocketEvent('stock:updated', (data) => {
+    applyStockUpdates(readStockUpdate(data))
+  })
+
+  useSocketEvent('connect', () => {
+    // Events emitted while the connection was down are gone, so re-read the
+    // POS data once instead of waiting for the next sale to trigger a refresh.
+    if (!hasConnectedRef.current) {
+      hasConnectedRef.current = true
+      return
+    }
+    refreshRealtimeSales()
   })
 
   const addToCart = useCallback((product) => {
@@ -785,15 +936,20 @@ export function PosWorkspace({
         cash_received: payload.cashReceived,
       })
       resetSaleForm()
+      applyStockUpdates(savedSale?.stockUpdates)
+      // `pos:sale_completed` refreshes the lists and the catalog moments later;
+      // only fall back to a fetch when no socket can deliver that notification.
       // A refresh failure must not make a recorded sale appear to have failed.
-      await loadRecentSales().catch(() => {})
+      if (!isConnected) {
+        await loadRecentSales().catch(() => {})
+      }
       showToast?.(`POS sale ${result?.data?.sale_number || 'saved'} recorded`, 'success')
     } catch (error) {
       showToast?.(error.message, 'error')
     } finally {
       setSubmitting(false)
     }
-  }, [cart, cashReceived, customerName, customerPhone, loadRecentSales, paymentMethod, referenceNumber, resetSaleForm, showToast, subtotal, tax, total])
+  }, [applyStockUpdates, cart, cashReceived, customerName, customerPhone, isConnected, loadRecentSales, paymentMethod, referenceNumber, resetSaleForm, showToast, subtotal, tax, total])
 
   const handlePrintSaleReceipt = useCallback((sale) => {
     if (!sale) {
@@ -858,10 +1014,12 @@ export function PosWorkspace({
       }
     }
 
-    setVoidReturnSubmitting(true)
+setVoidReturnSubmitting(true)
     try {
       if (mode === 'void') {
-        await posApi.voidSale(sale.sale_id, { reason: voidReturnReason.trim() })
+        const response = await posApi.voidSale(sale.sale_id, { reason: voidReturnReason.trim() })
+        applyStockUpdates(response?.data?.stockUpdates)
+        patchSaleLocally(response?.data?.sale)
         showToast?.(`Sale ${sale.sale_number} voided`, 'success')
       } else {
         const items = (sale.items || [])
@@ -871,18 +1029,24 @@ export function PosWorkspace({
             quantity: item.quantity,
             item_condition: voidReturnConditions[item.item_id] || 'resalable',
           }))
-        await posApi.returnSale(sale.sale_id, { reason: voidReturnReason.trim(), items })
+        const response = await posApi.returnSale(sale.sale_id, { reason: voidReturnReason.trim(), items })
+        applyStockUpdates(response?.data?.stockUpdates)
+        patchSaleLocally(response?.data?.sale)
         showToast?.(`Sale ${sale.sale_number} returned`, 'success')
       }
       closeVoidReturnModal()
       setSelectedSale(null)
-      await loadRecentSales()
+      // The socket notification confirms the change a moment later, so only
+      // re-read from the API when there is no live connection to deliver it.
+      if (!isConnected) {
+        refreshRealtimeSales()
+      }
     } catch (error) {
       showToast?.(error.message, 'error')
     } finally {
       setVoidReturnSubmitting(false)
     }
-  }, [closeVoidReturnModal, loadRecentSales, showToast, voidReturnConditions, voidReturnModal, voidReturnReason])
+  }, [applyStockUpdates, closeVoidReturnModal, isConnected, patchSaleLocally, refreshRealtimeSales, showToast, voidReturnConditions, voidReturnModal, voidReturnReason])
 
   const expectedRestockCount = useMemo(() => {
     if (!voidReturnModal.sale) return 0

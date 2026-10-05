@@ -21,6 +21,7 @@ import { Topbar } from '../components/admin/Topbar'
 import { WorkspaceSidebar } from '../components/admin/WorkspaceSidebar'
 import { useAuth } from '../context/AuthContext'
 import { useDebounce } from '../hooks/useDebounce'
+import { useDebouncedCallback } from '../hooks/useDebouncedCallback'
 import { useSocketEvent } from '../context/SocketContext'
 import { formatCurrency } from '../utils/formatCurrency'
 import { hasRole } from '../utils/roles'
@@ -542,6 +543,15 @@ export function StaffDashboard() {
   }, [activeTab, fetchAppointments, fetchArchivedProjects, fetchAvailableDates, fetchCalendarAppointments, fetchInventory, fetchOrders, fetchProjects, fetchSalesReport, fetchUnavailableDates])
 
   // ── Real-Time WebSocket Event Listeners (replaces polling) ──────────────
+  // Appointment changes arrive in bursts (the no-show sweep publishes one event
+  // per appointment), so the appointment views are re-read once per burst.
+  const refreshAppointmentsRealtime = useDebouncedCallback(() => {
+    fetchAppointments({ silent: true })
+    fetchCalendarAppointments()
+    fetchAvailableDates()
+    fetchUnavailableDates()
+  })
+
   useSocketEvent('order:created', () => {
     fetchOrders()
     fetchInventory({ silent: true })
@@ -566,17 +576,18 @@ export function StaffDashboard() {
   })
 
   useSocketEvent('appointment:created', () => {
-    fetchAppointments({ silent: true })
-    fetchCalendarAppointments()
-    fetchAvailableDates()
-    fetchUnavailableDates()
+    refreshAppointmentsRealtime()
     showToast('New appointment booked!', 'info')
   })
 
   useSocketEvent('appointment:updated', () => {
-    fetchAppointments({ silent: true })
-    fetchCalendarAppointments()
-    fetchUnavailableDates()
+    refreshAppointmentsRealtime()
+  })
+
+  useSocketEvent('appointment:schedule_updated', () => {
+    // Availability edits change which slots exist, so the list, the calendar and
+    // the blocked/available day pickers all have to be re-read.
+    refreshAppointmentsRealtime()
   })
 
   useSocketEvent('project:updated', () => {
@@ -602,6 +613,15 @@ export function StaffDashboard() {
     }
   })
 
+  useSocketEvent('pos:sale_updated', () => {
+    // A void/return changes today's figures and puts stock back, so the report
+    // and every inventory-backed view have to follow.
+    if (['dashboard', 'pos', 'inventory', 'sales-report'].includes(activeTab)) {
+      fetchSalesReport()
+      fetchInventory({ silent: true })
+    }
+  })
+
   useSocketEvent('refund:created', () => {
     fetchOrders()
     showToast('New refund request submitted!', 'info')
@@ -609,6 +629,18 @@ export function StaffDashboard() {
 
   useSocketEvent('refund:updated', () => {
     fetchOrders()
+  })
+
+  // Events published while the socket was down never arrive, so re-read the data
+  // this tab is actually showing once the connection is restored.
+  useSocketEvent('connect', () => {
+    if (['appointments', 'dashboard'].includes(activeTab)) {
+      fetchAppointments({ silent: true })
+      fetchCalendarAppointments()
+    }
+    if (['dashboard', 'pos', 'inventory', 'sales-report'].includes(activeTab)) {
+      fetchInventory({ silent: true })
+    }
   })
 
   const handleRefresh = useCallback(() => {

@@ -54,6 +54,7 @@ import { useUsersAdmin } from '../hooks/useUsersAdmin'
 import { useOrdersAdmin } from '../hooks/useOrdersAdmin'
 import { useProjectsAdmin } from '../hooks/useProjectsAdmin'
 import { useAppointmentsAdmin } from '../hooks/useAppointmentsAdmin'
+import { useDebouncedCallback } from '../hooks/useDebouncedCallback'
 import { useServicesAdmin } from '../hooks/useServicesAdmin'
 import { useInventoryAdmin } from '../hooks/useInventoryAdmin'
 import {
@@ -941,6 +942,14 @@ export function AdminPage() {
    }, [activeTab, fetchServices])
 
   // ── Real-time Event-Driven Updates for Admin Dashboard ─────────────────
+  // Appointment changes often arrive in bursts (the no-show sweep publishes one
+  // event per appointment), so the list and the calendar are re-read once per
+  // burst instead of once per event.
+  const refreshAppointmentsRealtime = useDebouncedCallback(() => {
+    fetchAppointments({ silent: true })
+    fetchCalendarAppointments()
+  })
+
   useSocketEvent('order:created', () => {
     fetchOrders()
     fetchInventory({ silent: true })
@@ -973,14 +982,20 @@ export function AdminPage() {
   })
 
   useSocketEvent('appointment:created', () => {
-    fetchAppointments({ silent: true })
-    fetchCalendarAppointments()
+    refreshAppointmentsRealtime()
     showToast('New appointment booked!', 'info')
   })
 
   useSocketEvent('appointment:updated', () => {
-    fetchAppointments({ silent: true })
-    fetchCalendarAppointments()
+    refreshAppointmentsRealtime()
+  })
+
+  useSocketEvent('appointment:schedule_updated', () => {
+    // Availability edits change which slots exist, so the list, the calendar and
+    // the blocked/available day pickers all have to be re-read.
+    refreshAppointmentsRealtime()
+    fetchUnavailableDates()
+    fetchAvailableDates()
   })
 
   useSocketEvent('project:updated', () => {
@@ -1034,6 +1049,15 @@ export function AdminPage() {
     }
   })
 
+  useSocketEvent('pos:sale_updated', () => {
+    // A void/return changes today's figures and puts stock back, so the report
+    // and every inventory-backed view have to follow.
+    if (['dashboard', 'pos', 'sales-report', 'inventory'].includes(activeTab)) {
+      fetchSalesReport()
+      fetchInventory({ silent: true })
+    }
+  })
+
   useSocketEvent('refund:created', () => {
     fetchOrders()
     showToast('New refund request submitted!', 'info')
@@ -1041,6 +1065,18 @@ export function AdminPage() {
 
   useSocketEvent('refund:updated', () => {
     fetchOrders()
+  })
+
+  // Events published while the socket was down never arrive, so re-read the data
+  // this tab is actually showing once the connection is restored.
+  useSocketEvent('connect', () => {
+    if (['appointments', 'dashboard'].includes(activeTab)) {
+      fetchAppointments({ silent: true })
+      fetchCalendarAppointments()
+    }
+    if (['dashboard', 'pos', 'inventory', 'sales-report'].includes(activeTab)) {
+      fetchInventory({ silent: true })
+    }
   })
 
   const handleRefresh = () => {
