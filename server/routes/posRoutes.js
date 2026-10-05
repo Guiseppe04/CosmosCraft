@@ -9,7 +9,8 @@ const ctrl = require('../controllers/posController');
  * manage_pos: staff, admin, super_admin
  * view_pos: staff, admin, super_admin
  * verify_pos_payment: staff, admin, super_admin
- * void_pos_sale: admin, super_admin
+ * void_pos_sale: staff, admin, super_admin
+ * return_pos_sale: staff, admin, super_admin
  */
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -96,19 +97,19 @@ router.patch(
   ctrl.cancelSale
 );
 
-// Void a completed sale (admin only)
+// Void a completed sale
 router.post(
   '/sales/:id/void',
   authenticateToken,
-  authorize('admin', 'super_admin'),
+  authorize('staff', 'admin', 'super_admin'),
   ctrl.voidSale
 );
 
-// Return items from a completed sale (admin only)
+// Return items from a completed sale
 router.post(
   '/sales/:id/return',
   authenticateToken,
-  authorize('admin', 'super_admin'),
+  authorize('staff', 'admin', 'super_admin'),
   ctrl.returnSale
 );
 
