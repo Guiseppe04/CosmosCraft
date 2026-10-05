@@ -272,7 +272,7 @@ export function AdminPage() {
   const [dashboardAppointmentStatusFilter, setDashboardAppointmentStatusFilter] = useState('all')
 
   // Redirect context: set when admin is sent from ProjectTaskTracker → OrdersTab to verify a payment.
-  // Stores { orderId, projectData } so we can auto-open the right order and prompt the admin to return.
+  // Stores the source { order, projectData } so we can auto-open the right order and prompt the admin to return.
   const [orderRedirectState, setOrderRedirectState] = useState(null)
   // Set to the updated order after the admin verifies payment from a redirect, to show the return prompt.
   const [postPaymentUpdatedOrder, setPostPaymentUpdatedOrder] = useState(null)
@@ -2935,7 +2935,12 @@ export function AdminPage() {
                 ordersLoading={ordersLoading}
                 initialPaymentStatusFilter={dashboardOrderPaymentFilter}
                 initialStatusFilter={dashboardOrderStatusFilter}
-                initialOrderId={orderRedirectState?.orderId ?? null}
+                initialOrder={orderRedirectState?.order ?? null}
+                onInitialOrderConsumed={() => {
+                  // Clear just the order so the useEffect guard on Strict Mode's
+                  // second run sees null — keeps projectData for the return banner.
+                  setOrderRedirectState(prev => prev ? { ...prev, order: null } : null)
+                }}
                 onPaymentStatusUpdated={(updatedOrder) => {
                   // Only trigger the return-to-tracker prompt when this was a redirect from ProjectTaskTracker
                   if (orderRedirectState) {
@@ -3039,15 +3044,16 @@ export function AdminPage() {
                     setProjects(previous => previous.map(project => project.project_id === updated.project_id ? { ...project, progress: updated.progress, task_summary: updated.task_summary } : project))
                   }}
                   onRedirectToOrder={(order) => {
-                    if (!order) {
+                    const targetOrder = order || (modal.data?.order_id ? { order_id: modal.data.order_id } : null)
+                    if (!targetOrder) {
                       setActiveTab('orders')
                       closeModal()
                       return
                     }
-                    // Store redirect context so OrdersTab can auto-open the order
+                    // Store the target order so OrdersTab can auto-open it
                     // and we can show the return-to-tracker prompt after payment update.
                     setOrderRedirectState({
-                      orderId: order.order_id,
+                      order: targetOrder,
                       projectData: modal.data,
                     })
                     setPostPaymentUpdatedOrder(null)

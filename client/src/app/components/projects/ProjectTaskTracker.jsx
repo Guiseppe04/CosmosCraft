@@ -328,8 +328,8 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   // Check if project is on hold
   const isOnHold = String(hierarchy?.status || '').toLowerCase() === 'on_hold';
 
-  const normalizedPaymentStatus = normalizePaymentStatus(orderPaymentStatus || null);
-  const isTaskUpdateBlocked = isAdmin && normalizedPaymentStatus && normalizedPaymentStatus !== 'approved';
+  const normalizedPaymentStatus = (orderPaymentStatus && String(orderPaymentStatus).trim()) ? normalizePaymentStatus(orderPaymentStatus) : null;
+  const isTaskUpdateBlocked = isAdmin && normalizedPaymentStatus !== null && normalizedPaymentStatus !== 'approved';
 
   const isMilestoneLocked = (milestone) => {
     if (!isAdmin) return false;
@@ -796,7 +796,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               {onRedirectToOrder && (
                 <button
                   type="button"
-                  onClick={() => onRedirectToOrder?.(sourceOrder)}
+                  onClick={() => onRedirectToOrder?.(sourceOrder || (orderId ? { order_id: orderId, payment_status: orderPaymentStatus } : null))}
                   className="inline-flex items-center gap-2 rounded-xl bg-amber-500/20 border border-amber-500/40 px-4 py-2 text-xs font-bold text-amber-300 hover:bg-amber-500/30 hover:text-white transition-all shrink-0"
                 >
                   Verify Payment

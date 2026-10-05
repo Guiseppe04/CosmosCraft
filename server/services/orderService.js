@@ -996,7 +996,14 @@ exports.getUserOrders = async (userId) => {
   })
 }
 
-exports.getOrderById = async (orderId, userId) => {
+exports.getOrderById = async (orderId, userId = null) => {
+  const queryParams = [orderId]
+  let whereClause = 'WHERE o.order_id = $1'
+  if (userId) {
+    queryParams.push(userId)
+    whereClause += ' AND o.user_id = $2'
+  }
+
   const res = await pool.query(
     `SELECT o.*, 
       a.line1 as shipping_line1, a.line2 as shipping_line2, a.city as shipping_city, 
@@ -1005,8 +1012,8 @@ exports.getOrderById = async (orderId, userId) => {
       FROM orders o
       LEFT JOIN addresses a ON o.shipping_address_id = a.address_id
       LEFT JOIN users u ON o.user_id = u.user_id
-      WHERE o.order_id = $1 AND o.user_id = $2`,
-    [orderId, userId]
+      ${whereClause}`,
+    queryParams
   )
   
   if (res.rows.length === 0) {
