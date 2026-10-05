@@ -493,7 +493,7 @@ export function PosWorkspace({
   description = 'Create and record walk-in sales.',
 }) {
   const { user } = useAuth()
-  const isAdmin = hasRole(user?.role, 'admin')
+  const canVoidReturn = hasRole(user?.role, 'staff', 'admin')
   const [searchQuery, setSearchQuery] = useState('')
   const [voidReturnModal, setVoidReturnModal] = useState({ open: false, mode: null, sale: null })
   const [voidReturnReason, setVoidReturnReason] = useState('')
@@ -816,8 +816,8 @@ export function PosWorkspace({
   }, [showToast])
 
   const openVoidReturnModal = useCallback((sale, mode) => {
-    if (!isAdmin) {
-      showToast?.('Only admins can void or return sales', 'error')
+    if (!canVoidReturn) {
+      showToast?.('Only staff and admins can void or return sales', 'error')
       return
     }
     if (String(sale?.status || '').toLowerCase() !== 'completed') {
@@ -827,7 +827,7 @@ export function PosWorkspace({
     setVoidReturnModal({ open: true, mode, sale })
     setVoidReturnReason('')
     setVoidReturnConditions({})
-  }, [isAdmin, showToast])
+  }, [canVoidReturn, showToast])
 
   const closeVoidReturnModal = useCallback(() => {
     setVoidReturnModal({ open: false, mode: null, sale: null })
@@ -1298,7 +1298,7 @@ export function PosWorkspace({
                   )}
                 </div>
 
-                {isAdmin && String(selectedSale.status || '').toLowerCase() === 'completed' && (
+                {canVoidReturn && String(selectedSale.status || '').toLowerCase() === 'completed' && (
                   <div className="mt-4 flex gap-3">
                     <button
                       type="button"

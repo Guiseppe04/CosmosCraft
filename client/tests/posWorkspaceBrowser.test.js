@@ -9,7 +9,7 @@ import autoprefixer from 'autoprefixer'
 import { build } from 'esbuild'
 import { chromium } from '@playwright/test'
 
-test('POS orders table paginates, filters and keeps cash checkout working', async () => {
+test('staff POS supports void/return, pagination, filters and cash checkout', async () => {
   const css = await postcss([tailwindcss({ content: ['./src/app/components/pos/PosWorkspace.jsx', './src/app/pages/admin/components/shared/PaginationBar.jsx'] }), autoprefixer]).process(
     (await readFile(new URL('../src/styles/globals.css', import.meta.url), 'utf8')).replace(/^@import.*$/gm, ''), { from: undefined })
   const fixture = await build({
@@ -21,12 +21,12 @@ test('POS orders table paginates, filters and keeps cash checkout working', asyn
       resolveDir: fileURLToPath(new URL('../', import.meta.url)), loader: 'jsx' },
     bundle: true, write: false, format: 'iife', logLevel: 'silent', define: { 'import.meta.env': '{}' },
     plugins: [{ name: 'isolated-pos', setup(builder) {
-      builder.onLoad({ filter: /AuthContext\.jsx$/ }, () => ({ loader: 'js', contents: `export const useAuth=()=>({user:{role:'admin'}});` }))
+      builder.onLoad({ filter: /AuthContext\.jsx$/ }, () => ({ loader: 'js', contents: `export const useAuth=()=>({user:{role:'staff'}});` }))
       builder.onLoad({ filter: /SocketContext\.jsx$/ }, () => ({ loader: 'js', contents: `export const useSocketEvent=()=>{};` }))
       builder.onLoad({ filter: /apiConfig\.js$/ }, () => ({ loader: 'js', contents: `export const API=window.location.origin; export const getAuthHeaders=()=>({});` }))
     } }],
   })
-  const requests = [], sales = []
+  const requests = [], sales = [], adjustments = [], saleStatuses = new Map()
   const server = createServer(async (req, res) => {
     if (req.url === '/style.css') { res.setHeader('Content-Type', 'text/css'); return res.end(css.css) }
     if (req.url === '/bundle.js') { res.setHeader('Content-Type', 'application/javascript'); return res.end(fixture.outputFiles[0].text) }
@@ -36,6 +36,23 @@ test('POS orders table paginates, filters and keeps cash checkout working', asyn
     if (url.pathname === '/api/pos/sales' && req.method === 'POST') {
       let body = ''; for await (const chunk of req) body += chunk
       sales.push(JSON.parse(body)); return res.end(JSON.stringify({ data: { sale_number: 'POS-NEW' } }))
+    }
+    const adjustment = url.pathname.match(/^\/api\/pos\/sales\/([^/]+)\/(void|return)$/)
+    if (adjustment && req.method === 'POST') {
+      let body = ''; for await (const chunk of req) body += chunk
+      const [, saleId, action] = adjustment
+      adjustments.push({ saleId, action, body: JSON.parse(body) })
+      saleStatuses.set(saleId, action === 'void' ? 'voided' : 'returned')
+      return res.end(JSON.stringify({ status: 'success' }))
+    }
+    const saleDetail = url.pathname.match(/^\/api\/pos\/sales\/(sale-\d+)$/)
+    if (saleDetail) {
+      const saleId = saleDetail[1]
+      return res.end(JSON.stringify({ data: {
+        sale_id: saleId, sale_number: `POS-${Number(saleId.slice(5)) + 1}`, created_at: '2026-10-04T08:00:00Z',
+        total_amount: 500, subtotal: 500, status: saleStatuses.get(saleId) || 'completed', payment_method: 'cash',
+        items: [{ item_id: 'item-1', product_id: 'strings', item_name: 'Guitar Strings', quantity: 1, subtotal: 500 }],
+      } }))
     }
     if (url.pathname === '/api/pos/sales') {
       requests.push(Object.fromEntries(url.searchParams))
@@ -96,7 +113,7 @@ test('POS orders table paginates, filters and keeps cash checkout working', asyn
     assert.equal(sales[0].items[0].quantity, 1)
     await page.getByRole('heading', { name: 'Do you want to print receipt?' }).waitFor()
     await page.getByRole('button', { name: 'No', exact: true }).click()
-    await page.getByRole('status').getByText(/Receipt was not printed/).waitFor()
+    await page.getByRole('heading', { name: 'Do you want to print receipt?' }).waitFor({ state: 'hidden' })
     assert.equal(await page.evaluate(() => window.printedReceipts.length), 0)
     await page.getByRole('button', { name: 'Add Guitar Strings', exact: true }).click()
     await page.getByPlaceholder('Cash received', { exact: true }).fill('1000')
@@ -111,6 +128,35 @@ test('POS orders table paginates, filters and keeps cash checkout working', asyn
     await page.getByRole('button', { name: 'View All Orders', exact: true }).first().click()
     await dialog.getByRole('table').waitFor()
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+    await dialog.getByLabel('Status', { exact: true }).selectOption('')
+    await dialog.getByText('POS-10', { exact: true }).waitFor()
+    for (const [index, action, reason] of [[0, 'void', 'Duplicate sale'], [1, 'return', 'Customer return']]) {
+      const row = dialog.locator('tbody tr').nth(index)
+      await row.getByRole('button', { name: 'View receipt', exact: true }).click()
+      await page.getByRole('button', { name: action === 'void' ? 'Void' : 'Return', exact: true }).click()
+      const confirm = page.getByRole('button', { name: action === 'void' ? 'Confirm Void' : 'Confirm Return', exact: true })
+      await confirm.click()
+      assert.equal(adjustments.length, index, 'a reason is required')
+      await page.getByPlaceholder(action === 'void' ? 'Why is this transaction being voided?' : 'Why is this transaction being returned?').fill(reason)
+      if (action === 'return') {
+        await confirm.click()
+        assert.equal(adjustments.length, index, 'an item condition is required')
+        await page.getByRole('button', { name: 'Perfect / Resalable', exact: true }).click()
+      }
+      const submitted = page.waitForResponse(response => response.url().endsWith(`/${action}`) && response.request().method() === 'POST')
+      await confirm.click()
+      await submitted
+      await page.getByRole('heading', { name: 'Receipt', exact: true }).waitFor({ state: 'hidden' })
+      assert.deepEqual(adjustments[index], {
+        saleId: `sale-${index}`, action,
+        body: action === 'void' ? { reason } : { reason, items: [{ item_id: 'item-1', quantity: 1, item_condition: 'resalable' }] },
+      })
+      await row.getByRole('button', { name: 'View receipt', exact: true }).click()
+      await page.getByRole('heading', { name: 'Receipt', exact: true }).waitFor()
+      assert.equal(await page.getByRole('button', { name: 'Void', exact: true }).count(), 0)
+      assert.equal(await page.getByRole('button', { name: 'Return', exact: true }).count(), 0)
+      await page.getByRole('heading', { name: 'Receipt', exact: true }).locator('..').getByRole('button').click()
+    }
     await page.getByRole('button', { name: 'Back to POS', exact: true }).click()
     assert.deepEqual(errors, [])
   } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)) }
