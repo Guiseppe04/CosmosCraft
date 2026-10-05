@@ -955,12 +955,14 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "#121824",
-                      borderColor: "#1F2937",
+                      backgroundColor: "var(--surface-dark)",
+                      borderColor: "var(--border)",
                       borderRadius: "12px",
                       fontSize: "12px",
-                      color: "#fff",
+                      color: "var(--text-light)",
                     }}
+                    labelStyle={{ color: "var(--text-light)" }}
+                    itemStyle={{ color: "var(--text-light)" }}
                     formatter={(val) => [formatCurrency(val), reportType === "refunds" ? "Adjustments" : "Revenue"]}
                   />
                   <Area
