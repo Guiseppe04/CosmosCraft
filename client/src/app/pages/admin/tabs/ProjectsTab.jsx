@@ -322,9 +322,6 @@ export function ProjectsTab({
                        <p className="mt-2 text-sm text-[var(--text-muted)]">
                          Customer: <span className="text-white">{project.customer_name || 'Unassigned'}</span>
                        </p>
-                       <p className="mt-2 text-sm text-[var(--text-muted)]">
-                         Claimed By: <span className="text-white">{project.claimed_first_name ? `${project.claimed_first_name} ${project.claimed_last_name}` : 'Unassigned'}</span>
-                       </p>
                       {status === 'on_hold' && project.hold_reason && (
                         <p className="mt-2 text-xs text-amber-300/80">
                           Hold reason: <span className="font-medium">{project.hold_reason}</span>
@@ -450,9 +447,6 @@ export function ProjectsTab({
                       </h3>
                        <p className="mt-2 text-sm text-[var(--text-muted)]">
                          Customer: <span className="text-white">{project.customer_name || 'Unassigned'}</span>
-                       </p>
-                       <p className="mt-2 text-sm text-[var(--text-muted)]">
-                         Claimed By: <span className="text-white">{project.claimed_first_name ? `${project.claimed_first_name} ${project.claimed_last_name}` : 'Unassigned'}</span>
                        </p>
                       {status === 'on_hold' && project.hold_reason && (
                         <p className="mt-2 text-xs text-amber-300/80">
