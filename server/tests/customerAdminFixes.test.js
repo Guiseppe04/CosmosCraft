@@ -29,7 +29,7 @@ test('delivery schemas normalize local PH numbers and reject malformed contacts'
   for (const input of ['abc', '+639123', '+6391234567890', '0912-345-6789', '+63(912)3456789', '']) {
     for (const schema of [validation.updateOrderSchema, validation.updateOutForDeliverySchema, validation.updateShipmentSchema]) {
       const payload = schema === validation.updateShipmentSchema
-        ? { tracking_number: 'TRACK123', courier_name: 'Courier', rider_contact: input }
+        ? { tracking_number: 'TRACK123', courier_name: 'Courier', rider_contact: input, additional_shipping_fee: 0 }
         : { rider_name: 'Rider', rider_contact: input };
       const result = schema.validate(payload);
       // Optional empty contact still supports edits unrelated to delivery.

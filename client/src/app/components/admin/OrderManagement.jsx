@@ -21,6 +21,8 @@ import {
 import { useDebounce } from '../../hooks/useDebounce'
 import { normalizeRiderContact } from '../../utils/phone'
 import PhoneInput from '../PhoneInput'
+import { ShippingFeeInput, ShippingFeeNotice } from '../ShippingFeeNotice'
+import { isValidShippingFee } from '../../utils/shippingFee'
 import { useSocketEvent } from '../../context/SocketContext'
 
 const ORDER_STATUS_LIFECYCLE = [
@@ -1144,6 +1146,7 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
                   <span className="text-white font-semibold">Total</span>
                   <span className="text-[var(--gold-primary)] font-bold">{formatCurrency(getOrderTotal(order))}</span>
                 </div>
+                <ShippingFeeNotice fee={order.additional_shipping_fee} />
               </div>
             </div>
           )}
@@ -1382,6 +1385,7 @@ function PaymentVerificationPanel({ order, onVerify, onMarkUnderReview, user }) 
 
 function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
   const [selectedStatus, setSelectedStatus] = useState(order.status || 'pending')
+  const [shippingFee, setShippingFee] = useState('')
   const [trackingInfo, setTrackingInfo] = useState('')
   const [riderName, setRiderName] = useState('')
   const [riderContact, setRiderContact] = useState('')
@@ -1394,7 +1398,7 @@ function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
   const requiresRiderDetails = selectedStatus === 'out_for_delivery'
   const canSubmit =
     selectedStatus !== currentStatus && allowedStatuses.includes(selectedStatus) &&
-    (!requiresTrackingNumber || Boolean(trackingInfo.trim())) &&
+    (!requiresTrackingNumber || (Boolean(trackingInfo.trim()) && isValidShippingFee(shippingFee))) &&
     (!requiresRiderDetails || Boolean(riderName.trim() && riderContact.trim()))
 
   useEffect(() => {
@@ -1403,6 +1407,7 @@ function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
 
   useEffect(() => {
     setTrackingInfo('')
+    setShippingFee('')
     setRiderName('')
     setRiderContact('')
     setTrackingError('')
@@ -1420,6 +1425,10 @@ function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
   }
 
   const handleUpdate = async () => {
+    if (requiresTrackingNumber && !isValidShippingFee(shippingFee)) {
+      setTrackingError('Enter a valid additional shipping fee (0 or more, with up to 2 decimal places).')
+      return
+    }
     if (requiresTrackingNumber && !trackingInfo.trim()) {
       setTrackingError('Tracking number is required')
       return
@@ -1441,6 +1450,7 @@ function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
     try {
       await onUpdate(order.order_id, selectedStatus, {
         trackingInfo: trackingInfo.trim(),
+        shippingFee: requiresTrackingNumber ? Number(shippingFee) : undefined,
         riderName: riderName.trim(),
         riderContact: requiresRiderDetails ? normalizeRiderContact(riderContact) : riderContact.trim(),
       })
@@ -1492,6 +1502,9 @@ function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
 
         {requiresTrackingNumber && (
           <div className="mb-4">
+            <div className="mb-4">
+              <ShippingFeeInput value={shippingFee} onChange={(value) => { setShippingFee(value); setTrackingError('') }} />
+            </div>
             <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">
               Tracking Number
               <span className="text-red-400 ml-1">*</span>
@@ -1838,7 +1851,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
   }
 
   const handleUpdateOrderStatus = async (orderId, newStatus, details = {}) => {
-    const { trackingInfo = '', riderName = '', riderContact = '' } = details
+    const { trackingInfo = '', riderName = '', riderContact = '', shippingFee } = details
     setIsUpdatingOrder(true)
     try {
       const order = selectedOrder?.order_id === orderId ? selectedOrder : orders.find(o => o.order_id === orderId)
@@ -1849,6 +1862,10 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
       }
 
       const updateData = { status: newStatus }
+      if (newStatus === 'shipped') {
+        if (!isValidShippingFee(shippingFee)) throw new Error('Enter a valid additional shipping fee before shipping.')
+        updateData.additional_shipping_fee = Number(shippingFee)
+      }
       if (newStatus === 'shipped' && trackingInfo) {
         updateData.tracking_number = trackingInfo
       }
@@ -1864,7 +1881,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
       setSelectedOrder(prev => prev ? {
         ...prev,
         status: newStatus,
-        ...(newStatus === 'shipped' ? { tracking_number: trackingInfo } : {}),
+        ...(newStatus === 'shipped' ? { tracking_number: trackingInfo, additional_shipping_fee: Number(shippingFee) } : {}),
         ...(newStatus === 'out_for_delivery' ? { rider_name: riderName, rider_contact: riderContact } : {}),
       } : null)
     } catch (error) {

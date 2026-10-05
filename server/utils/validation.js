@@ -1,4 +1,11 @@
 const Joi = require('joi');
+const shippingFeeSchema = Joi.number().min(0).max(9999999999.99).precision(2).strict().messages({
+  'any.required': 'Additional shipping fee is required before shipping.',
+  'number.base': 'Additional shipping fee must be a number.',
+  'number.min': 'Additional shipping fee must be 0 or more.',
+  'number.max': 'Additional shipping fee is too large.',
+  'number.precision': 'Additional shipping fee must have at most 2 decimal places.',
+});
 const { normalizeRiderContact } = require('./riderContact');
 const riderContactSchema = Joi.string().trim().custom((value, helpers) => {
   const normalized = normalizeRiderContact(value);
@@ -938,13 +945,14 @@ exports.updatePaymentStatusSchema = Joi.object({
 
 exports.updateOrderSchema = Joi.object({
   status: Joi.string().valid(...orderStatusEnum).optional(),
+  additional_shipping_fee: shippingFeeSchema.when('status', { is: 'shipped', then: Joi.required(), otherwise: Joi.optional() }),
   payment_status: Joi.string().valid(...orderPaymentStatusEnum).optional(),
   notes: Joi.string().max(1000).optional().allow('').trim(),
   tracking_number: Joi.string().max(100).optional().allow('').trim(),
   courier_name: Joi.string().max(100).optional().allow('').trim(),
   rider_name: Joi.string().max(100).optional().allow('').trim(),
   rider_contact: riderContactSchema.optional().allow(''),
-}).or('status', 'payment_status', 'notes', 'tracking_number', 'courier_name', 'rider_name', 'rider_contact').messages({
+}).or('status', 'payment_status', 'notes', 'tracking_number', 'courier_name', 'rider_name', 'rider_contact', 'additional_shipping_fee').messages({
   'object.missing': 'At least one field is required to update the order',
 });
 
@@ -959,6 +967,7 @@ exports.orderIdParamSchema = Joi.object({
 });
 
 exports.updateShipmentSchema = Joi.object({
+  additional_shipping_fee: shippingFeeSchema.required(),
   tracking_number: Joi.string().trim().min(5).max(100).required().messages({
     'string.min': 'Tracking number must be at least 5 characters',
     'string.max': 'Tracking number must not exceed 100 characters',

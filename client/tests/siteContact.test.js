@@ -14,6 +14,7 @@ const bundle = await build({
     export { default as TermsAndConditionsModal } from './src/app/components/TermsAndConditionsModal.jsx';
     export { LandingPage } from './src/app/pages/LandingPage.jsx';
     export { AuthProvider } from './src/app/context/AuthContext.jsx';
+    export { ThemeProvider } from './src/app/context/ThemeContext.jsx';
     export { MemoryRouter } from 'react-router';
   `, resolveDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), loader: 'jsx' },
   bundle: true, platform: 'node', format: 'cjs', write: false, jsx: 'automatic',
@@ -28,10 +29,10 @@ compiled._compile(bundle.outputFiles[0].text, compiled.filename)
 const {
   SITE_CONTACT_STORAGE_KEY, SITE_CONTACT_UPDATED_EVENT,
   getSiteContactSnapshot, publishSiteContact, refreshSiteContact, subscribeSiteContact,
-  TermsAndConditionsModal, LandingPage, AuthProvider, MemoryRouter,
+  TermsAndConditionsModal, LandingPage, AuthProvider, ThemeProvider, MemoryRouter,
 } = compiled.exports
 
-const originalGlobals = { window: globalThis.window, fetch: globalThis.fetch, CustomEvent: globalThis.CustomEvent }
+const originalGlobals = { window: globalThis.window, fetch: globalThis.fetch, CustomEvent: globalThis.CustomEvent, localStorage: globalThis.localStorage }
 const baseline = { email: 'shop@example.test', phone: '+639661341242' }
 beforeEach(() => {
   const storage = new Map()
@@ -46,6 +47,7 @@ beforeEach(() => {
   globalThis.CustomEvent = class extends Event {
     constructor(type, options) { super(type); this.detail = options?.detail }
   }
+  globalThis.localStorage = globalThis.window.localStorage
   publishSiteContact(baseline)
 })
 afterEach(() => {
@@ -114,7 +116,7 @@ test('landing contact details, footer and Terms and Conditions use the same save
   assert.match(terms, /href="mailto:shop@example.test"/)
   assert.doesNotMatch(terms, /cosmosguitars@gmail.com/)
   const landing = renderToStaticMarkup(
-    React.createElement(MemoryRouter, {}, React.createElement(AuthProvider, {}, React.createElement(LandingPage))),
+    React.createElement(ThemeProvider, {}, React.createElement(MemoryRouter, {}, React.createElement(AuthProvider, {}, React.createElement(LandingPage)))),
   )
   assert.equal(landing.match(/shop@example.test/g)?.length, 2)
   assert.match(landing, /\+63 966 134 1242/)

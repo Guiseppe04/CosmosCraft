@@ -9,8 +9,11 @@ import {
   ChevronDown, ChevronUp, MapPin, FileText, Check,
   X, CheckCircle, Trash2, Home, Building, PlusCircle, Maximize2
 } from 'lucide-react'
+import { ShippingFeeNotice } from '../components/ShippingFeeNotice.jsx'
 import { PaymentModal } from '../components/PaymentModal.jsx'
 import TermsAndConditionsModal from '../components/TermsAndConditionsModal.jsx'
+import CheckoutTermsAgreement from '../components/CheckoutTermsAgreement.jsx'
+import { getCheckoutTermsTypes, hasAcceptedCheckoutTerms, TERMS_BY_TYPE } from '../utils/checkoutTerms'
 import { AddressForm } from '../components/AddressForm.jsx'
 import { API, getAuthHeaders } from '../utils/apiConfig'
 import api from '../services/api.js'
@@ -334,61 +337,6 @@ function AddressSelectionCard({ addresses, selectedAddressId, onSelectAddress, o
   )
 }
 
-function ShippingSelector({ selected, onChange }) {
-  const options = [
-    { value: 'standard', label: 'Standard', days: '5-7 days', price: 'Free', priceValue: 0 },
-    { value: 'express', label: 'Express', days: '2-3 days', price: '₱500', priceValue: 500 },
-  ]
-
-  return (
-    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl p-4">
-      <div className="flex items-center gap-3 mb-4">
-        <Truck className="w-5 h-5 text-[var(--gold-primary)]" />
-        <h2 className="text-lg font-bold text-[var(--text-light)]">Shipping Method</h2>
-      </div>
-      <div className="grid sm:grid-cols-2 gap-3">
-        {options.map((option) => (
-          <label
-            key={option.value}
-            className={`relative flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-all duration-200 ${
-              selected === option.value 
-                ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10' 
-                : 'border-[var(--border)] hover:border-[var(--gold-primary)]/50'
-            }`}
-          >
-            <input 
-              type="radio" 
-              name="shipping" 
-              value={option.value}
-              checked={selected === option.value}
-              onChange={() => onChange(option.value)}
-              className="sr-only"
-            />
-            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-              selected === option.value 
-                ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]' 
-                : 'border-[var(--border)]'
-            }`}>
-              {selected === option.value && (
-                <div className="w-2 h-2 rounded-full bg-[var(--text-dark)]" />
-              )}
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-[var(--text-light)]">{option.label}</p>
-              <p className="text-xs text-[var(--text-muted)]">{option.days}</p>
-            </div>
-            <span className={`text-sm font-bold ${
-              option.priceValue === 0 ? 'text-green-400' : 'text-[var(--gold-primary)]'
-            }`}>
-              {option.price}
-            </span>
-          </label>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 function OrderNotesCard({ value, onChange }) {
   return (
     <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl p-4">
@@ -439,9 +387,9 @@ function OrderSummaryCard({
       </div>
 
       <div className="flex justify-between text-sm">
-        <span className="text-[var(--text-muted)]">Shipping</span>
+        <span className="text-[var(--text-muted)]">Shipping fee</span>
         <span className={`${shippingCost === 0 ? 'text-green-400' : 'text-[var(--text-light)]'}`}>
-          {shippingCost === 0 ? 'Free' : `₱${shippingCost}`}
+          {shippingCost === 0 ? 'Paid separately' : `₱${shippingCost}`}
         </span>
       </div>
     </div>
@@ -537,6 +485,8 @@ function CheckoutSummaryCard({
   onViewTerms,
   onToggleTerms,
   termsAccepted = false,
+  termsTypes = [],
+  acceptedTermsByType = {},
   termsError = '',
   monthlyPayment = 0,
   estimatedCompletion,
@@ -592,7 +542,7 @@ function CheckoutSummaryCard({
         <div className="flex justify-between text-sm">
           <span className="text-[var(--text-muted)]">Shipping</span>
           <span className={`${safeShippingCost === 0 ? 'text-green-400' : 'text-[var(--text-light)]'}`}>
-            {safeShippingCost === 0 ? 'Free' : `PHP ${safeShippingCost.toLocaleString('en-PH')}`}
+            {safeShippingCost === 0 ? 'Paid separately' : `PHP ${safeShippingCost.toLocaleString('en-PH')}`}
           </span>
         </div>
         {Number(taxAmount) > 0 && (
@@ -654,27 +604,8 @@ function CheckoutSummaryCard({
         )}
       </div>
 
-      <div className="rounded-xl border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/10 p-4">
-        <button
-          type="button"
-          onClick={onViewTerms}
-          className="text-sm font-medium text-[var(--gold-primary)] hover:underline"
-        >
-          Terms and Conditions
-        </button>
-        <label className="mt-2 flex items-start gap-2 text-sm text-[var(--text-muted)]">
-          <input
-            type="checkbox"
-            checked={termsAccepted}
-            onChange={(event) => onToggleTerms(event.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-[var(--border)] bg-[var(--bg-primary)] text-[var(--gold-primary)] focus:ring-[var(--gold-primary)]"
-          />
-          <span>I have read and agree to the Terms and Conditions.</span>
-        </label>
-        {termsError && (
-          <p className="mt-2 text-xs font-medium text-red-400">{termsError}</p>
-        )}
-      </div>
+      <CheckoutTermsAgreement types={termsTypes} accepted={acceptedTermsByType}
+        onViewTerms={onViewTerms} onToggleTerms={onToggleTerms} error={termsError} />
 
       <button
         onClick={onPlaceOrder}
@@ -852,7 +783,7 @@ export function CheckoutPage() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [orderError, setOrderError] = useState(null)
   const [orderNotes, setOrderNotes] = useState('')
-  const [shippingMethod, setShippingMethod] = useState('standard')
+  const shippingMethod = 'standard'
   const [selectedAddressId, setSelectedAddressId] = useState(null)
   const [addressError, setAddressError] = useState(false)
   const [showAddAddressModal, setShowAddAddressModal] = useState(false)
@@ -867,7 +798,8 @@ export function CheckoutPage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showTermsModal, setShowTermsModal] = useState(false)
-  const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [termsAcceptance, setTermsAcceptance] = useState({ scope: '', accepted: {} })
+  const [viewedTermsType, setViewedTermsType] = useState('orders')
   const [termsError, setTermsError] = useState('')
   const [selectionError, setSelectionError] = useState(false)
   const [preparedCartItems, setPreparedCartItems] = useState([])
@@ -992,11 +924,20 @@ export function CheckoutPage() {
 
   const checkoutItems = baseCheckoutItems.filter(item => activeSelectedItemIds.includes(String(item.id)))
   const subtotal = checkoutItems.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.quantity) || 0)), 0)
-  const shippingCost = shippingMethod === 'express' ? 500 : 0
+  const shippingCost = 0
   const taxAmount = Math.round((subtotal * preparedTaxRate + Number.EPSILON) * 100) / 100
   
   const fullPaymentTotal = subtotal + shippingCost + taxAmount
   const hasSelectedCustomBuild = checkoutItems.some(item => isCustomBuildItem(item))
+  const termsTypes = getCheckoutTermsTypes(checkoutItems.some(item => !isCustomBuildItem(item)), hasSelectedCustomBuild)
+  const termsScope = termsTypes.join(',')
+  const acceptedTermsByType = termsAcceptance.scope === termsScope ? termsAcceptance.accepted : {}
+  const acceptedTerms = hasAcceptedCheckoutTerms(termsTypes, acceptedTermsByType)
+  useEffect(() => {
+    setTermsAcceptance((previous) => previous.scope === termsScope ? previous : { scope: termsScope, accepted: {} })
+    setTermsError('')
+    setShowPaymentModal(false)
+  }, [termsScope])
   const total = hasSelectedCustomBuild ? fullPaymentTotal * CUSTOM_BUILD_DOWN_PAYMENT_RATE : fullPaymentTotal
   const remainingBalance = Math.max(0, fullPaymentTotal - total)
   const monthlyPayment = hasSelectedCustomBuild
@@ -1041,7 +982,8 @@ export function CheckoutPage() {
     updateQuantity(itemId, quantity)
   }
 
-  const handleOpenTermsModal = () => {
+  const handleOpenTermsModal = (type) => {
+    setViewedTermsType(type)
     setShowTermsModal(true)
   }
 
@@ -1049,8 +991,11 @@ export function CheckoutPage() {
     setShowTermsModal(false)
   }
 
-  const handleToggleTerms = (checked) => {
-    setAcceptedTerms(Boolean(checked))
+  const handleToggleTerms = (type, checked) => {
+    setTermsAcceptance((previous) => ({
+      scope: termsScope,
+      accepted: { ...(previous.scope === termsScope ? previous.accepted : {}), [type]: Boolean(checked) },
+    }))
     if (checked) {
       setTermsError('')
     }
@@ -1196,7 +1141,7 @@ export function CheckoutPage() {
       return
     }
     if (!acceptedTerms) {
-      setTermsError('You must agree to the Terms and Conditions before placing your order.')
+      setTermsError('Please accept each applicable agreement before placing your order.')
       return
     }
     const outOfStockItem = checkoutItems.find((item) => {
@@ -1215,6 +1160,11 @@ export function CheckoutPage() {
   }
 
   const handlePaymentSubmit = async (paymentMethod, receipt, paymentPlan = 'full') => {
+    if (!acceptedTerms) {
+      setTermsError('Please accept each applicable agreement before placing your order.')
+      setShowPaymentModal(false)
+      return
+    }
     if (!validatePayment(paymentMethod, receipt)) return
 
     setIsProcessing(true)
@@ -1282,7 +1232,7 @@ export function CheckoutPage() {
       if (hasSelectedCustomBuild) {
         const checkoutTermsNote = [
           'Checkout Terms:',
-          '- Terms and Conditions accepted for custom build selection',
+          `- Terms and Conditions accepted: ${termsTypes.map(type => TERMS_BY_TYPE[type].label).join('; ')}`,
           `- Payment plan: ${selectedPaymentTerms === 'full' ? 'Full payment' : `${Math.round(CUSTOM_BUILD_DOWN_PAYMENT_RATE * 100)}% down payment`}`,
           `- Full order total: PHP ${fullPaymentTotal.toLocaleString('en-PH', { maximumFractionDigits: 2 })}`,
           `- ${paymentAmountLabel}: PHP ${paymentAmount.toLocaleString('en-PH', { maximumFractionDigits: 2 })}`,
@@ -1521,10 +1471,7 @@ export function CheckoutPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
               >
-                <ShippingSelector
-                  selected={shippingMethod}
-                  onChange={setShippingMethod}
-                />
+                <ShippingFeeNotice title="Shipping Fee Notice:" />
               </motion.div>
 
             </div>
@@ -1558,6 +1505,8 @@ export function CheckoutPage() {
                   onViewTerms={handleOpenTermsModal}
                   onToggleTerms={handleToggleTerms}
                   termsAccepted={acceptedTerms}
+                  termsTypes={termsTypes}
+                  acceptedTermsByType={acceptedTermsByType}
                   termsError={termsError}
                   monthlyPayment={monthlyPayment}
                   estimatedCompletion={estimatedCompletion}
@@ -1600,6 +1549,8 @@ export function CheckoutPage() {
       <TermsAndConditionsModal
         isOpen={showTermsModal}
         onClose={handleCloseTermsModal}
+        types={termsTypes}
+        initialType={viewedTermsType}
       />
     </>
   )

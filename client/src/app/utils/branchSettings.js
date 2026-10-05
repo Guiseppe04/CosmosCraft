@@ -14,7 +14,7 @@ let revision = 0
 let pendingRequest = null
 
 function parseBranch(value) {
-  if (value?.id !== DEFAULT_APPOINTMENT_BRANCH.id || typeof value?.address !== 'string' || !value.address.trim()) return null
+  if (typeof value?.id !== 'string' || !value.id.trim() || typeof value?.address !== 'string' || !value.address.trim()) return null
   return {
     id: value.id,
     name: value.name || DEFAULT_APPOINTMENT_BRANCH.name,
@@ -31,7 +31,11 @@ function readCachedBranch() {
   } catch { return null }
 }
 
-let snapshot = { branch: readCachedBranch() || DEFAULT_APPOINTMENT_BRANCH, isLoading: true, isLoaded: false, error: null }
+const initialBranch = readCachedBranch() || DEFAULT_APPOINTMENT_BRANCH
+let cachedLocations
+try { cachedLocations = typeof window !== 'undefined' ? JSON.parse(window.localStorage.getItem(`${BRANCH_SETTINGS_STORAGE_KEY}.locations`)) : null } catch { /* Cache is optional. */ }
+const initialLocations = Array.isArray(cachedLocations) ? cachedLocations.map(parseBranch).filter(branch => branch && branch.id !== initialBranch.id) : []
+let snapshot = { branch: initialBranch, branches: [initialBranch, ...initialLocations], isLoading: true, isLoaded: false, error: null }
 export const getBranchSettingsSnapshot = () => snapshot
 
 function updateSnapshot(changes) {
@@ -39,27 +43,42 @@ function updateSnapshot(changes) {
   listeners.forEach((listener) => listener())
 }
 
-function applyBranch(value, persist = true) {
-  const branch = parseBranch(value)
+function applyBranches(values, persist = true) {
+  const valid = values.map(parseBranch).filter(Boolean)
+  const unique = [...new Map(valid.map(branch => [branch.id, branch])).values()]
+  const branch = unique.find(branch => branch.id === DEFAULT_APPOINTMENT_BRANCH.id)
   if (!branch) return snapshot.branch
+  const branches = [branch, ...unique.filter(item => item.id !== branch.id)]
   if (persist && typeof window !== 'undefined') {
-    try { window.localStorage.setItem(BRANCH_SETTINGS_STORAGE_KEY, JSON.stringify(branch)) }
+    try {
+      window.localStorage.setItem(BRANCH_SETTINGS_STORAGE_KEY, JSON.stringify(branch))
+      window.localStorage.setItem(`${BRANCH_SETTINGS_STORAGE_KEY}.locations`, JSON.stringify(branches))
+    }
     catch { /* Storage is only a cache; the database remains authoritative. */ }
   }
-  if (JSON.stringify(branch) !== JSON.stringify(snapshot.branch) || !snapshot.isLoaded || snapshot.error || snapshot.isLoading) {
+  if (JSON.stringify(branches) !== JSON.stringify(snapshot.branches) || !snapshot.isLoaded || snapshot.error || snapshot.isLoading) {
     revision += 1
-    updateSnapshot({ branch, isLoaded: true, isLoading: false, error: null })
+    updateSnapshot({ branch, branches, isLoaded: true, isLoading: false, error: null })
   }
   return snapshot.branch
 }
 
+function applyBranch(value, persist = true) {
+  const branch = parseBranch(value)
+  if (!branch) return snapshot.branch
+  return applyBranches([...snapshot.branches.filter(item => item.id !== branch.id), branch], persist)
+}
+
 export function publishBranchSettings(branch) {
   revision += 1
-  return applyBranch(branch)
+  return Array.isArray(branch) ? applyBranches(branch) : applyBranch(branch)
 }
 
 const onStorage = (event) => {
   if (event.key === BRANCH_SETTINGS_STORAGE_KEY) applyBranch(readCachedBranch(), false)
+  if (event.key === `${BRANCH_SETTINGS_STORAGE_KEY}.locations`) {
+    try { const branches = JSON.parse(window.localStorage.getItem(event.key)); if (Array.isArray(branches)) applyBranches(branches, false) } catch { /* Ignore invalid cache. */ }
+  }
 }
 
 export function subscribeBranchSettings(listener) {
@@ -80,7 +99,7 @@ export function refreshBranchSettings() {
     .then(async (response) => {
       const result = await response.json()
       if (!response.ok || !parseBranch(result.data)) throw new Error(result.message || 'Failed to load branch address.')
-      if (revision === startedAtRevision) applyBranch(result.data)
+      if (revision === startedAtRevision) applyBranches(Array.isArray(result.branches) ? result.branches : [result.data])
       return snapshot.branch
     })
     .catch((error) => {

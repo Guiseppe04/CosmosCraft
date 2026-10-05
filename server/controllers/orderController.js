@@ -197,7 +197,7 @@ exports.approvePayment = asyncHandler(async (req, res, next) => {
 })
 
 exports.updateShipment = asyncHandler(async (req, res, next) => {
-  const { tracking_number, courier_name, rider_name, rider_contact } = req.validatedData || req.body
+  const { tracking_number, courier_name, rider_name, rider_contact, additional_shipping_fee } = req.validatedData || req.body
   
   if (!tracking_number || !courier_name) {
     throw new AppError('Tracking number and courier name are required', 400)
@@ -206,6 +206,7 @@ exports.updateShipment = asyncHandler(async (req, res, next) => {
   const order = await orderService.updateShipment(req.params.id, {
     tracking_number,
     courier_name,
+    additional_shipping_fee,
     rider_name,
     rider_contact
   }, req.user?.id ?? null)

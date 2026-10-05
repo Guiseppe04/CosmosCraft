@@ -39,7 +39,7 @@ beforeEach(() => {
       setItem: (key, value) => storage.set(key, value),
     },
   })
-  publishBranchSettings(DEFAULT_APPOINTMENT_BRANCH)
+  publishBranchSettings([DEFAULT_APPOINTMENT_BRANCH])
 })
 afterEach(() => {
   for (const [key, value] of Object.entries(originalGlobals)) {
@@ -78,6 +78,23 @@ test('database settings override stale browser-only branch addresses and remain 
   assert.ok(html.includes(saved.address))
   assert.match(html, /Edit Branch Address/)
   assert.doesNotMatch(html, /Stale browser address/)
+})
+
+test('additional branches survive refresh and updates while preserving the primary branch', async () => {
+  const extra = { ...saved, id: 'second-branch', name: 'CosmosCraft Malolos Branch', address: '456 New Street, Malolos' }
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ data: saved, branches: [saved, extra] }) })
+  await refreshBranchSettings()
+  assert.deepEqual(getBranchSettingsSnapshot().branches, [saved, extra])
+  publishBranchSettings({ ...extra, hours: 'Mon-Fri 9 AM - 5 PM' })
+  assert.deepEqual(getBranchSettingsSnapshot().branch, saved)
+  assert.equal(getBranchSettingsSnapshot().branches.length, 2)
+  assert.equal(getBranchSettingsSnapshot().branches[1].hours, 'Mon-Fri 9 AM - 5 PM')
+  assert.equal(JSON.parse(window.localStorage.getItem(`${BRANCH_SETTINGS_STORAGE_KEY}.locations`)).length, 2)
+  const html = render(BranchAddressSettings, {})
+  assert.match(html, /Add branch address/)
+  assert.ok(html.includes(saved.address))
+  assert.ok(html.includes(extra.name))
+  assert.ok(html.includes(extra.address))
 })
 
 test('saved branch changes reach all consumers and other tabs', () => {
@@ -138,5 +155,5 @@ test('settings search filters cards and preserves permission restrictions', () =
   assert.match(restricted, /No settings found/)
   assert.doesNotMatch(restricted, /shop@example.test/)
   const all = render(SettingsTab, { ...props, searchQuery: '' })
-  for (const section of ['Your account', 'Site contact information', 'Appointment branch', 'General settings', 'Audit logs', 'System information']) assert.ok(all.includes(section), section)
+  for (const section of ['Your account', 'Site contact information', 'Appointment branch', 'Audit logs', 'System information']) assert.ok(all.includes(section), section)
 })

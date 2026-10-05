@@ -88,7 +88,7 @@ test('checkout survives cart empty/refill transitions and completes a multiple-i
     await page.getByRole('heading',{name:'Your Cart is Empty',exact:true}).waitFor()
     await page.evaluate(()=>window.replaceCart(window.testCart))
     await page.getByRole('heading',{name:'Checkout',exact:true}).waitFor()
-    await page.getByRole('checkbox',{name:'I have read and agree to the Terms and Conditions.'}).check()
+    await page.getByRole('checkbox',{name:'I have read and agree to the Order Terms and Conditions.'}).check()
     await page.getByRole('button',{name:'Continue to Payment',exact:true}).click()
     await page.locator('input[type=file]').setInputFiles({
       name:'receipt.png',mimeType:'image/png',

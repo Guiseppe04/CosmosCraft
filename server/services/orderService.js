@@ -3,6 +3,14 @@ const { generateOrderNumber, generateRefundRequestNumber, determineOrderTypePref
 const projectRefundService = require('./projectRefundService')
 const { calculateOrderTotals } = require('../utils/orderTotals')
 
+const validateShippingFee = (value) => {
+  if (value === null || value === undefined || !/^\d+(?:\.\d{1,2})?$/.test(String(value).trim()) ||
+      !Number.isFinite(Number(value)) || Number(value) > 9999999999.99) {
+    throw createValidationError('Enter a valid additional shipping fee (0 or more, with up to 2 decimal places) before shipping.');
+  }
+  return Number(value);
+};
+
 /**
  * Reads the customer for an order so an order event names a person, not just an
  * order number. One extra read per event, only when the caller did not already
@@ -1300,6 +1308,9 @@ exports.updateOrder = async (orderId, updateData) => {
     }
   }
   
+  if (status === 'shipped' || updateData.additional_shipping_fee !== undefined) {
+    updateData = { ...updateData, additional_shipping_fee: validateShippingFee(updateData.additional_shipping_fee) };
+  }
   if (status === 'shipped' && !shipped_at && tracking_number) {
     updateData.shipped_at = new Date();
   }
@@ -1326,9 +1337,10 @@ exports.updateOrder = async (orderId, updateData) => {
          received_at = COALESCE($9, received_at),
          rider_name = COALESCE($10, rider_name),
          rider_contact = COALESCE($11, rider_contact),
+         additional_shipping_fee = COALESCE($13, additional_shipping_fee),
          updated_at = CURRENT_TIMESTAMP
      WHERE order_id = $12 RETURNING *`,
-    [status, payment_status, notes, tracking_number, courier_name, updateData.shipped_at, updateData.out_for_delivery_at, updateData.delivered_at, updateData.received_at, rider_name, rider_contact, orderId]
+    [status, payment_status, notes, tracking_number, courier_name, updateData.shipped_at, updateData.out_for_delivery_at, updateData.delivered_at, updateData.received_at, rider_name, rider_contact, orderId, updateData.additional_shipping_fee]
   );
   if (res.rows.length === 0) return null;
   return res.rows[0];
@@ -1708,6 +1720,7 @@ exports.approvePayment = async (orderId, options = {}) => {
 
 exports.updateShipment = async (orderId, shipmentData, actorId = null) => {
   const { tracking_number, courier_name, rider_name, rider_contact } = shipmentData;
+  const additionalShippingFee = validateShippingFee(shipmentData.additional_shipping_fee);
   
   const orderRes = await pool.query(
     `SELECT status, payment_status FROM orders WHERE order_id = $1`,
@@ -1740,10 +1753,11 @@ exports.updateShipment = async (orderId, shipmentData, actorId = null) => {
          courier_name = $2,
          rider_name = $3,
          rider_contact = $4,
+         additional_shipping_fee = $6,
          shipped_at = CURRENT_TIMESTAMP,
          updated_at = CURRENT_TIMESTAMP
      WHERE order_id = $5 RETURNING *`,
-    [tracking_number, courier_name, rider_name || null, rider_contact || null, orderId]
+    [tracking_number, courier_name, rider_name || null, rider_contact || null, orderId, additionalShippingFee]
   );
 
   await logOrderStatusEvent({
@@ -1755,6 +1769,7 @@ exports.updateShipment = async (orderId, shipmentData, actorId = null) => {
     details: {
       tracking_number,
       courier_name,
+      additional_shipping_fee: additionalShippingFee,
       rider_name: rider_name || null,
     },
     extraContext: { courierName: courier_name, trackingNumber: tracking_number },

@@ -261,8 +261,7 @@
     const location = useLocation()
     const { user, isAuthenticated, isLoadingUser, openLogin, updateUser } = useAuth()
     const today = new Date()
-    const { branch } = useBranchSettings()
-    const branches = useMemo(() => [branch], [branch])
+    const { branch, branches } = useBranchSettings()
     const userAddresses = Array.isArray(user?.addresses) ? user.addresses : []
     const savedBuilds = useMemo(() => {
     // Only return saved builds when the user is authenticated.
@@ -327,7 +326,7 @@
     const [serviceReferencePreviewUrl, setServiceReferencePreviewUrl] = useState('')
     const [guitarReferenceFile, setGuitarReferenceFile] = useState(null)
     const [guitarReferencePreviewUrl, setGuitarReferencePreviewUrl] = useState('')
-    const [selectedBranchId] = useState(branches[0].id)
+    const [selectedBranchId, setSelectedBranchId] = useState(branch.id)
     const [selectedDateId, setSelectedDateId] = useState('')
     const [selectedTime, setSelectedTime] = useState('')
     const [unavailableDateSet, setUnavailableDateSet] = useState(new Set())
@@ -496,7 +495,10 @@
       []
     )
 
-    const currentBranch = branches.find(b => b.id === selectedBranchId)
+    const currentBranch = branches.find(b => b.id === selectedBranchId) || branch
+    useEffect(() => {
+      if (!branches.some(location => location.id === selectedBranchId)) setSelectedBranchId(branch.id)
+    }, [branches, branch.id, selectedBranchId])
     const selectedDate = selectedDateId ? new Date(`${selectedDateId}T00:00:00`) : null
     const allTimeSlotsDisabled = selectedDateId && timeSlots.every((time) => {
       const isUnavailableTime = !availableTimeSet.has(time.toUpperCase())
@@ -1631,7 +1633,7 @@
                       <div>
                         <p className="text-sm font-semibold text-[var(--text-light)]">In-store Service</p>
                         <p className="mt-1 text-xs text-[var(--text-muted)]">
-                          Your appointment will be at our Balagtas branch. Home Service is available after signing in - it requires a saved address on your account.
+                          Choose a branch for your appointment. Home Service is available after signing in - it requires a saved address on your account.
                         </p>
                       </div>
                     </div>
@@ -1856,7 +1858,7 @@
                 <>
                   <div>
                     <h2 className="text-2xl font-bold text-white mb-2">Location</h2>
-                    <p className="text-sm text-[var(--text-muted)]">Appointments are currently available at our Balagtas branch.</p>
+                    <p className="text-sm text-[var(--text-muted)]">Choose the branch for your appointment.</p>
                   </div>
 
                   {!isAuthenticated && (
@@ -1871,9 +1873,9 @@
                     {branches.map(branch => {
                       const isSelected = selectedBranchId === branch.id
                       return (
-                        <div
+                        <button type="button" onClick={() => setSelectedBranchId(branch.id)} aria-pressed={isSelected}
                           key={branch.id}
-                          className="w-full flex items-center justify-between p-5 rounded-2xl border-2 border-[#d4af37] bg-[#d4af37]/5"
+                          className={`w-full flex items-center justify-between gap-3 p-5 rounded-2xl border-2 transition-colors ${isSelected ? 'border-[#d4af37] bg-[#d4af37]/5' : 'border-[var(--border)] bg-[var(--surface-dark)] hover:border-[#d4af37]/50'}`}
                         >
                           <div className="flex gap-4 text-left">
                             <div className="p-3 rounded-full bg-[#d4af37]/20 text-[#d4af37]">
@@ -1886,7 +1888,7 @@
                             </div>
                           </div>
                           {isSelected && <CheckCircle2 className="w-6 h-6 text-[#d4af37]" />}
-                        </div>
+                        </button>
                       )
                     })}
                   </div>

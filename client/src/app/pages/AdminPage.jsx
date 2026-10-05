@@ -1,3 +1,4 @@
+import { isValidShippingFee } from '../utils/shippingFee'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import '../../styles/AdminWorkspace.css'
 import { isValidPhoneNumber, normalizePhoneForSubmit, PHONE_ERROR_MESSAGE } from '../utils/phone'
@@ -1718,6 +1719,13 @@ export function AdminPage() {
       return
     }
 
+    if (orderStatusChanged && newOrderStatus === 'shipped') {
+      if (!isValidShippingFee(form.additional_shipping_fee) || !form.tracking_info?.trim()) {
+        showToast('Enter a valid additional shipping fee and tracking number before shipping.', 'error')
+        return
+      }
+    }
+
     setPaymentStatusUpdate({ loading: true, orderId: modal.data.order_id })
     try {
       if (paymentStatusChanged) {
@@ -1725,7 +1733,10 @@ export function AdminPage() {
       }
       
       if (orderStatusChanged) {
-        await adminApi.updateOrder(modal.data.order_id, { status: newOrderStatus })
+        await adminApi.updateOrder(modal.data.order_id, {
+          status: newOrderStatus,
+          ...(newOrderStatus === 'shipped' ? { additional_shipping_fee: Number(form.additional_shipping_fee), tracking_number: form.tracking_info.trim() } : {}),
+        })
       }
       
       showToast('Order statuses updated!')
