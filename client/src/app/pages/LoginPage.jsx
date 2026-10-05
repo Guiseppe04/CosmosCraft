@@ -4,6 +4,7 @@ import { motion } from 'motion/react'
 import { Mail, Lock, ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { API } from '../utils/apiConfig'
+import { normalizeRole } from '../utils/roles'
 
 /**
  * LoginPage - User Authentication
@@ -22,7 +23,7 @@ export function LoginPage() {
   const [redirectingProvider, setRedirectingProvider] = useState(null)
 
   const navigate = useNavigate()
-  const { login } = useAuth()
+  const { login, fetchUser } = useAuth()
 
   const validateEmail = (value) => emailPattern.test(value.trim())
 
@@ -101,8 +102,13 @@ export function LoginPage() {
 
       const token = data.data?.accessToken || data.data?.token || data.token
       const userData = data.data?.user || null
+
+      let resolvedUser = userData
       if (userData) {
         login(userData, token)
+      } else {
+        // Fallback: fetch the current user from the backend to populate auth state
+        resolvedUser = await fetchUser()
       }
 
       const storedReturnTo = (() => {
@@ -118,16 +124,18 @@ export function LoginPage() {
         }
       })()
 
-      const role = userData?.role || 'customer'
+      const rawRole = resolvedUser?.role || 'customer'
+      const role = normalizeRole(rawRole)
       if (storedReturnTo) {
         navigate(storedReturnTo, { replace: true })
-      } else if (role === 'admin' || role === 'super_admin') {
-        navigate('/admin')
+      } else if (role === 'admin') {
+        navigate('/admin', { replace: true })
       } else if (role === 'staff') {
-        navigate('/staff')
+        navigate('/staff', { replace: true })
       } else {
-        navigate('/dashboard')
+        navigate('/dashboard', { replace: true })
       }
+
     } catch (err) {
       console.error('Login error:', err)
       setError('Network error. Please check your connection and try again.')

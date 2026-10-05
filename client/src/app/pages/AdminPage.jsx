@@ -1995,13 +1995,28 @@ export function AdminPage() {
   const saveStockAdjust = async (overrideForm = {}) => {
     setIsSaving(true)
     try {
-      const { product_id, change_type, quantity } = { ...form, ...overrideForm }
-      if (!product_id || !change_type || !quantity) {
+      const { product_id, change_type, quantity, current_stock: overrideCurrentStock } = { ...form, ...overrideForm }
+      if (!product_id || !change_type || quantity === undefined || quantity === null || quantity === '') {
         showToast('Please fill all required fields', 'error'); return
       }
-      const existingProduct = visibleProducts.find((product) => product.product_id === product_id)
-      const currentStock = Number(existingProduct?.stock ?? form.current_stock ?? 0) || 0
+      // The modal may be opened from the Inventory tab, where the Products-tab
+      // list can be stale or missing the row. Resolve the freshest stock so the
+      // Manual Set delta lands on the correct final value.
+      const existingProduct = await resolveInventoryProduct(product_id)
+      const currentStock = Number(existingProduct?.stock ?? overrideCurrentStock ?? form.current_stock ?? 0) || 0
       const qty = Number(quantity)
+
+      if (change_type === 'stock_out' && qty > currentStock) {
+        showToast(`Insufficient stock. Available: ${currentStock}`, 'error'); return
+      }
+      if (change_type === 'adjustment') {
+        if (qty < 0) {
+          showToast('Stock cannot be negative', 'error'); return
+        }
+        if (qty === currentStock) {
+          showToast('Stock is already set to that value', 'error'); return
+        }
+      }
       const payload = { 
         productId: product_id, 
         quantity: change_type === 'adjustment' ? qty - currentStock : qty,
@@ -2019,13 +2034,13 @@ export function AdminPage() {
   const savePartStockAdjust = async (overrideForm = {}) => {
     setIsSaving(true)
     try {
-      const { part_id, change_type, quantity } = { ...form, ...overrideForm }
-      if (!part_id || !change_type || !quantity) {
+      const { part_id, change_type, quantity, current_stock: overrideCurrentStock } = { ...form, ...overrideForm }
+      if (!part_id || !change_type || quantity === undefined || quantity === null || quantity === '') {
         showToast('Please fill all required fields', 'error'); return
       }
 
       const existingPart = await resolveBuilderPart(part_id)
-      const currentStock = Number(existingPart?.stock ?? existingPart?.quantity ?? form.current_stock ?? 0) || 0
+      const currentStock = Number(existingPart?.stock ?? existingPart?.quantity ?? overrideCurrentStock ?? form.current_stock ?? 0) || 0
       const qty = Number(quantity)
 
       let nextStock = currentStock
@@ -2035,6 +2050,10 @@ export function AdminPage() {
 
       if (nextStock < 0) {
         showToast('Stock cannot be negative', 'error')
+        return
+      }
+      if (change_type === 'adjustment' && nextStock === currentStock) {
+        showToast('Stock is already set to that value', 'error')
         return
       }
 
