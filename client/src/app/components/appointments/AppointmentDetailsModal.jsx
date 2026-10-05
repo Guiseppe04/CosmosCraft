@@ -13,6 +13,13 @@ import { printAppointmentReceipt, generatePlainTextReceipt } from '../../utils/a
 
 const EMPTY_LABEL = 'N/A'
 
+// E-wallet / bank transfer methods (e_wallet, e_bank, gcash, bank_transfer, ...)
+// require the customer to pay upfront, so the appointment cannot be confirmed
+// until the prepayment has been reviewed and approved. Cash is the only method
+// that may be confirmed without an approved payment.
+const isPrepaidPaymentMethod = (method) => Boolean(String(method || '').trim()) && String(method).trim().toLowerCase() !== 'cash'
+const isPaymentApproved = (status) => ['verified', 'approved', 'paid', 'confirmed'].includes(String(status || '').toLowerCase())
+
 // Status badge styling configurations
 const STATUS_CONFIG = {
   pending: { label: 'Pending', color: 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/30' },
@@ -182,6 +189,9 @@ export default function AppointmentDetailsModal({
     const rawPaymentStatus = appointment.payment_status || 'pending'
     const paymentStatusConfig = getPaymentStatusConfig(rawPaymentStatus)
     const paymentProofUrl = appointment.payment_proof_url
+    // E-wallet / bank transfer bookings are prepaid methods: confirmation stays
+    // locked until the payment has been reviewed and approved by the shop.
+    const paymentConfirmationBlocked = isPrepaidPaymentMethod(paymentMethod) && !isPaymentApproved(rawPaymentStatus)
 
     const customerAddress = appointment.customer_address || appointment.address || ''
     const locationId = appointment.location_id
@@ -208,6 +218,7 @@ export default function AppointmentDetailsModal({
       rawPaymentStatus,
       paymentStatusConfig,
       paymentProofUrl,
+      paymentConfirmationBlocked,
       customerAddress,
       locationId,
       guitarInfo,
@@ -243,6 +254,7 @@ export default function AppointmentDetailsModal({
       label: 'Confirm Appointment',
       nextStatus: 'confirmed',
       variant: 'primary',
+      blocked: derived.paymentConfirmationBlocked,
     }
   } else if (derived.status === 'confirmed') {
     primaryAction = {
@@ -276,6 +288,9 @@ export default function AppointmentDetailsModal({
 
   // Action handlers
   const handleStatusAction = async (nextStatus) => {
+    // E-wallet / bank transfer bookings are prepaid methods: confirmation is
+    // prevented until the payment has been reviewed and approved.
+    if (nextStatus === 'confirmed' && derived.paymentConfirmationBlocked) return
     try {
       setActionLoading(nextStatus)
       if (onStatusChange) {
@@ -514,6 +529,17 @@ export default function AppointmentDetailsModal({
                 </div>
               )}
 
+              {/* Confirmation is locked until the e-wallet / bank transfer prepayment is approved */}
+              {derived.paymentConfirmationBlocked && (
+                <div className="flex items-start gap-2.5 pt-3">
+                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-400/90 leading-relaxed">
+                    Confirmation is locked while this <span className="font-semibold capitalize">{formatPaymentMethod(derived.paymentMethod)}</span> payment is pending review.
+                    Review the proof and approve the payment above before confirming this appointment.
+                  </p>
+                </div>
+              )}
+
               <AppointmentPaymentReview appointment={appointment} onUpdate={onPaymentStatusUpdate} />
               {onPaymentStatusUpdate && <AppointmentRefundAdmin key={appointment.appointment_id || appointment.id} appointment={appointment} />}
             </div>
@@ -574,14 +600,16 @@ export default function AppointmentDetailsModal({
             <button
               type="button"
               onClick={() => handleStatusAction(primaryAction.nextStatus)}
-              disabled={actionLoading !== null}
+              disabled={actionLoading !== null || primaryAction.blocked}
+              title={primaryAction.blocked ? 'Approve the e-wallet / bank transfer payment before confirming this appointment' : undefined}
               className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all inline-flex items-center justify-center gap-2 disabled:opacity-50 ${
                 primaryAction.variant === 'success'
                   ? 'bg-emerald-500 text-black hover:bg-emerald-400 font-bold shadow-lg shadow-emerald-500/20'
                   : 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black font-bold hover:shadow-[0_0_20px_rgba(212,175,55,0.4)]'
-              }`}
+              } ${primaryAction.blocked ? 'cursor-not-allowed opacity-50' : ''}`}
             >
               {actionLoading === primaryAction.nextStatus && <Loader2 className="w-4 h-4 animate-spin" />}
+              {primaryAction.blocked && <AlertCircle className="w-4 h-4" />}
               <span>{primaryAction.label}</span>
             </button>
           )}

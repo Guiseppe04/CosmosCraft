@@ -325,6 +325,8 @@ const PROJECT_BASE_SELECT = `
     o.user_id AS customer_id,
     o.order_number,
     o.order_type,
+    o.payment_status AS order_payment_status,
+    o.payment_status,
     o.customization_status,
     o.shipping_address_id AS order_shipping_address_id,
     o.customization_hold_reason,

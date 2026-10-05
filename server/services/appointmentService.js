@@ -10,6 +10,22 @@ const { lockAppointmentCapacity } = require('../middleware/appointmentCapacityLo
 
 const NON_BLOCKING_APPOINTMENT_STATUSES = ['cancelled', 'rejected', 'rescheduled_by_customer'];
 
+// E-wallet / bank transfer methods (e_wallet, e_bank, gcash, bank_transfer, ...)
+// are prepaid: the appointment can only be confirmed ('confirmed') after the
+// payment has been reviewed and approved. Cash is the only method that may be
+// confirmed without an approved payment.
+const APPOINTMENT_APPROVED_PAYMENT_STATUSES = ['approved', 'verified', 'paid', 'confirmed'];
+const isApprovedAppointmentPayment = (status) => APPOINTMENT_APPROVED_PAYMENT_STATUSES.includes(String(status || '').toLowerCase());
+const isPrepaidPaymentMethod = (method) => Boolean(String(method || '').trim()) && String(method).trim().toLowerCase() !== 'cash';
+const assertPaymentApprovedBeforeConfirmation = (appointment) => {
+  if (isPrepaidPaymentMethod(appointment.payment_method) && !isApprovedAppointmentPayment(appointment.payment_status)) {
+    throw new AppError(
+      `This appointment cannot be confirmed until the ${appointment.payment_method} payment has been reviewed and approved.`,
+      409
+    );
+  }
+};
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Statuses that end an appointment's life. A customer can no longer cancel once
@@ -768,6 +784,11 @@ exports.updateAppointment = async (appointmentId, updates, actorId = null) => {
 
     const currentAppt = formatAppointmentResponse(currentRes.rows[0]);
     if (currentAppt.status === 'rescheduled_by_customer') throw new AppError('Historical appointments cannot be changed', 409);
+    // Prepaid e-wallet / bank transfer bookings can only be confirmed after the
+    // payment has been reviewed and approved by the shop.
+    if (status !== undefined && String(status).toLowerCase() === 'confirmed') {
+      assertPaymentApprovedBeforeConfirmation(currentAppt);
+    }
     let targetId = appointmentId;
     if (scheduled_at && actorId === currentAppt.user_id) {
       if (!['pending', 'confirmed', 'no_show'].includes(currentAppt.status)) throw new AppError('This appointment cannot be rescheduled', 409);
@@ -954,7 +975,7 @@ exports.updateStatus = async (appointmentId, newStatus, reason, actorId = null) 
     // 1. Retrieve the current appointment (with row-lock to prevent races)
     const currentRes = await client.query(
       `SELECT a.appointment_id, a.status, a.appointment_type, a.reference_code,
-              a.scheduled_at, a.user_id,
+              a.scheduled_at, a.user_id, a.payment_method, a.payment_status,
               u.email AS user_email,
               u.first_name || ' ' || u.last_name AS user_name
        FROM appointments a
@@ -973,6 +994,12 @@ exports.updateStatus = async (appointmentId, newStatus, reason, actorId = null) 
 
     // 3. Validate the requested transition (throws 409 on invalid)
     assertValidAppointmentStatusTransition(currentStatus, newStatus, appointmentType);
+
+    // Prepaid e-wallet / bank transfer bookings can only be confirmed once the
+    // payment has been reviewed and approved by the shop.
+    if (String(newStatus).toLowerCase() === 'confirmed') {
+      assertPaymentApprovedBeforeConfirmation(currentRow);
+    }
 
     // 4. Same-status → no-op, return current data immediately
     if (currentStatus === newStatus) {

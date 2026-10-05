@@ -113,7 +113,11 @@ exports.getOrder = asyncHandler(async (req, res, next) => {
     throw new AppError('You must be logged in to view orders', 401)
   }
 
-  const order = await orderService.getOrderById(orderId, userId)
+  const userRole = req.user?.role
+  const userRoles = Array.isArray(req.user?.roles) ? req.user.roles.map(r => typeof r === 'string' ? r : r.name) : []
+  const isStaffOrAdmin = ['admin', 'staff', 'super_admin'].includes(userRole) || userRoles.some(r => ['admin', 'staff', 'super_admin'].includes(r))
+
+  const order = await orderService.getOrderById(orderId, isStaffOrAdmin ? null : userId)
 
   res.status(200).json({
     status: 'success',

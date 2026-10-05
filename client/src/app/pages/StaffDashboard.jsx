@@ -5,6 +5,7 @@ import '../../styles/AdminWorkspace.css'
 import {
   Activity,
   AlertCircle,
+  ArrowLeft,
   BarChart3,
   Briefcase,
   Calendar,
@@ -172,6 +173,10 @@ export function StaffDashboard() {
   const [unavailableDatesOpen, setUnavailableDatesOpen] = useState(false)
   const [openOverrides, setOpenOverrides] = useState([])
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null)
+
+  // ── Order redirect state (Verify Payment → Orders tab flow) ───────────────
+  const [orderRedirectState, setOrderRedirectState] = useState(null)  // { order, projectData }
+  const [postPaymentUpdatedOrder, setPostPaymentUpdatedOrder] = useState(null)
 
   const [confirm, setConfirm] = useState({
     open: false,
@@ -943,7 +948,10 @@ export function StaffDashboard() {
     }
 
     if (project?.project_id) {
-      openModal('project_tasks', project)
+      openModal('project_tasks', {
+        ...project,
+        source_order: order || null,
+      })
     } else if (order) {
       showToast('This customization order does not have an associated project yet.', 'error')
     }
@@ -1338,16 +1346,79 @@ export function StaffDashboard() {
 
           {/* ── ORDERS TAB ────────────────────────────────────────────────── */}
           {activeTab === 'orders' && (
-            <OrdersTab
-              orders={orders}
-              fetchOrders={fetchOrders}
-              user={user}
-              pagination={ordersPagination}
-              showToast={showToast}
-              ordersLoading={ordersLoading}
-              onManageProject={handleManageCustomizationProject}
-              onGoToProjects={() => handleManageCustomizationProject()}
-            />
+            <>
+              {/* Return-to-tracker banner after payment update */}
+              {postPaymentUpdatedOrder && orderRedirectState?.projectData && (
+                <motion.div
+                  key="return-to-tracker-banner"
+                  initial={{ opacity: 0, y: -12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  className="mb-4 flex flex-col gap-3 rounded-2xl border border-emerald-500/40 bg-gradient-to-r from-emerald-500/15 via-emerald-500/10 to-transparent p-4 shadow-lg sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
+                      <CheckCircle className="h-5 w-5 text-emerald-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-emerald-300">Payment Updated Successfully</p>
+                      <p className="mt-0.5 text-xs text-emerald-200/70">
+                        Would you like to return to the Project Task Tracker for{' '}
+                        <span className="font-semibold text-emerald-200">
+                          {orderRedirectState.projectData?.name || orderRedirectState.projectData?.title || 'this project'}
+                        </span>{' '}
+                        and continue working?
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2 pl-12 sm:pl-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPostPaymentUpdatedOrder(null)
+                        setOrderRedirectState(null)
+                      }}
+                      className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-white/60 hover:text-white transition-colors"
+                    >
+                      Stay Here
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const projectData = orderRedirectState.projectData
+                        setPostPaymentUpdatedOrder(null)
+                        setOrderRedirectState(null)
+                        openModal('project_tasks', projectData)
+                        setActiveTab('projects')
+                      }}
+                      className="inline-flex items-center gap-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 px-4 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 hover:text-white transition-all"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                      Go Back to Tracker
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+              <OrdersTab
+                orders={orders}
+                fetchOrders={fetchOrders}
+                user={user}
+                pagination={ordersPagination}
+                showToast={showToast}
+                ordersLoading={ordersLoading}
+                onManageProject={handleManageCustomizationProject}
+                onGoToProjects={() => handleManageCustomizationProject()}
+                initialOrder={orderRedirectState?.order ?? null}
+                onInitialOrderConsumed={() => {
+                  setOrderRedirectState(prev => prev ? { ...prev, order: null } : null)
+                }}
+                onPaymentStatusUpdated={(updatedOrder) => {
+                  if (orderRedirectState) {
+                    setPostPaymentUpdatedOrder(updatedOrder)
+                  }
+                }}
+              />
+            </>
           )}
 
           {/* ── INVENTORY TAB ─────────────────────────────────────────────── */}
@@ -1438,7 +1509,23 @@ export function StaffDashboard() {
               }`}
             >
               {modal.type === 'project_tasks' && modal.data && (
-                <ProjectTasksModal modal={modal} closeModal={closeModal} visibleParts={visibleParts} />
+                <ProjectTasksModal
+                  modal={modal}
+                  closeModal={closeModal}
+                  visibleParts={visibleParts}
+                  onRedirectToOrder={(order) => {
+                    const targetOrder = order || (modal.data?.order_id ? { order_id: modal.data.order_id } : null)
+                    if (!targetOrder) {
+                      setActiveTab('orders')
+                      closeModal()
+                      return
+                    }
+                    setOrderRedirectState({ order: targetOrder, projectData: modal.data })
+                    setPostPaymentUpdatedOrder(null)
+                    setActiveTab('orders')
+                    closeModal()
+                  }}
+                />
               )}
 
               {modal.type === 'inventory' && (

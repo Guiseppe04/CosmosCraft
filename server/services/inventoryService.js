@@ -366,7 +366,7 @@ exports.deductStock = async (
     );
 
     // Audit: a deduction must always say what it was deducted for
-    const referenceOrder = await readReferenceOrder(query, referenceType, referenceId);
+    const referenceOrder = await readReferenceOrder(client, referenceType, referenceId);
     await logStockEvent({
       query: client,
       userId: createdBy,

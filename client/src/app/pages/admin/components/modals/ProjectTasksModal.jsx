@@ -36,6 +36,29 @@ export function ProjectTasksModal({ modal, closeModal, visibleParts, onRestockPa
   const [projectDetails, setProjectDetails] = useState(null)
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
   const [detailsError, setDetailsError] = useState('')
+  const [sourceOrder, setSourceOrder] = useState(modal.data?.source_order || null)
+
+  // Fetch the associated order when it wasn't pre-loaded in modal.data
+  // (e.g. opened from ProjectsTab which passes only the project, not the order).
+  useEffect(() => {
+    if (modal.data?.source_order) {
+      setSourceOrder(modal.data.source_order)
+      return
+    }
+    const orderId = modal.data?.order_id || projectDetails?.order_id
+    if (!orderId) return undefined
+
+    let cancelled = false
+    adminApi.getOrder(orderId)
+      .then((res) => {
+        const order = res?.data?.order || res?.data || res || null
+        if (!cancelled && order) setSourceOrder(order)
+      })
+      .catch(() => {
+        // Non-critical — tracker still works without the order
+      })
+    return () => { cancelled = true }
+  }, [modal.data?.order_id, modal.data?.source_order, projectDetails?.order_id])
 
   useEffect(() => {
     const projectId = modal.data?.project_id
@@ -229,9 +252,9 @@ export function ProjectTasksModal({ modal, closeModal, visibleParts, onRestockPa
           onRestockPart={onRestockPart}
           staffMembers={staffMembers}
           onProjectChange={onProjectChange}
-          orderPaymentStatus={modal.data?.source_order?.payment_status}
-          orderId={modal.data?.source_order?.order_id || modal.data?.order_id}
-          sourceOrder={modal.data?.source_order || null}
+          orderPaymentStatus={sourceOrder?.payment_status || projectData?.order_payment_status || projectData?.payment_status || modal.data?.order_payment_status || modal.data?.payment_status}
+          orderId={sourceOrder?.order_id || projectData?.order_id || modal.data?.order_id}
+          sourceOrder={sourceOrder}
           onRedirectToOrder={onRedirectToOrder}
         />
       </div>

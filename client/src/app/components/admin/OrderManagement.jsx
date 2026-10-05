@@ -972,7 +972,7 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
               Update Order Status
             </button>
           )}
-          {(order.order_type === 'customization' || order.project_id) && (
+          {/* {(order.order_type === 'customization' || order.project_id) && (
             <button
               onClick={() => onManageProject?.(order)}
               className="px-4 py-2 rounded-lg text-sm font-medium border border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 hover:text-white transition-all inline-flex items-center gap-2 cursor-pointer"
@@ -981,7 +981,7 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
               <BriefcaseBusiness className="w-4 h-4" />
               Project Progress
             </button>
-          )}
+          )} */}
           {(order.order_type === 'customization' || order.project_id) && (
             <button
               onClick={() => setActiveSection('fulfillment')}
@@ -1611,7 +1611,7 @@ function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
 }
 
 
-export function OrderManagement({ orders, onRefresh, user, pagination, onManageProject, loading = false, initialPaymentStatusFilter = 'all', initialStatusFilter = 'all', initialOrder = null, onPaymentStatusUpdated = null }) {
+export function OrderManagement({ orders, onRefresh, user, pagination, onManageProject, loading = false, initialPaymentStatusFilter = 'all', initialStatusFilter = 'all', initialOrder = null, onInitialOrderConsumed = null, onPaymentStatusUpdated = null }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
@@ -1631,9 +1631,8 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(PAGE_SIZE)
   const [isPageLoading, setIsPageLoading] = useState(false)
-  const [selectedOrder, setSelectedOrder] = useState(null)
-  const initialOrderOpenedRef = useRef(false)
-  const [selectedSection, setSelectedSection] = useState('details')
+  const [selectedOrder, setSelectedOrder] = useState(() => initialOrder ?? null)
+  const [selectedSection, setSelectedSection] = useState(() => initialOrder ? 'payment' : 'details')
   const [isUpdatingPayment, setIsUpdatingPayment] = useState(false)
   const [isUpdatingOrder, setIsUpdatingOrder] = useState(false)
   // True once a page request has settled. Rows normally arrive through the
@@ -1798,14 +1797,30 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
     requestOrdersPage(1)
   }, [debouncedSearch, orderTypeFilter, statusFilter, paymentStatusFilter, paymentMethodFilter, dateFrom, dateTo, sortField, sortDirection, requestOrdersPage])
 
-  // Auto-open a specific order immediately when initialOrder is provided (redirected from ProjectTaskTracker).
-  // We use the full order object so it works even before the orders list loads.
+  // Handle initialOrder arriving while the component is already mounted or upon mount
+  // (e.g. admin was already on the Orders tab when they clicked Verify Payment).
+  // onInitialOrderConsumed is called immediately so React Strict Mode's
+  // cleanup+rerun cycle sees null on the second invocation and skips.
   useEffect(() => {
-    if (!initialOrder || initialOrderOpenedRef.current) return
-    initialOrderOpenedRef.current = true
+    if (!initialOrder) return
+    const orderId = initialOrder.order_id || initialOrder.id
+    const found = orders.find(o => String(o.order_id) === String(orderId))
+    const initialToSet = found || initialOrder
     setSelectedSection('payment')
-    setSelectedOrder(initialOrder)
-  }, [initialOrder])
+    setSelectedOrder(initialToSet)
+    onInitialOrderConsumed?.()
+
+    if (orderId && (!initialToSet.items || !initialToSet.payment)) {
+      adminApi.getOrder(orderId)
+        .then((res) => {
+          const full = res?.data?.order || res?.data || res
+          if (full && (full.order_id === orderId || full.id === orderId)) {
+            setSelectedOrder(prev => prev && (prev.order_id === orderId || prev.id === orderId) ? { ...prev, ...full } : full)
+          }
+        })
+        .catch(() => {})
+    }
+  }, [initialOrder]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleUpdatePaymentStatus = async (orderId, newStatus, referenceNumber, notes) => {
     setIsUpdatingPayment(true)
@@ -1818,7 +1833,11 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
       })
       // The server broadcasts order:updated / payment:updated, which reloads the
       // list through the socket subscription above.
-      setSelectedOrder(prev => prev ? { ...prev, payment_status: newStatus } : null)
+      const updatedOrder = selectedOrder ? { ...selectedOrder, payment_status: newStatus } : null
+      setSelectedOrder(updatedOrder)
+      if (onPaymentStatusUpdated) {
+        onPaymentStatusUpdated(updatedOrder || { order_id: orderId, payment_status: newStatus })
+      }
     } catch (error) {
       console.error('Failed to update payment status:', error)
     } finally {
