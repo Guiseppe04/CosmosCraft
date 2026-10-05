@@ -3,7 +3,9 @@ import { Header } from '../Header.jsx'
 import { LoginModal } from '../auth/LoginModal.jsx'
 import { CartDrawer } from '../cart/CartDrawer.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { useEffect } from 'react'
+import { useEffect, useLayoutEffect } from 'react'
+import { motion, useReducedMotion } from 'motion/react'
+import { scrollToHomeSection } from '../../utils/sectionNavigation.js'
 import { useToast } from '../ui/Toast.jsx'
 import { useRef } from 'react'
 
@@ -13,11 +15,58 @@ import { useRef } from 'react'
  */
 export function RootLayout() {
   const location = useLocation()
+  const reducedMotion = useReducedMotion()
   const navigate = useNavigate()
   const { toast } = useToast()
   const { isLoggingOut } = useAuth()
   const handledSearchRef = useRef(new Set())
   const isAdminOrStaff = location.pathname.startsWith('/admin') || location.pathname.startsWith('/staff') || location.pathname.startsWith('/staff/')
+
+  useLayoutEffect(() => {
+    if (!isAdminOrStaff && !location.hash) {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+    }
+  }, [location.pathname, isAdminOrStaff])
+
+  useEffect(() => {
+    const sectionId = location.hash.slice(1)
+    if (location.pathname !== '/' || !['services', 'about', 'contact'].includes(sectionId)) return
+    let cancelled = false
+    let timer
+    const scheduleCenter = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        if (!cancelled) scrollToHomeSection(sectionId)
+      }, reducedMotion ? 0 : 300)
+    }
+    scheduleCenter()
+    const section = document.getElementById(sectionId)
+    const target = section?.querySelector('[data-section-focus]') || section
+    const observer = target && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(scheduleCenter) : null
+    if (observer) observer.observe(target)
+    // Watch late catalog content during arrival, then leave normal reading/scrolling alone.
+    const stopObserving = () => {
+      observer?.disconnect()
+      clearTimeout(timer)
+    }
+    const settleTimer = setTimeout(stopObserving, 2000)
+    window.addEventListener('wheel', stopObserving, { passive: true, once: true })
+    window.addEventListener('touchstart', stopObserving, { passive: true, once: true })
+    // Font metrics and responsive layout can change the section height after navigation.
+    document.fonts?.ready.then(() => { if (!cancelled) scheduleCenter() })
+    window.addEventListener('resize', scheduleCenter)
+    window.visualViewport?.addEventListener('resize', scheduleCenter)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+      clearTimeout(settleTimer)
+      observer?.disconnect()
+      window.removeEventListener('wheel', stopObserving)
+      window.removeEventListener('touchstart', stopObserving)
+      window.removeEventListener('resize', scheduleCenter)
+      window.visualViewport?.removeEventListener('resize', scheduleCenter)
+    }
+  }, [location.pathname, location.hash, location.key, reducedMotion])
 
   // Show structured OAuth errors passed as query params (auth_error, auth_code)
   useEffect(() => {
@@ -52,7 +101,16 @@ export function RootLayout() {
     <div className="min-h-screen bg-[var(--bg-primary)] transition-colors duration-300">
       {!isAdminOrStaff && <Header />}
       <main className={isAdminOrStaff ? 'pt-0' : ''}>
-        <Outlet />
+        {isAdminOrStaff ? <Outlet /> : (
+          <motion.div
+            key={location.pathname}
+            initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+          >
+            <Outlet />
+          </motion.div>
+        )}
       </main>
       <LoginModal />
       <CartDrawer />

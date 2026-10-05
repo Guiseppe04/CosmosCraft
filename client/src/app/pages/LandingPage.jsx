@@ -183,14 +183,6 @@ export function LandingPage() {
   }, [showContactSuccess])
 
   useEffect(() => {
-    if (window.location.hash !== '#contact') return
-
-    requestAnimationFrame(() => {
-      document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' })
-    })
-  }, [])
-
-  useEffect(() => {
     if (!isAuthenticated || !user) {
       setContactForm((prev) => ({
         ...prev,
@@ -402,7 +394,7 @@ export function LandingPage() {
   </div>
 </section>
       <section id="services" className="scroll-mt-24 bg-[var(--black-deep)] px-3 py-10 sm:px-6 sm:py-16 lg:px-8">
-        <div className="mx-auto max-w-7xl">
+        <div data-section-focus className="mx-auto max-w-7xl">
           <div className="text-center">
             <h2 className="text-3xl font-bold uppercase tracking-wide text-white sm:text-5xl">Our Services</h2>
             <p className="mx-auto mt-4 max-w-2xl text-sm text-[var(--text-muted)] sm:text-lg">
@@ -445,7 +437,7 @@ export function LandingPage() {
         </div>
       </section>
       <section id="about" className="scroll-mt-24 px-3 py-10 sm:px-6 sm:py-16 lg:px-8">
-        <div className="mx-auto max-w-7xl overflow-hidden rounded-2xl sm:rounded-[34px] border border-[var(--border)] bg-[var(--surface-dark)] p-4 sm:p-8 lg:p-12">
+        <div data-section-focus className="mx-auto max-w-7xl overflow-hidden rounded-2xl sm:rounded-[34px] border border-[var(--border)] bg-[var(--surface-dark)] p-4 sm:p-8 lg:p-12">
           <div className="grid gap-6 sm:gap-8 lg:grid-cols-[1fr_420px] lg:items-center">
             <div>
               <h2 className="text-2xl sm:text-4xl font-semibold text-[var(--text-light)] lg:text-5xl">About Us</h2>
@@ -503,7 +495,7 @@ export function LandingPage() {
 
       <footer id="contact" className="scroll-mt-24 bg-[var(--black-deep)] px-3 pb-4 pt-8 sm:px-6 sm:pb-8 sm:pt-12 lg:px-8">
         <div className="mx-auto max-w-7xl">
-          <div className="rounded-2xl sm:rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-4 sm:p-8 lg:p-10">
+          <div data-section-focus className="rounded-2xl sm:rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-4 sm:p-8 lg:p-10">
             <div className="grid gap-6 sm:gap-8 lg:grid-cols-[0.9fr_1.1fr]">
               <div className="flex flex-col justify-center text-left sm:text-left md:text-left lg:text-left">
                 <h2 className="text-2xl font-semibold leading-tight text-[var(--text-light)] text-center sm:text-left sm:text-4xl lg:text-5xl">Get in touch with us</h2>
