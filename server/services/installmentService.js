@@ -245,6 +245,10 @@ exports.submitCustomerInstallmentPayment = async ({
     const installment = instRes.rows[0];
     const customerId = installment.customer_id || installment.order_user_id;
 
+    if (!installment.order_id) {
+      throw new AppError('Cannot process installment payment: project has no associated order', 400);
+    }
+
     // Check ownership if customer
     const isStaffOrAdmin = ['staff', 'admin', 'super_admin'].includes(userRole);
     if (!isStaffOrAdmin && customerId && customerId !== userId) {
