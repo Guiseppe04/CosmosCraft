@@ -22,6 +22,7 @@ import { NotFoundPage } from './pages/NotFoundPage.jsx'
 import { ErrorPage } from './pages/ErrorPage.jsx'
 import CloudinaryAssetsPage from './pages/CloudinaryAssetsPage.jsx'
 import { ProtectedRoute } from './components/auth/ProtectedRoute.jsx'
+import { TermsOfServicePage, PrivacyPolicyPage } from './pages/LegalPolicyPage.jsx'
 
 function CustomizeRoute() {
   const [searchParams] = useSearchParams()
@@ -54,6 +55,8 @@ export const router = createBrowserRouter([
       { path: 'customize-bass', loader: redirectLegacyBass },
       { path: 'shop', Component: ShopPage },
       { path: 'appointments', Component: AppointmentPage },
+      { path: 'terms-of-service', Component: TermsOfServicePage },
+      { path: 'privacy-policy', Component: PrivacyPolicyPage },
 
       // Authentication routes
       { path: 'login', Component: LoginPage },

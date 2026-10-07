@@ -1,5 +1,6 @@
 ﻿import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
+import { LegalLinks } from '../components/LegalLinks'
 import {
   ArrowRight,
   CheckCircle2,
@@ -644,6 +645,7 @@ export function LandingPage() {
           </div>
 
           <div className="py-6 text-center text-xs text-[var(--text-muted)]">2026 CosmosCraft. All rights reserved.</div>
+          <LegalLinks />
         </div>
       </footer>
           {showContactSuccess && (

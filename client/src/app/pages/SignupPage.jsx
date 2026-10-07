@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router'
+import SitePolicyAgreement from '../components/SitePolicyAgreement'
 import { motion } from 'motion/react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { API } from '../utils/apiConfig'
@@ -946,29 +947,10 @@ export function SignupPage() {
 
               {/* TERMS & ACTIONS */}
               <div className="pt-6 border-t border-white/10">
-                <motion.label animate={showTermsError ? shakeAnimation : {}} className="flex items-start gap-3 mt-2 mb-8 cursor-pointer group">
-                  <div className="relative mt-1">
-                    <input
-                      type="checkbox"
-                      checked={form.terms}
-                      ref={registerFieldRef('terms')}
-                      onChange={e => updateField('terms', e.target.checked)}
-                      className="peer sr-only"
-                    />
-                    <div className={`w-5 h-5 border-2 rounded-md transition-all duration-300 flex items-center justify-center
-                      ${form.terms
-                        ? 'bg-[var(--gold-primary)] border-[var(--gold-primary)]'
-                        : 'border-[var(--border-strong,#94a3b8)] bg-[var(--surface-dark,#ffffff)] group-hover:border-[var(--gold-primary)]'}
-                      ${showTermsError ? 'border-red-500 bg-red-500/10' : ''}
-                    `}>
-                      {form.terms && <CheckCircle2 className="w-4 h-4 text-black" />}
-                    </div>
-                  </div>
-                  <div className="text-sm text-[var(--text-muted)]">
-                    I agree to the <span className="text-white font-medium hover:text-[var(--gold-primary)] transition-colors">Terms of Service</span> and acknowledge the <span className="text-white font-medium hover:text-[var(--gold-primary)] transition-colors">Privacy Policy</span>.
-                    {showTermsError && <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{showTermsError}</p>}
-                  </div>
-                </motion.label>
+                <motion.div animate={showTermsError ? shakeAnimation : {}} className="mt-2 mb-8">
+                  <SitePolicyAgreement checked={form.terms} onChange={checked => updateField('terms', checked)}
+                    inputRef={registerFieldRef('terms')} error={showTermsError} />
+                </motion.div>
 
                 {/* Desktop submit (unchanged) */}
                 <button

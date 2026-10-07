@@ -415,6 +415,12 @@ function emitToUserAndAdmins(
 }
 
 module.exports = {
+  emitRefundChanged(refund, event = 'refund:updated', action = 'status_updated') {
+    if (!refund) return false;
+    const { refund_request_id, order_id, user_id, status, workflow_version, approved_amount, refunded_amount } = refund;
+    return emitToUserAndStaff(user_id, event, { action,
+      refundRequest: { refund_request_id, order_id, user_id, status, workflow_version, approved_amount, refunded_amount } });
+  },
   init,
   getIO,
   emitToUser,

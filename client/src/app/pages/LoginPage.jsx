@@ -15,7 +15,6 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState('')
   const [emailError, setEmailError] = useState('')
   const [passwordError, setPasswordError] = useState('')
@@ -255,17 +254,7 @@ export function LoginPage() {
             {passwordError && <p id="password-error" className="mt-2 text-sm text-red-400 flex items-center gap-1.5"><span>⚠</span>{passwordError}</p>}
           </div>
 
-          {/* Remember & Forgot */}
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="w-4 h-4 border border-[var(--border)] rounded cursor-pointer bg-[var(--bg-primary)] accent-[var(--gold-primary)]"
-              />
-              <span className="text-sm text-[var(--text-muted)]">Remember me</span>
-            </label>
+          <div className="flex justify-end">
             <Link
               to={`/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ''}`}
               className="text-sm text-[var(--gold-primary)] hover:text-[var(--gold-secondary)] font-medium transition-colors duration-200"

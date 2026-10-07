@@ -258,7 +258,7 @@ exports.createRefundRequest = asyncHandler(async (req, res, next) => {
   if (!userId) {
     throw new AppError('You must be logged in to request a refund', 401)
   }
-  const { reason, customerNotes, items, images } = req.validatedData || req.body
+  const { reason, customerNotes, items, images, destination } = req.validatedData || req.body
   if (!reason || !String(reason).trim()) {
     throw new AppError('Refund reason is required', 400)
   }
@@ -272,23 +272,32 @@ exports.createRefundRequest = asyncHandler(async (req, res, next) => {
     customerNotes: customerNotes ? String(customerNotes).trim() : null,
     items,
     images: images || [],
+    destination,
   })
-  socketService.emitToUserAndStaff(refundRequest.user_id, 'refund:created', { refundRequest });
+  socketService.emitRefundChanged(refundRequest, 'refund:created', 'created');
   res.status(201).json({ status: 'success', data: refundRequest })
 })
 
 exports.getRefundRequests = asyncHandler(async (req, res, next) => {
   const result = await orderService.getRefundRequests(req.validatedQuery || req.query)
+  if (!require('../services/orderRefundWorkflow').isAdmin(req.user)) result.requests = result.requests.map(require('../services/orderRefundWorkflow').publicRefund)
   res.status(200).json({ status: 'success', data: result.requests, pagination: result.pagination })
 })
 
 exports.getRefundRequest = asyncHandler(async (req, res, next) => {
-  const refundRequest = await orderService.getRefundRequestById(req.params.refundId)
+  const refundRequest = await orderService.getRefundRequestById(req.params.refundId, require('../services/orderRefundWorkflow').isAdmin(req.user))
   if (!refundRequest) throw new AppError('Refund request not found', 404)
-  res.status(200).json({ status: 'success', data: refundRequest })
+  res.status(200).json({ status: 'success', data: require('../services/orderRefundWorkflow').isAdmin(req.user) ? refundRequest : require('../services/orderRefundWorkflow').publicRefund(refundRequest) })
 })
 
 exports.updateRefundStatus = asyncHandler(async (req, res, next) => {
+  const workflow = require('../services/orderRefundWorkflow')
+  const current = await pool.query("SELECT (to_jsonb(refund_requests)->>'workflow_version')::int AS workflow_version FROM refund_requests WHERE refund_request_id=$1 AND deleted_at IS NULL", [req.params.refundId])
+  if (current.rows[0]?.workflow_version === 2) {
+    const refundRequest = await workflow.update(req.params.refundId, req.body.status, req.user, req.validatedData || req.body)
+    socketService.emitRefundChanged(refundRequest)
+    return res.status(200).json({ status: 'success', data: refundRequest })
+  }
   const { status, adminNotes } = req.validatedData || req.body
   const adminUserId = req.user?.user_id || req.user?.id
   if (!status) {
@@ -299,7 +308,7 @@ exports.updateRefundStatus = asyncHandler(async (req, res, next) => {
     adminNotes: adminNotes ? String(adminNotes).trim() : null,
   })
   if (!refundRequest) throw new AppError('Refund request not found', 404)
-  socketService.emitToUserAndStaff(refundRequest.user_id, 'refund:updated', { refundRequest, action: 'status_updated' });
+  socketService.emitRefundChanged(refundRequest);
   res.status(200).json({ status: 'success', data: refundRequest })
 })
 
@@ -310,10 +319,26 @@ exports.withdrawRefund = asyncHandler(async (req, res, next) => {
   }
   const refundService = require('../services/refundService')
   const refundRequest = await refundService.withdrawRefund(req.params.refundId, userId)
+  socketService.emitRefundChanged(refundRequest, 'refund:updated', 'withdrawn')
+  res.status(200).json({ status: 'success', data: refundRequest })
+})
+
+exports.getRefundFile = asyncHandler(async (req, res) => {
+  const file = await require('../services/orderRefundWorkflow').getFile(req.params.refundId, req.params.kind, req.user)
+  res.set('Cache-Control', 'private, no-store')
+  res.set('X-Content-Type-Options', 'nosniff')
+  res.status(200).json({ status: 'success', data: { image: `data:${file.mime_type};base64,${Buffer.from(file.file_data).toString('base64')}` } })
+})
+
+exports.confirmRefund = asyncHandler(async (req, res) => {
+  const refundRequest = await require('../services/orderRefundWorkflow').update(req.params.refundId, 'completed', req.user)
+  socketService.emitRefundChanged(refundRequest, 'refund:updated', 'customer_confirmed')
   res.status(200).json({ status: 'success', data: refundRequest })
 })
 
 exports.adjustRefundAmount = asyncHandler(async (req, res, next) => {
+  const current = await pool.query("SELECT (to_jsonb(refund_requests)->>'workflow_version')::int AS workflow_version FROM refund_requests WHERE refund_request_id=$1 AND deleted_at IS NULL", [req.params.refundId])
+  if (current.rows[0]?.workflow_version === 2) throw new AppError('Approve and adjust this refund from its review step', 409)
   const adminUserId = req.user?.user_id || req.user?.id
   const { approvedAmount, adjustmentReason } = req.validatedData || req.body
   if (!approvedAmount || Number(approvedAmount) <= 0) {
@@ -330,6 +355,6 @@ exports.adjustRefundAmount = asyncHandler(async (req, res, next) => {
       adjustmentReason: adjustmentReason ? String(adjustmentReason).trim() : null,
     }
   )
-  socketService.emitToUserAndStaff(refundRequest?.user_id, 'refund:updated', { refundRequest, action: 'amount_adjusted' });
+  socketService.emitRefundChanged(refundRequest, 'refund:updated', 'amount_adjusted');
   res.status(200).json({ status: 'success', data: refundRequest })
 })

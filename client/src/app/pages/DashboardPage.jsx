@@ -20,6 +20,9 @@ import { useDebounce } from '../hooks/useDebounce'
 import { uploadToCloudinary } from '../utils/cloudinary.js'
 import { formatCurrency } from '../utils/formatCurrency.js'
 import { ShippingFeeNotice } from '../components/ShippingFeeNotice.jsx'
+import RefundDestinationForm from '../components/refunds/RefundDestinationForm'
+import CustomerRefundTracking from '../components/refunds/CustomerRefundTracking'
+import { emptyRefundDestination, refundDestinationError } from '../utils/refundWorkflow'
 import CustomerProjectTracker from '../components/projects/CustomerProjectTracker.jsx'
 import { AddressForm } from '../components/AddressForm.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
@@ -28,6 +31,7 @@ import { ConfirmModal } from '../components/ui/ConfirmModal'
 import { SelectableCartItemRow } from '../components/cart/SelectableCartItemRow.jsx'
 import { DashboardSectionTabs } from '../components/DashboardSectionTabs.jsx'
 import { useSocketEvent } from '../context/SocketContext.jsx'
+import { useRefundRealtime } from '../hooks/useRefundRealtime'
 import { sanitizePhoneInput, isValidPhoneNumber, PHONE_ERROR_MESSAGE } from '../utils/phone.js'
 import PhoneInput from '../components/PhoneInput'
 import AppointmentCard, { getSelectedGuitarLabel, formatAppointmentServiceType } from '../components/appointments/AppointmentCard.jsx'
@@ -187,6 +191,9 @@ const PURCHASE_TABS = [
 ]
 
 const REFUND_STATUS_CONFIG = {
+  under_review: { label: 'Under Review', icon: Clock, className: 'border-amber-500/30 text-amber-400' },
+  refund_sent: { label: 'Refund Sent', icon: CheckCircle, className: 'border-sky-500/30 text-sky-400' },
+  completed: { label: 'Refund Completed', icon: CheckCircle, className: 'border-green-500/30 text-green-400' },
   pending: {
     label: 'Refund Request Pending',
     icon: Clock,
@@ -588,6 +595,8 @@ export function DashboardPage() {
   const [refundCustomerNotes, setRefundCustomerNotes] = useState('')
   const [refundSelectedItems, setRefundSelectedItems] = useState([])
   const [refundImages, setRefundImages] = useState([])
+  const [refundDestination, setRefundDestination] = useState(emptyRefundDestination)
+  const [readingRefundQr, setReadingRefundQr] = useState(false)
   const [isSubmittingRefund, setIsSubmittingRefund] = useState(false)
   const [isMarkingReceived, setIsMarkingReceived] = useState(false)
   const [printingOrderId, setPrintingOrderId] = useState(null)
@@ -1092,8 +1101,8 @@ export function DashboardPage() {
     fetchMyOrders()
   })
 
+  useRefundRealtime(fetchMyOrders)
   useSocketEvent('refund:updated', (data) => {
-    fetchMyOrders()
     const refundStatus = data?.refundRequest?.status || data?.status
     const msg = data?.action === 'amount_adjusted'
       ? `Refund amount adjusted: ${data?.refundRequest?.approved_amount || 'approved'}`
@@ -1265,6 +1274,8 @@ export function DashboardPage() {
   }
 
   const openRefundModal = (order) => {
+    setRefundDestination(emptyRefundDestination())
+    setReadingRefundQr(false)
     setRefundTarget(order)
     setRefundReason('')
     setRefundCustomerNotes('')
@@ -1347,6 +1358,11 @@ export function DashboardPage() {
       setToastMessage('Please provide a refund reason')
       return
     }
+    const destinationError = refundDestinationError(refundDestination)
+    if (destinationError || readingRefundQr) {
+      setToastMessage(destinationError || 'Wait for the QR code to finish loading.')
+      return
+    }
     try {
       setIsSubmittingRefund(true)
       await adminApi.createRefundRequest(refundTarget.order_id, {
@@ -1357,6 +1373,7 @@ export function DashboardPage() {
           quantity: item.refundQuantity,
         })),
         images: refundImages,
+        destination: refundDestination,
       })
       setToastMessage('Refund request submitted successfully.')
       closeRefundModal(true)
@@ -2507,6 +2524,19 @@ const filteredOrders = myOrders.filter(order => {
                           </button>
                         )}
                       </div>
+                    )}
+                    {order.has_refund_request && (order.refund_rejection_reason || order.refund_admin_notes) && (
+                      <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3">
+                        <p className="text-sm font-semibold text-[var(--text-light)]">
+                          {order.refund_request_status === 'rejected' ? 'Refund rejection reason' : 'Refund notes from admin'}
+                        </p>
+                        <p className="mt-1 whitespace-pre-wrap break-words text-sm text-[var(--text-muted)]">
+                          {order.refund_rejection_reason || order.refund_admin_notes}
+                        </p>
+                      </div>
+                    )}
+                    {order.has_refund_request && order.refund_workflow_version === 2 && (
+                      <CustomerRefundTracking key={order.refund_request_id} order={order} onRefresh={fetchMyOrders} />
                     )}
                   </div>
                 )
@@ -6012,6 +6042,8 @@ const filteredOrders = myOrders.filter(order => {
             <p className="text-sm text-[var(--text-muted)] mb-6">Order #{refundTarget.order_number}</p>
 
             <div className="space-y-5">
+              <RefundDestinationForm value={refundDestination} onChange={setRefundDestination}
+                disabled={isSubmittingRefund || readingRefundQr} onBusyChange={setReadingRefundQr} />
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Select Items to Refund</label>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
@@ -6093,7 +6125,7 @@ const filteredOrders = myOrders.filter(order => {
                 <button type="button" onClick={() => closeRefundModal()} disabled={isSubmittingRefund} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-white hover:bg-white/5 transition-colors font-medium text-sm disabled:opacity-50">
                   Cancel
                 </button>
-                <button type="button" onClick={handleSubmitRefund} disabled={isSubmittingRefund} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all disabled:opacity-50">
+                <button type="button" onClick={handleSubmitRefund} disabled={isSubmittingRefund || readingRefundQr || Boolean(refundDestinationError(refundDestination))} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all disabled:opacity-50">
                   {isSubmittingRefund ? 'Submitting...' : 'Submit Refund Request'}
                 </button>
               </div>
@@ -6177,22 +6209,6 @@ const filteredOrders = myOrders.filter(order => {
                     className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-white hover:bg-white/5 transition-colors font-medium text-sm"
                   >
                     Close
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReviewForm({
-                        rating: reviewModal.review?.rating || 5,
-                        title: reviewModal.review?.title || '',
-                        comment: reviewModal.review?.comment || '',
-                        images: Array.isArray(reviewModal.review?.images) ? reviewModal.review.images : [],
-                      })
-                      setReviewModal(prev => ({ ...prev, mode: 'edit' }))
-                    }}
-                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all flex items-center justify-center gap-2"
-                  >
-                    <Edit className="w-4 h-4" />
-                    Edit Review
                   </button>
                 </div>
               </div>

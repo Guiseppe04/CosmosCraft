@@ -276,6 +276,8 @@ exports.applyTransition = async (refundId, newStatus, actorId, actorRole, data =
     const refund = await getRefundById(client, refundId);
     if (!refund) throw new AppError('Refund request not found', 404);
 
+    if (refund.workflow_version === 2) throw new AppError('Use the reviewed refund workflow for this request', 409);
+
     const from = refund.status;
 
     // Withdrawal is customer-initiated; all other transitions require staff+.

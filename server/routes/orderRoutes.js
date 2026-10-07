@@ -27,6 +27,8 @@ const {
 router.get('/my-orders', authenticateToken, orderController.getUserOrders)
 
 // --- REFUND ROUTES ---
+router.get('/refund-requests/:refundId/files/:kind', authenticateToken, validateParams(namedUuidParamSchema('refundId').keys({ kind: require('joi').string().valid('qr', 'proof').required() })), orderController.getRefundFile)
+router.post('/refund-requests/:refundId/confirm', authenticateToken, validateParams(namedUuidParamSchema('refundId')), orderController.confirmRefund)
 router.get('/refund-requests', authenticateToken, authorize('staff', 'admin', 'super_admin'), validateQuery(listRefundRequestsSchema), orderController.getRefundRequests)
 router.get('/refund-requests/:refundId', authenticateToken, authorize('staff', 'admin', 'super_admin'), validateParams(namedUuidParamSchema('refundId')), orderController.getRefundRequest)
 router.put('/refund-requests/:refundId/status', authenticateToken, authorize('staff', 'admin', 'super_admin'), validateParams(namedUuidParamSchema('refundId')), validate(updateRefundStatusSchema), orderController.updateRefundStatus)

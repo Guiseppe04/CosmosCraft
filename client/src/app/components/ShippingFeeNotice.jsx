@@ -5,6 +5,9 @@ export function ShippingFeeNotice({ fee, title = 'Additional shipping fee (paid 
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4 space-y-2">
       <p className="text-sm font-semibold text-[var(--text-light)]">{title}</p>
+      {fee !== undefined && fee !== null && fee !== '' && Number.isFinite(Number(fee)) && (
+        <p className="text-base font-semibold text-[var(--gold-primary)]">{formatCurrency(Number(fee))}</p>
+      )}
       <p className="text-sm text-[var(--text-muted)]">{SHIPPING_FEE_NOTE}</p>
     </div>
   )

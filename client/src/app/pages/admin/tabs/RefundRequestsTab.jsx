@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   RefreshCw, Search, Eye, CheckCircle, XCircle, Clock, Loader2,
@@ -7,6 +7,9 @@ import {
 } from 'lucide-react'
 import { formatCurrency } from '../../../utils/formatCurrency'
 import { adminApi } from '../../../utils/adminApi'
+import AdminRefundWorkflow from '../../../components/refunds/AdminRefundWorkflow'
+import { useRefundRealtime } from '../../../hooks/useRefundRealtime'
+import { useSocketEvent } from '../../../context/SocketContext'
 import { useDebounce } from '../../../hooks/useDebounce'
 import { ImageZoomModal } from '../components/shared/ImageZoomModal'
 import { EmptyState } from '../components/shared/EmptyState'
@@ -18,6 +21,9 @@ import {
 } from '../../../utils/orderPaymentStatus'
 
 const REFUND_STATUS_MAP = {
+  under_review: { label: 'Under Review', color: '#f59e0b', bgColor: 'bg-amber-500/20', textColor: 'text-amber-400', borderColor: 'border-amber-500/30' },
+  refund_sent: { label: 'Refund Sent', color: '#38bdf8', bgColor: 'bg-sky-500/20', textColor: 'text-sky-400', borderColor: 'border-sky-500/30' },
+  completed: { label: 'Completed', color: '#22c55e', bgColor: 'bg-green-500/20', textColor: 'text-green-400', borderColor: 'border-green-500/30' },
   pending: { label: 'Pending Review', color: '#f59e0b', bgColor: 'bg-amber-500/20', textColor: 'text-amber-400', borderColor: 'border-amber-500/30' },
   'pending_payment_verification': { label: 'Awaiting Payment Verification', color: '#8b5cf6', bgColor: 'bg-violet-500/20', textColor: 'text-violet-400', borderColor: 'border-violet-500/30' },
   approved: { label: 'Approved', color: '#22c55e', bgColor: 'bg-green-500/20', textColor: 'text-green-400', borderColor: 'border-green-500/30' },
@@ -278,9 +284,13 @@ export function RefundRequestsTab({ showToast, user }) {
   const [adjustmentReason, setAdjustmentReason] = useState('')
 
   const debouncedSearch = useDebounce(searchQuery, 300)
+  const listVersion = useRef(0)
+  const detailVersion = useRef(0)
+  useEffect(() => () => { listVersion.current++; detailVersion.current++ }, [])
 
-  const fetchRefundRequests = async () => {
-    setLoading(true)
+  const fetchRefundRequests = async ({ silent = false } = {}) => {
+    const version = ++listVersion.current
+    if (!silent) setLoading(true)
     try {
       const params = {
         page,
@@ -292,17 +302,35 @@ export function RefundRequestsTab({ showToast, user }) {
       if (debouncedSearch) params.search = debouncedSearch
 
       const res = await adminApi.getRefundRequests(params)
+      if (version !== listVersion.current) return
       const requests = Array.isArray(res.data?.refund_requests) ? res.data.refund_requests : Array.isArray(res.data) ? res.data : []
       setRefundRequests(requests)
-      const total = res.data?.total || 0
-      const pageSize = res.data?.limit || PAGE_SIZE
+      const total = res.pagination?.total ?? res.data?.total ?? 0
+      const pageSize = res.pagination?.page_size ?? res.data?.limit ?? PAGE_SIZE
       setPagination({ page, page_size: pageSize, total, total_pages: Math.max(1, Math.ceil(total / pageSize)) })
     } catch (err) {
-      showToast?.(`Failed to load refund requests: ${err.message}`, 'error')
+      if (version === listVersion.current) showToast?.(`Failed to load refund requests: ${err.message}`, 'error')
     } finally {
-      setLoading(false)
+      if (version === listVersion.current) setLoading(false)
     }
   }
+
+  const refreshRefunds = useRefundRealtime(async () => {
+    fetchRefundRequests({ silent: true })
+    if (!selectedRequest?.refund_request_id) return
+    const id = selectedRequest.refund_request_id
+    const version = ++detailVersion.current
+    try {
+      const result = await adminApi.getRefundRequest(id)
+      if (version !== detailVersion.current) return
+      setSelectedRequest(current => current?.refund_request_id === id ? result.data : current)
+      setSelectedOrder(current => current?.order_id === result.data.order_id
+        ? { ...current, payment_status: result.data.order_payment_status || current.payment_status } : current)
+    } catch (err) {
+      if (version === detailVersion.current) showToast?.(`Failed to refresh refund details: ${err.message}`, 'error')
+    }
+  })
+  useSocketEvent('payment:updated', refreshRefunds)
 
   useEffect(() => {
     fetchRefundRequests()
@@ -471,6 +499,9 @@ export function RefundRequestsTab({ showToast, user }) {
               <option value="pending">Pending</option>
               <option value="pending_payment_verification">Awaiting Payment Verification</option>
               <option value="approved">Approved</option>
+              <option value="under_review">Under Review</option>
+              <option value="refund_sent">Refund Sent</option>
+              <option value="completed">Completed</option>
               <option value="processing">Processing</option>
               <option value="rejected">Rejected</option>
               <option value="refunded">Refunded</option>
@@ -658,6 +689,14 @@ export function RefundRequestsTab({ showToast, user }) {
             <div className="flex-1 overflow-y-auto pr-1">
               {activeSection === 'details' && (
                 <div className="space-y-6">
+                  {selectedRequest.workflow_version === 2 && <AdminRefundWorkflow key={selectedRequest.refund_request_id + selectedRequest.status} refund={selectedRequest}
+                    onUpdated={async () => {
+                      const result = await adminApi.getRefundRequest(selectedRequest.refund_request_id)
+                      setSelectedRequest(result.data)
+                      setSelectedOrder(prev => prev ? { ...prev, payment_status: result.data.order_payment_status || prev.payment_status } : prev)
+                      await fetchRefundRequests()
+                      showToast?.('Refund status updated.')
+                    }} />}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-[var(--bg-primary)]/50 rounded-xl p-4">
                       <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Refund Status</p>
@@ -738,7 +777,7 @@ export function RefundRequestsTab({ showToast, user }) {
                     </div>
                   )}
 
-                  {selectedRequest.status === 'pending' && (
+                  {selectedRequest.workflow_version !== 2 && selectedRequest.status === 'pending' && (
                     <div>
                       <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Admin Notes</p>
                       <textarea
@@ -809,7 +848,7 @@ export function RefundRequestsTab({ showToast, user }) {
                     </div>
                   )}
 
-                  {selectedRequest.status === 'approved' && (
+                  {selectedRequest.workflow_version !== 2 && selectedRequest.status === 'approved' && (
                     <div className="flex gap-3">
                       <button
                         onClick={() => handleUpdateStatus('processing')}
@@ -822,7 +861,7 @@ export function RefundRequestsTab({ showToast, user }) {
                     </div>
                   )}
 
-                  {selectedRequest.status === 'processing' && (
+                  {selectedRequest.workflow_version !== 2 && selectedRequest.status === 'processing' && (
                     <div className="flex gap-3">
                       <button
                         onClick={() => handleUpdateStatus('refunded')}

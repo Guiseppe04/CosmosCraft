@@ -14,7 +14,8 @@ test('admin must enter a shipping quote and customers see the separate fee', asy
         const order={order_id:'order-1',order_number:'ORD-1',status:'processing',payment_status:'approved',total_amount:1000,subtotal:1000,items:[]};
         window.apiCalls=[];
         createRoot(document.getElementById('root')).render(<OrderManagement orders={[order]} initialOrder={order} user={{}} pagination={{}} onRefresh={async()=>({data:{orders:[order]}})} />);
-        window.renderCustomerFee=(fee)=>createRoot(document.getElementById('customer')).render(<ShippingFeeNotice fee={fee}/>);`,
+        const customerRoot=createRoot(document.getElementById('customer'));
+        window.renderCustomerFee=(fee)=>customerRoot.render(<ShippingFeeNotice fee={fee}/>);`,
       resolveDir: fileURLToPath(new URL('../', import.meta.url)), loader: 'jsx',
     },
     bundle: true, write: false, format: 'iife', logLevel: 'silent', jsx: 'automatic', define: { 'import.meta.env': '{}' },
@@ -59,7 +60,11 @@ test('admin must enter a shipping quote and customers see the separate fee', asy
     const customer = page.locator('#customer')
     await customer.getByText('₱250.75', { exact: true }).waitFor()
     assert.match(await customer.innerText(), /paid separately/)
-    assert.match(await customer.innerText(), /not covered by the admin/)
+    assert.match(await customer.innerText(), /shouldered by the customer/)
+    await page.evaluate(() => window.renderCustomerFee('0.00'))
+    await customer.getByText('₱0.00', { exact: true }).waitFor()
+    await page.evaluate(() => window.renderCustomerFee(null))
+    await page.waitForFunction(() => !document.getElementById('customer').innerText.includes('₱'))
     assert.deepEqual(errors, [])
   } finally {
     await browser?.close()

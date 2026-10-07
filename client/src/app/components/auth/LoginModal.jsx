@@ -10,7 +10,6 @@ export function LoginModal() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [rememberMe, setRememberMe] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [redirectingProvider, setRedirectingProvider] = useState(null)
@@ -147,16 +146,7 @@ export function LoginModal() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-sm">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={e => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 rounded border-[var(--border)] text-[var(--gold-primary)]"
-                  />
-                  <span className="text-[var(--text-muted)]">Remember me</span>
-                </label>
+              <div className="flex justify-end text-sm">
                 <button
                   type="button"
                   onClick={() => {

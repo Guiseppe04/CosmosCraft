@@ -701,6 +701,7 @@ exports.transitionRefundStatusesForPayment = async (client, orderId, newPaymentS
     const updateFields = ['status = $1', 'updated_at = CURRENT_TIMESTAMP'];
     const updateValues = [nextStatus];
     let paramIndex = 2;
+    let verifiedTotal = Number(refund.amount_requested || 0);
 
     if (nextStatus === 'pending') {
       const verifiedRes = await client.query(
@@ -709,7 +710,7 @@ exports.transitionRefundStatusesForPayment = async (client, orderId, newPaymentS
          WHERE order_id = $1 AND deleted_at IS NULL`,
         [orderId]
       );
-      const verifiedTotal = Number(verifiedRes.rows[0]?.verified_total || 0);
+      verifiedTotal = Number(verifiedRes.rows[0]?.verified_total || 0);
       updateFields.push(`amount_requested = $${paramIndex++}`);
       updateValues.push(verifiedTotal);
     }

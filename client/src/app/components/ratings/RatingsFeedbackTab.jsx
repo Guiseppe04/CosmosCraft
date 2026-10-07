@@ -524,14 +524,6 @@ export default function RatingsFeedbackTab({ showToast = () => {} }) {
                                 <Eye className="w-3.5 h-3.5" />
                                 View Review
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => openProductReviewModal(item, true)}
-                                className="px-3.5 py-1.5 rounded-xl border border-[var(--gold-primary)]/40 text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 text-xs font-semibold transition-colors flex items-center gap-1.5"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                                Edit Review
-                              </button>
                             </>
                           )}
 

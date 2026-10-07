@@ -755,7 +755,7 @@ const orderStatusEnum = ['pending', 'processing', 'shipped', 'out_for_delivery',
 const orderPaymentStatusEnum = ['pending', 'proof_submitted', 'under_review', 'approved', 'rejected', 'failed'];
 const fulfillmentMethods = ['pickup', 'delivery', 'pickup_appointment', 'external_delivery', 'shop_delivery'];
 const notificationTypeEnum = ['order_update', 'appointment_reminder', 'system', 'promotional', 'low_stock'];
-const refundStatusEnum = ['pending', 'approved', 'processing', 'rejected', 'refunded', 'pending_payment_verification'];
+const refundStatusEnum = ['pending', 'under_review', 'approved', 'processing', 'refund_sent', 'completed', 'rejected', 'refunded', 'pending_payment_verification'];
 
 exports.createOrderSchema = Joi.object({
   items: Joi.array()
@@ -868,13 +868,14 @@ exports.cancelMyOrderSchema = Joi.object({
 exports.markAsReceivedSchema = Joi.object({});
 
 exports.createRefundRequestSchema = Joi.object({
+  destination: require('./refundValidation').refundDestinationSchema.required(),
   reason: Joi.string().trim().min(3).max(500).required().messages({
     'string.min': 'Refund reason must be at least 3 characters',
     'string.max': 'Refund reason must not exceed 500 characters',
     'any.required': 'Refund reason is required',
   }),
   customerNotes: Joi.string().trim().max(1000).optional().allow(''),
-  items: Joi.array()
+  items: Joi.array().unique('order_item_id')
     .items(
       Joi.object({
         order_item_id: Joi.number().integer().required().messages({
@@ -912,6 +913,9 @@ exports.createProjectRefundRequestSchema = Joi.object({
 }).unknown(true);
 
 exports.updateRefundStatusSchema = Joi.object({
+  approvedAmount: Joi.number().positive().precision(2).optional(),
+  refundReference: Joi.string().trim().max(255).allow('').optional(),
+  proofImage: require('./refundValidation').refundImageSchema.optional(),
   status: Joi.string().valid(...refundStatusEnum).required().messages({
     'any.only': `Status must be one of: ${refundStatusEnum.join(', ')}`,
     'any.required': 'Status is required',

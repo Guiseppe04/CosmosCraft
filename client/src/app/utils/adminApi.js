@@ -142,6 +142,8 @@ export const adminApi = {
   cancelMyOrder: (id, reason) => request(`/api/orders/${id}/cancel-my-order`, { method: 'POST', body: reason ? { reason } : {} }),
   markAsReceived: (id) => request(`/api/orders/${id}/received`, { method: 'POST' }),
   createRefundRequest: (id, body) => request(`/api/orders/${id}/refund-request`, { method: 'POST', body }),
+  getRefundFile: (id, kind) => request(`/api/orders/refund-requests/${id}/files/${kind}`),
+  confirmRefund: (id) => request(`/api/orders/refund-requests/${id}/confirm`, { method: 'POST' }),
   getRefundRequests: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/orders/refund-requests${qs ? '?' + qs : ''}`)

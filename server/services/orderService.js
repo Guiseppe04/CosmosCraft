@@ -921,6 +921,11 @@ exports.getUserOrders = async (userId) => {
        refund_reference,
        refund_method,
        rejection_reason,
+       admin_notes,
+       (to_jsonb(refund_requests)->>'workflow_version')::int AS workflow_version,
+       to_jsonb(refund_requests)->>'preferred_method' AS preferred_method,
+       to_jsonb(refund_requests)->>'refund_sent_at' AS refund_sent_at,
+       to_jsonb(refund_requests)->>'completed_at' AS completed_at,
        refund_type,
        request_number
      FROM refund_requests
@@ -990,6 +995,11 @@ exports.getUserOrders = async (userId) => {
       refund_reference: refund?.refund_reference || null,
       refund_method: refund?.refund_method || null,
       refund_rejection_reason: refund?.rejection_reason || null,
+      refund_admin_notes: refund?.admin_notes || null,
+      refund_workflow_version: refund?.workflow_version || 1,
+      refund_preferred_method: refund?.preferred_method || null,
+      refund_sent_at: refund?.refund_sent_at || null,
+      refund_completed_at: refund?.completed_at || null,
       refund_type: refund?.refund_type || null,
       refund_request_number: refund?.request_number || null,
     }
@@ -1036,7 +1046,11 @@ exports.getOrderById = async (orderId, userId = null) => {
 
   // Get the most recent refund request for this order (live status)
   const refundRes = await pool.query(
-    `SELECT refund_request_id, status, created_at
+    `SELECT refund_request_id, status, created_at, rejection_reason, admin_notes,
+      (to_jsonb(refund_requests)->>'workflow_version')::int AS workflow_version,
+      to_jsonb(refund_requests)->>'preferred_method' AS preferred_method,
+      to_jsonb(refund_requests)->>'refund_sent_at' AS refund_sent_at,
+      to_jsonb(refund_requests)->>'completed_at' AS completed_at, refunded_amount, approved_amount, refund_reference
      FROM refund_requests
      WHERE order_id = $1 AND deleted_at IS NULL
      ORDER BY created_at DESC
@@ -1053,6 +1067,15 @@ exports.getOrderById = async (orderId, userId = null) => {
   order.refund_request_id = refund?.refund_request_id || null
   order.refund_request_status = refund?.status || null
   order.refund_requested_at = refund?.created_at || null
+  order.refund_rejection_reason = refund?.rejection_reason || null
+  order.refund_admin_notes = refund?.admin_notes || null
+  order.refund_workflow_version = refund?.workflow_version || 1
+  order.refund_preferred_method = refund?.preferred_method || null
+  order.refund_sent_at = refund?.refund_sent_at || null
+  order.refund_completed_at = refund?.completed_at || null
+  order.refund_refunded_amount = refund?.refunded_amount || null
+  order.refund_approved_amount = refund?.approved_amount || null
+  order.refund_reference = refund?.refund_reference || null
 
   return order
 }
@@ -2066,6 +2089,10 @@ exports.markAsReceived = async (orderId, userId) => {
 
 exports.createRefundRequest = async (data) => {
   const { orderId, userId, reason, customerNotes, items, images } = data;
+  const workflow = require('./orderRefundWorkflow');
+  const destination = workflow.validateDestination(data.destination);
+  await workflow.ensureReady();
+  if (!Array.isArray(items) || new Set(items.map(item => item.order_item_id)).size !== items.length) throw new Error('Duplicate refund items are not allowed');
 
   const orderRes = await pool.query(
     `SELECT status, delivered_at, received_at FROM orders WHERE order_id = $1 AND user_id = $2`,
@@ -2089,7 +2116,7 @@ exports.createRefundRequest = async (data) => {
   }
 
   const existingRes = await pool.query(
-    `SELECT refund_request_id FROM refund_requests WHERE order_id = $1 AND status NOT IN ('rejected', 'refunded') AND deleted_at IS NULL LIMIT 1`,
+    `SELECT refund_request_id FROM refund_requests WHERE order_id = $1 AND status NOT IN ('rejected', 'refunded', 'completed', 'withdrawn') AND deleted_at IS NULL LIMIT 1`,
     [orderId]
   );
   if (existingRes.rows.length > 0) {
@@ -2124,7 +2151,8 @@ exports.createRefundRequest = async (data) => {
         throw new Error('Order item not found');
       }
       const orderItem = itemRes.rows[0];
-      const refundQty = Math.min(Number(item.quantity || 1), Number(orderItem.quantity || 1));
+      const refundQty = Number(item.quantity);
+      if (!Number.isInteger(refundQty) || refundQty < 1 || refundQty > Number(orderItem.quantity)) throw new Error('Invalid refund quantity');
       const unitPrice = Number(orderItem.unit_price || 0);
       const refundAmount = unitPrice * refundQty;
 
@@ -2143,8 +2171,9 @@ exports.createRefundRequest = async (data) => {
       }
     }
 
+    const attachedRequest = await workflow.attachRequest(client, refundRequest, destination, userId);
     await client.query('COMMIT');
-    return refundRequest;
+    return attachedRequest;
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -2265,7 +2294,7 @@ exports.getRefundRequests = async (params = {}) => {
   };
 }
 
-exports.getRefundRequestById = async (refundRequestId) => {
+exports.getRefundRequestById = async (refundRequestId, includeSensitive = false) => {
   const res = await pool.query(
     `SELECT rr.*, o.order_number, o.payment_status, o.payment_status as order_payment_status, o.total_amount as order_total_amount, o.status as order_status, u.first_name, u.last_name, u.email as customer_email
      FROM refund_requests rr
@@ -2277,6 +2306,15 @@ exports.getRefundRequestById = async (refundRequestId) => {
   if (res.rows.length === 0) return null;
 
   const request = res.rows[0];
+  if (includeSensitive && request.workflow_version === 2) {
+    const destinationRes = await pool.query('SELECT payment_destination FROM refund_private_destinations WHERE refund_request_id=$1', [refundRequestId]);
+    request.payment_destination = destinationRes.rows[0]?.payment_destination || null;
+  }
+  const filesRes = request.workflow_version === 2
+    ? await pool.query('SELECT kind FROM refund_private_files WHERE refund_request_id=$1', [refundRequestId])
+    : { rows: [] };
+  request.has_qr = filesRes.rows.some(file => file.kind === 'qr');
+  request.has_proof = filesRes.rows.some(file => file.kind === 'proof');
   const itemsRes = await pool.query(
     `SELECT * FROM refund_request_items WHERE refund_request_id = $1 AND deleted_at IS NULL`,
     [refundRequestId]
@@ -2307,16 +2345,18 @@ exports.updateRefundStatus = async (refundRequestId, status, options = {}) => {
   const { adminUserId, adminNotes } = options;
 
   const checkRes = await pool.query(
-    `SELECT status FROM refund_requests WHERE refund_request_id = $1 AND deleted_at IS NULL`,
+    `SELECT status, (to_jsonb(refund_requests)->>'workflow_version')::int AS workflow_version FROM refund_requests WHERE refund_request_id = $1 AND deleted_at IS NULL`,
     [refundRequestId]
   );
   if (checkRes.rows.length === 0) {
     throw new Error('Refund request not found');
   }
   const currentStatus = checkRes.rows[0].status;
+  if (checkRes.rows[0].workflow_version === 2) throw new Error('Use the reviewed refund workflow for this request');
   const allowedTransitions = {
     pending: ['approved', 'rejected', 'refunded'],
-    approved: ['refunded'],
+    approved: ['processing', 'refunded'],
+    processing: ['refunded'],
     rejected: [],
     refunded: [],
   };
@@ -2336,6 +2376,13 @@ exports.updateRefundStatus = async (refundRequestId, status, options = {}) => {
   if (adminNotes) {
     updateFields.push(`admin_notes = $${paramIndex++}`);
     updateValues.push(adminNotes);
+    if (status === 'rejected') {
+      updateFields.push(`rejection_reason = $${paramIndex++}`);
+      updateValues.push(adminNotes);
+    }
+  }
+  if (status === 'processing') {
+    updateFields.push(`processing_at = CURRENT_TIMESTAMP`);
   }
   if (status === 'refunded') {
     updateFields.push(`refunded_at = CURRENT_TIMESTAMP`);

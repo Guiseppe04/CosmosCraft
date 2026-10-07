@@ -1,5 +1,6 @@
 import { Outlet, useLocation, useNavigate } from 'react-router'
 import { Header } from '../Header.jsx'
+import { LegalLinks } from '../LegalLinks.jsx'
 import { LoginModal } from '../auth/LoginModal.jsx'
 import { CartDrawer } from '../cart/CartDrawer.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
@@ -112,6 +113,7 @@ export function RootLayout() {
           </motion.div>
         )}
       </main>
+      {!isAdminOrStaff && location.pathname !== '/' && <footer className="border-t border-[var(--border)] px-4 py-6"><LegalLinks /></footer>}
       <LoginModal />
       <CartDrawer />
 
