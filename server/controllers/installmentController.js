@@ -1,6 +1,7 @@
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const installmentService = require('../services/installmentService');
 const projectService = require('../services/projectService');
+const { uploadImage } = require('../services/cloudinaryService');
 
 /**
  * Get installment tracking data for a project/order.
@@ -111,10 +112,20 @@ exports.submitCustomerInstallmentPayment = asyncHandler(async (req, res, next) =
   const projectId = req.params.id || req.params.projectId || req.body.projectId;
   const referenceNumber = req.body.reference_number || req.body.referenceNumber || req.body.reference || null;
   const method = req.body.method || req.body.payment_method || req.body.paymentMethod || 'gcash';
-  const proofUrl = req.file ? `/uploads/proofs/${req.file.filename}` : (req.body.proof_url || req.body.proofUrl || null);
+  const proofUrlFromBody = req.body.proof_url || req.body.proofUrl || null;
 
   if (!scheduleId) throw new AppError('Schedule ID is required', 400);
   if (!projectId) throw new AppError('Project ID is required', 400);
+
+  let proofUrl = proofUrlFromBody;
+  if (req.file) {
+    // Upload to Cloudinary
+    const dataUri = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    proofUrl = await uploadImage(dataUri, { folder: 'cosmoscraft_assets/installment_proofs' });
+  }
+  if (!proofUrl) {
+    throw new AppError('Payment proof/receipt is required', 400);
+  }
 
   const result = await installmentService.submitCustomerInstallmentPayment({
     projectId,

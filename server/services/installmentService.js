@@ -30,7 +30,7 @@ const INSTALLMENT_AUDIT_SELECT = `
   FROM project_installment_schedules pis
   JOIN projects p ON p.project_id = pis.project_id
   LEFT JOIN orders o ON o.order_id = p.order_id
-  LEFT JOIN users cu ON cu.user_id = COALESCE(o.user_id, pis.customer_id)
+  LEFT JOIN users cu ON cu.user_id = o.user_id
 `;
 
 /**
@@ -223,18 +223,18 @@ exports.submitCustomerInstallmentPayment = async ({
   try {
     await client.query('BEGIN');
 
-    // 1. Get the installment and project/order info
+// 1. Get the installment and project/order info
     const instRes = await client.query(
       `SELECT pis.*, p.order_id, p.custom_build_id, p.title AS project_title,
-              o.user_id AS customer_id, o.user_id AS order_user_id,
-              o.total_amount AS order_total, o.order_number, o.order_type,
-              TRIM(CONCAT(COALESCE(cu.first_name, ''), ' ', COALESCE(cu.last_name, ''))) AS customer_name,
-              cu.email AS customer_email
-       FROM project_installment_schedules pis
-       JOIN projects p ON p.project_id = pis.project_id
-       LEFT JOIN orders o ON o.order_id = p.order_id
-       LEFT JOIN users cu ON cu.user_id = COALESCE(o.user_id, pis.customer_id)
-       WHERE pis.schedule_id = $1 AND pis.project_id = $2`,
+               o.user_id AS customer_id, o.user_id AS order_user_id,
+               o.total_amount AS order_total, o.order_number, o.order_type,
+               TRIM(CONCAT(COALESCE(cu.first_name, ''), ' ', COALESCE(cu.last_name, ''))) AS customer_name,
+               cu.email AS customer_email
+        FROM project_installment_schedules pis
+        JOIN projects p ON p.project_id = pis.project_id
+        LEFT JOIN orders o ON o.order_id = p.order_id
+        LEFT JOIN users cu ON cu.user_id = o.user_id
+        WHERE pis.schedule_id = $1 AND pis.project_id = $2`,
       [scheduleId, projectId]
     );
 
@@ -371,11 +371,6 @@ exports.verifyInstallmentPayment = async ({
   try {
     await client.query('BEGIN');
 
-    // Get installment and linked payment
-    const previousPaymentRes = installment.payment_id
-      ? await client.query(`SELECT status FROM payments WHERE payment_id = $1`, [installment.payment_id])
-      : { rows: [] };
-
     const instRes = await client.query(
       `${INSTALLMENT_AUDIT_SELECT} WHERE pis.schedule_id = $1`,
       [scheduleId]
@@ -387,6 +382,11 @@ exports.verifyInstallmentPayment = async ({
 
     const installment = instRes.rows[0];
     const customerId = installment.customer_id || installment.order_user_id;
+
+    // Get installment and linked payment
+    const previousPaymentRes = installment.payment_id
+      ? await client.query(`SELECT status FROM payments WHERE payment_id = $1`, [installment.payment_id])
+      : { rows: [] };
 
     // Update payment record if exists
     let payment = null;
