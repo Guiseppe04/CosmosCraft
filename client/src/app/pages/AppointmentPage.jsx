@@ -754,8 +754,10 @@
      * single effect run and must not set state after unmount.
      */
     const isMountedRef = useRef(true)
+    const scheduleRequestRef = useRef(0)
 
     const loadUnavailableDates = useCallback(async () => {
+      const requestId = ++scheduleRequestRef.current
       try {
         const [unavailRes, overrideRes] = await Promise.all([
           fetch(`${API}/api/appointments/unavailable-dates`, {
@@ -770,7 +772,7 @@
         const overridePayload = overrideRes && overrideRes.ok ? await overrideRes.json().catch(() => ({})) : null
 
         if (!unavailRes.ok) {
-          if (!isMountedRef.current) return
+          if (!isMountedRef.current || requestId !== scheduleRequestRef.current) return
           setUnavailableDateSet(new Set())
           setOpenOverrideSet(new Set())
           return
@@ -790,7 +792,7 @@
             .filter(Boolean)
         )
 
-        if (!isMountedRef.current) return
+        if (!isMountedRef.current || requestId !== scheduleRequestRef.current) return
 
         setUnavailableDateSet(nextSet)
         setOpenOverrideSet(nextOverrideSet)
@@ -804,7 +806,7 @@
           return current
         })
       } catch {
-        if (isMountedRef.current) {
+        if (isMountedRef.current && requestId === scheduleRequestRef.current) {
           setUnavailableDateSet(new Set())
           setOpenOverrideSet(new Set())
         }
@@ -832,15 +834,29 @@
       setCalendarRefresh(value => value + 1)
     })
 
+    useSocketEvent('connect', () => {
+      loadUnavailableDates()
+      setCalendarRefresh(value => value + 1)
+    })
+
     useSocketEvent('appointment:created', () => setCalendarRefresh(value => value + 1))
     useSocketEvent('appointment:updated', () => setCalendarRefresh(value => value + 1))
 
     useEffect(() => {
-      const refresh = () => { if (document.visibilityState === 'visible') setCalendarRefresh(value => value + 1) }
+      const refresh = () => {
+        if (document.visibilityState !== 'visible') return
+        loadUnavailableDates()
+        setCalendarRefresh(value => value + 1)
+      }
       const timer = setInterval(refresh, 30000)
       window.addEventListener('focus', refresh)
-      return () => { clearInterval(timer); window.removeEventListener('focus', refresh) }
-    }, [])
+      document.addEventListener('visibilitychange', refresh)
+      return () => {
+        clearInterval(timer)
+        window.removeEventListener('focus', refresh)
+        document.removeEventListener('visibilitychange', refresh)
+      }
+    }, [loadUnavailableDates])
 
     useEffect(() => {
       let active = true

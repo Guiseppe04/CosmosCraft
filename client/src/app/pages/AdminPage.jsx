@@ -996,6 +996,7 @@ export function AdminPage() {
     refreshAppointmentsRealtime()
     fetchUnavailableDates()
     fetchAvailableDates()
+    fetchOpenOverrides()
   })
 
   useSocketEvent('project:updated', () => {
@@ -1073,6 +1074,9 @@ export function AdminPage() {
     if (['appointments', 'dashboard'].includes(activeTab)) {
       fetchAppointments({ silent: true })
       fetchCalendarAppointments()
+      fetchUnavailableDates()
+      fetchAvailableDates()
+      fetchOpenOverrides()
     }
     if (['dashboard', 'pos', 'inventory', 'sales-report'].includes(activeTab)) {
       fetchInventory({ silent: true })

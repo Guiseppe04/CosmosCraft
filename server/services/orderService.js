@@ -978,6 +978,7 @@ exports.getUserOrders = async (userId) => {
 
     return {
       ...order,
+      status: project?.status === 'cancelled' ? 'cancelled' : order.status,
       items,
       payment,
       project,

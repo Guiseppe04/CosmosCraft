@@ -582,6 +582,7 @@ export function DashboardPage() {
   const [myOrders, setMyOrders] = useState(() => dashboardCache.orders || [])
   const [activePurchaseTab, setActivePurchaseTab] = useState('All')
   const [purchaseSort, setPurchaseSort] = useState('created_latest')
+  const [purchaseSearch, setPurchaseSearch] = useState('')
   const [isCancelOrderModalOpen, setIsCancelOrderModalOpen] = useState(false)
   const [cancelOrderTarget, setCancelOrderTarget] = useState(null)
   const [cancelOrderReason, setCancelOrderReason] = useState('')
@@ -1118,6 +1119,7 @@ export function DashboardPage() {
 
   useSocketEvent('project:updated', () => {
     fetchMyProjects()
+    fetchMyOrders()
     if (activeSection === 'appointments') fetchMyAppointments()
     setToastMessage('Guitar build project progress updated!')
   })
@@ -2088,7 +2090,14 @@ export function DashboardPage() {
     { id: 'purchases', label: 'My Purchase', icon: Package, group: 'orders' },
   ]
   const renderPurchasesContent = () => {
-const filteredOrders = myOrders.filter(order => {
+    const searchTerms = purchaseSearch.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    const filteredOrders = myOrders.filter(order => {
+      const searchableText = [
+        order.order_number, order.order_id, order.status, formatStatus(order.status),
+        order.payment_status, formatStatus(order.payment_status), order.project?.title,
+        ...(order.items || []).map(item => item.name || item.product_name),
+      ].filter(Boolean).join(' ').toLowerCase()
+      if (!searchTerms.every(term => searchableText.includes(term))) return false
       if (activePurchaseTab === 'All') return true;
       if (activePurchaseTab === 'Processing' && order.status === 'processing') return true;
       if (activePurchaseTab === 'Shipped' && order.status === 'shipped') return true;
@@ -2119,6 +2128,17 @@ const filteredOrders = myOrders.filter(order => {
           </div>
 
           {/* Order Status Filters */}
+          <div className="relative mb-4">
+            <Search aria-hidden="true" className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+            <input
+              type="search"
+              aria-label="Search purchases"
+              placeholder="Search by order number, item, or status"
+              value={purchaseSearch}
+              onChange={event => setPurchaseSearch(event.target.value)}
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] py-3 pl-11 pr-4 text-sm text-[var(--text-light)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--gold-primary)]"
+            />
+          </div>
           <div className="purch-toolbar">
             <div className="purch-tabs">
               {PURCHASE_TABS.map(tab => (
@@ -2175,7 +2195,13 @@ const filteredOrders = myOrders.filter(order => {
             </div>
           ) : sortedOrders.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10">
-              {activePurchaseTab === 'Refund' ? (
+              {purchaseSearch.trim() ? (
+                <>
+                  <p className="text-white font-medium mb-1">No matching purchases</p>
+                  <p className="text-sm text-[var(--text-muted)] mb-3">Try another search or choose a different status tab.</p>
+                  <button type="button" onClick={() => setPurchaseSearch('')} className="text-sm font-semibold text-[var(--gold-primary)]">Clear search</button>
+                </>
+              ) : activePurchaseTab === 'Refund' ? (
                 <>
                   <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-4">
                     <RefreshCw className="w-8 h-8 text-[var(--text-muted)]" />
@@ -3645,7 +3671,6 @@ const filteredOrders = myOrders.filter(order => {
                 selectionEnabled
                 showQuantityControls
                 showRemove
-                className="cart-item-card"
               />
             ))}
 

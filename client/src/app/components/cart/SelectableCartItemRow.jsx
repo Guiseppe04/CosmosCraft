@@ -25,9 +25,9 @@ export function SelectableCartItemRow({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`group rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)]/50 p-4 transition-all duration-200 hover:border-[var(--gold-primary)]/30 hover:bg-[var(--surface-elevated)] ${className}`}
+      className={`cart-product group rounded-2xl border p-4 transition-colors duration-200 ${isSelected && !outOfStock ? 'border-[var(--gold-primary)]/40 bg-[var(--gold-primary)]/5' : 'border-[var(--border)] bg-[var(--surface-elevated)]/50'} hover:border-[var(--gold-primary)]/50 ${className}`}
     >
-      <div className="flex items-center gap-4">
+      <div className="cart-product-main">
         {selectionEnabled && (
           <label className={`flex-shrink-0 ${outOfStock ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`}>
             <input
@@ -36,10 +36,10 @@ export function SelectableCartItemRow({
               disabled={outOfStock}
               aria-label={`Select ${item.name}`}
               onChange={() => onToggleSelect(item.id)}
-              className="sr-only"
+              className="sr-only peer"
             />
             <div
-              className={`flex h-5 w-5 items-center justify-center rounded border transition-colors ${
+              className={`flex h-5 w-5 items-center justify-center rounded border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--gold-primary)] ${
                 isSelected
                   ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-[var(--text-dark)]'
                   : 'border-[var(--border)] bg-[var(--bg-primary)] text-transparent'
@@ -50,14 +50,15 @@ export function SelectableCartItemRow({
           </label>
         )}
 
-        <div className="w-20 h-20 rounded-lg bg-[var(--bg-primary)] border border-white/5 flex items-center justify-center overflow-hidden flex-shrink-0">
+        <div className="cart-product-image rounded-xl bg-[var(--bg-primary)] border border-[var(--border)] flex items-center justify-center overflow-hidden flex-shrink-0">
           {item.customization ? <CustomBuildThumbnail item={item} /> : item.image ? (
             <img
               src={item.image}
               alt={item.name}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              className="w-full h-full object-contain p-1 group-hover:scale-105 transition-transform duration-300"
               onError={(e) => {
-                e.target.src = '/assets/placeholder.jpg'
+                e.currentTarget.onerror = null
+                e.currentTarget.src = '/default-image.png'
               }}
             />
           ) : (
@@ -65,34 +66,35 @@ export function SelectableCartItemRow({
           )}
         </div>
 
-        <div className="flex-1 min-w-0 flex items-center justify-between gap-4">
+        <div className="cart-product-content">
           <div className="min-w-0 flex-1">
-            <h3 className="font-semibold text-[var(--text-light)] truncate">{item.name}</h3>
+            <h3 className="font-semibold text-[var(--text-light)] leading-snug break-words">{item.name}</h3>
             {outOfStock && <p className="mt-1 text-xs font-semibold text-red-400">Out of Stock</p>}
             <div className="flex items-center gap-2 mt-1">
               <p className="text-xs text-[var(--text-muted)] tracking-wide uppercase">{item.category || 'Product'}</p>
             </div>
+            <p className="mt-2 text-xs text-[var(--text-muted)]">₱{Number(item.price).toLocaleString('en-PH')} each</p>
           </div>
 
-          <div className="flex items-center gap-4 flex-shrink-0">
+          <div className="cart-product-controls">
             {showQuantityControls && (
               <div className="flex flex-col items-end gap-1">
-                <div className="flex items-center gap-2 bg-[var(--bg-primary)] border border-white/10 rounded-full px-3 py-1.5">
+                <div className="flex items-center bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl overflow-hidden">
                   <button
                     type="button"
                     onClick={() => onUpdateQuantity(item.id, Math.max(1, item.quantity - 1))}
                     disabled={item.quantity <= 1}
-                    className="text-[var(--text-muted)] hover:text-white p-0.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="w-9 h-9 flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--surface-dark)] hover:text-[var(--text-light)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                     aria-label="Decrease quantity"
                   >
                     <Minus className="w-3 h-3" />
                   </button>
-                  <span className="text-sm font-semibold w-5 text-center text-white">{item.quantity}</span>
+                  <span className="text-sm font-semibold w-7 text-center text-[var(--text-light)] tabular-nums">{item.quantity}</span>
                   <button
                     type="button"
                     onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
                     disabled={atStockLimit}
-                    className="text-[var(--text-muted)] hover:text-[var(--gold-primary)] p-0.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="w-9 h-9 flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--surface-dark)] hover:text-[var(--gold-primary)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                     aria-label="Increase quantity"
                   >
                     <Plus className="w-3 h-3" />
@@ -104,8 +106,8 @@ export function SelectableCartItemRow({
               </div>
             )}
 
-            <div className="w-24 text-right">
-              <p className="font-bold text-white text-sm tracking-tight">
+            <div className="cart-product-total text-right">
+              <p className="font-bold text-[var(--gold-primary)] text-sm tracking-tight tabular-nums">
                 ₱{(item.price * item.quantity).toLocaleString('en-PH')}
               </p>
             </div>

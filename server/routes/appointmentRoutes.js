@@ -71,6 +71,9 @@ router.get(
   appointmentController.getAvailableSlots
 );
 
+// Public calendar counts contain no customer or appointment details.
+router.get('/available-dates', optionalAuthenticateToken, appointmentController.getAvailableDates);
+
 // ─── MIDDLEWARE ─────────────────────────────────────────────────────────────
 // Everything below this line requires authentication.
 router.use(authenticateToken);
@@ -101,7 +104,6 @@ router.post('/', appointmentController.createAppointment);
  *   - date_to (required) - ISO date string
  * Access: Any authenticated user
  */
-router.get('/available-dates', appointmentController.getAvailableDates);
 
 // ─── UNAVAILABLE DATES ───────────────────────────────────────────────────────
 // GET /unavailable-dates is public (registered above the auth gate).

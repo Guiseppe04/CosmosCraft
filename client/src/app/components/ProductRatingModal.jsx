@@ -10,6 +10,7 @@ import {
   Loader2,
   AlertCircle
 } from 'lucide-react'
+import { AddToCartButton } from './cart/AddToCartButton.jsx'
 import { StarRating } from './common/StarRating.jsx'
 import { feedbackService } from '../services/feedbackService'
 
@@ -454,23 +455,13 @@ export function ProductRatingModal({
                     Buy Now
                   </button>
                 )}
-                <button
-                  type="button"
+                <AddToCartButton
+                  state={buttonState}
                   onClick={() => {
-                    if (buttonState !== 'out_of_stock') {
-                      onAddToCart?.(product, quantity)
-                      setQuantity(1)
-                    }
+                    onAddToCart?.(product, quantity)
+                    setQuantity(1)
                   }}
-                  disabled={buttonState === 'out_of_stock'}
-                  className={`flex-1 min-w-0 py-2.5 px-3 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${
-                    buttonState === 'out_of_stock'
-                      ? 'border-white/10 text-white/30 bg-transparent cursor-not-allowed'
-                      : 'border-white/20 text-white hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] bg-[var(--surface-elevated)]'
-                  }`}
-                >
-                  {buttonState === 'out_of_stock' ? 'Out of Stock' : 'Add to Cart'}
-                </button>
+                />
               </div>
             </div>
           </div>
