@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { writeSavedBuilds } from '../utils/savedBuildStorage.js'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
 import { Eye, EyeOff, User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, Bike, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon, Check, RefreshCw, Printer, Info, Camera, Filter, CircleDot, CalendarDays, ArrowDownWideNarrow, ListFilter, DollarSign } from 'lucide-react'
@@ -1017,8 +1018,8 @@ export function DashboardPage() {
       setMyCustomizations(customizations)
       for (const [key, type] of [['cosmoscraft_saved_builds', 'electric'], ['cosmoscraft_saved_bass_builds', 'bass']]) {
         try {
-          const builds = mergeWalkInSavedBuilds(readSavedBuilds(window.localStorage, key), customizations, requestedUserId, type)
-          window.localStorage.setItem(key, JSON.stringify(builds))
+          const builds = mergeWalkInSavedBuilds(readSavedBuilds(window.localStorage, key), customizations, requestedUserId, type, true)
+          writeSavedBuilds(window.localStorage, key, builds)
         } catch (error) {
           console.warn('Could not cache received builds:', error.message)
         }
@@ -3377,8 +3378,8 @@ export function DashboardPage() {
       return renderProjectsContent()
     }
 
-    const savedGuitarBuilds = mergeWalkInSavedBuilds(readSavedBuilds(window.localStorage, 'cosmoscraft_saved_builds'), myCustomizations, currentUserId, 'electric').map(b => ({ ...b, isBass: false }))
-    const savedBassBuilds = mergeWalkInSavedBuilds(readSavedBuilds(window.localStorage, 'cosmoscraft_saved_bass_builds'), myCustomizations, currentUserId, 'bass').map(b => ({ ...b, isBass: true }))
+    const savedGuitarBuilds = mergeWalkInSavedBuilds(readSavedBuilds(window.localStorage, 'cosmoscraft_saved_builds'), myCustomizations, currentUserId, 'electric', true).map(b => ({ ...b, isBass: false }))
+    const savedBassBuilds = mergeWalkInSavedBuilds(readSavedBuilds(window.localStorage, 'cosmoscraft_saved_bass_builds'), myCustomizations, currentUserId, 'bass', true).map(b => ({ ...b, isBass: true }))
     const allBuilds = [...savedGuitarBuilds, ...savedBassBuilds]
       .filter(build => !build.config?._walkIn?.customerId || String(build.config._walkIn.customerId) === String(user?.id || user?.user_id))
       .sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0))

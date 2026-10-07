@@ -260,6 +260,7 @@ exports.createMyCustomization = async (userId, payload, db = pool, customization
   }
 
   const resolvedStickers = Array.isArray(stickers) ? await sanitizeStickersForStorage(stickers) : null;
+  const resolvedPreviews = await require('./buildPreviewStorage').storeBuildPreviews(config_json, preview_image);
 
   const res = await db.query(
     `INSERT INTO customizations (
@@ -278,9 +279,9 @@ exports.createMyCustomization = async (userId, payload, db = pool, customization
     [
       userId, name, guitar_type, body_wood, neck_wood, fingerboard_wood,
       bridge_type, pickups, color, finish_type, total_price, is_saved ?? true,
-      config_json ? JSON.stringify(config_json) : null,
+      resolvedPreviews.config ? JSON.stringify(resolvedPreviews.config) : null,
       resolvedStickers ? JSON.stringify(resolvedStickers) : null,
-      preview_image || null,
+      resolvedPreviews.preview || null,
       customizationId,
     ]
   );
@@ -369,6 +370,7 @@ exports.updateMyCustomization = async (customizationId, userId, payload) => {
   } = payload;
 
   const resolvedStickers = Array.isArray(stickers) ? await sanitizeStickersForStorage(stickers) : null;
+  const resolvedPreviews = await require('./buildPreviewStorage').storeBuildPreviews(config_json, preview_image);
 
   const res = await pool.query(
     `UPDATE customizations SET
@@ -392,9 +394,9 @@ exports.updateMyCustomization = async (customizationId, userId, payload) => {
     [
       name, guitar_type, body_wood, neck_wood, fingerboard_wood, bridge_type,
       pickups, color, finish_type, total_price, is_saved,
-      config_json ? JSON.stringify(config_json) : null,
+      resolvedPreviews.config ? JSON.stringify(resolvedPreviews.config) : null,
       resolvedStickers ? JSON.stringify(resolvedStickers) : null,
-      preview_image || null,
+      resolvedPreviews.preview || null,
       customizationId, userId,
     ]
   );
