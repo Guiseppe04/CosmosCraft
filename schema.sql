@@ -200,7 +200,7 @@ CREATE TABLE products (
     price NUMERIC(12, 2) NOT NULL CHECK (price >= 0),
     brand VARCHAR(100) NOT NULL DEFAULT '',
     sku VARCHAR(100) NOT NULL UNIQUE,
-    category_id INT NOT NULL,
+    category_id INT,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

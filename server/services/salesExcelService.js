@@ -209,7 +209,6 @@ async function generateReportWorkbook(reportData = {}, options = {}) {
       { key: 'payment_status', header: 'Payment Status', width: 16, align: 'center' },
       { key: 'payment_method', header: 'Payment Method', width: 16, align: 'center' },
       { key: 'subtotal', header: 'Subtotal', width: 16, align: 'right', format: FORMATS.currency, isTotal: true },
-      { key: 'shipping_cost', header: 'Shipping', width: 14, align: 'right', format: FORMATS.currency, isTotal: true },
       { key: 'gross_amount', header: 'Total Amount', width: 18, align: 'right', format: FORMATS.currency, isTotal: true },
     ],
     pos: [
@@ -220,7 +219,6 @@ async function generateReportWorkbook(reportData = {}, options = {}) {
       { key: 'payment_method', header: 'Payment Method', width: 16, align: 'center' },
       { key: 'status', header: 'Sale Status', width: 15, align: 'center' },
       { key: 'subtotal', header: 'Subtotal', width: 16, align: 'right', format: FORMATS.currency, isTotal: true },
-      { key: 'discount_amount', header: 'Discount', width: 14, align: 'right', format: FORMATS.currency, isTotal: true },
       { key: 'gross_amount', header: 'Total Collected', width: 18, align: 'right', format: FORMATS.currency, isTotal: true },
     ],
     customization: [

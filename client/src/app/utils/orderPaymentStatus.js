@@ -55,5 +55,5 @@ export function getAllowedPaymentStatuses(currentStatus, options = {}) {
 
   return values
     .map((value) => PAYMENT_STATUS_MAP[value])
-    .filter(Boolean)
+    .filter((status) => status && status.value !== 'failed')
 }

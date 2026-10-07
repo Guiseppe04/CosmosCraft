@@ -1,4 +1,5 @@
 const { pool } = require('../config/database');
+const { AppError } = require('../middleware/errorHandler');
 
 // ─── CATEGORIES ─────────────────────────────────────────────────────────────
 
@@ -51,7 +52,22 @@ exports.updateCategory = async (id, category = {}) => {
 };
 
 exports.deleteCategory = async (id) => {
-  await pool.query('DELETE FROM categories WHERE category_id = $1', [id]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const category = await client.query(
+      'SELECT category_id FROM categories WHERE category_id = $1 FOR UPDATE', [id]
+    );
+    if (!category.rows.length) throw new AppError('Category not found', 404);
+    await client.query('UPDATE products SET category_id = NULL WHERE category_id = $1', [id]);
+    await client.query('DELETE FROM categories WHERE category_id = $1', [id]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 };
 
 // ─── PRODUCTS ────────────────────────────────────────────────────────────────

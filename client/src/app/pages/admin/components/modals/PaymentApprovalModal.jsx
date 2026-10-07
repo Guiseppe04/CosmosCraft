@@ -116,7 +116,7 @@ export function PaymentApprovalModal({
                 className="w-full rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-left flex items-center justify-between gap-3 transition-all hover:border-[var(--gold-primary)]/30"
               >
                 <span className="text-sm font-semibold" style={{ color: selectedStatus?.color || '#ffffff' }}>
-                  {selectedStatus?.label || 'Pending'}
+                  {selectedStatus?.label || 'Select payment status'}
                 </span>
                 <ChevronDown className="w-4 h-4 text-white" />
               </button>

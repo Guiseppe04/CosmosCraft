@@ -127,17 +127,6 @@ export function OrdersTab({ orders, fetchOrders, user, pagination, showToast, on
             )
           })}
         </div>
-
-          <button
-            type="button"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)]/50 hover:bg-white/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Refresh Orders & Counts"
-            aria-label="Refresh orders and counts"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-[var(--gold-primary)]' : ''}`} />
-          </button>
       </div>
 
       {/* Main Content Area */}

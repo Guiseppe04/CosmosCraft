@@ -286,6 +286,7 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
   const [reportData, setReportData] = useState(initialReport || null);
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [showTrendChart, setShowTrendChart] = useState(true);
 
@@ -323,6 +324,43 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
 
   const reportRequestRef = useRef(0);
 
+  const reportParams = useMemo(() => {
+    const params = {
+      report_type: reportType,
+      sort_by: sortBy,
+      sort_order: sortOrder,
+    };
+
+    if (resolvedDates.start_date) params.start_date = resolvedDates.start_date;
+    if (resolvedDates.end_date) params.end_date = resolvedDates.end_date;
+
+    // Only pass filters relevant to active report type
+    if (filters.search && filters.search.trim()) params.search = filters.search.trim();
+
+    if (reportType === "all") {
+      if (filters.order_type && filters.order_type !== "all") params.order_type = filters.order_type;
+      if (filters.payment_method && filters.payment_method !== "all") params.payment_method = filters.payment_method;
+      if (filters.status && filters.status !== "all") params.status = filters.status;
+    } else if (reportType === "online") {
+      if (filters.status && filters.status !== "all") params.status = filters.status;
+      if (filters.payment_status && filters.payment_status !== "all") params.payment_status = filters.payment_status;
+      if (filters.payment_method && filters.payment_method !== "all") params.payment_method = filters.payment_method;
+    } else if (reportType === "pos") {
+      if (filters.status && filters.status !== "all") params.status = filters.status;
+      if (filters.payment_method && filters.payment_method !== "all") params.payment_method = filters.payment_method;
+      if (filters.staff_id && filters.staff_id !== "all") params.staff_id = filters.staff_id;
+    } else if (reportType === "customization") {
+      if (filters.status && filters.status !== "all") params.status = filters.status;
+      if (filters.payment_status && filters.payment_status !== "all") params.payment_status = filters.payment_status;
+      if (filters.payment_method && filters.payment_method !== "all") params.payment_method = filters.payment_method;
+    } else if (reportType === "refunds") {
+      if (filters.status && filters.status !== "all") params.status = filters.status;
+      if (filters.refund_type && filters.refund_type !== "all") params.refund_type = filters.refund_type;
+    }
+
+    return params;
+  }, [reportType, resolvedDates, filters, sortBy, sortOrder]);
+
   // Fetch Report Data from Backend
   const loadReport = useCallback(async () => {
     const requestId = ++reportRequestRef.current;
@@ -330,42 +368,7 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
       setIsLoading(true);
       setErrorMsg("");
 
-      const params = {
-        report_type: reportType,
-        page,
-        limit: pageSize,
-        sort_by: sortBy,
-        sort_order: sortOrder,
-      };
-
-      if (resolvedDates.start_date) params.start_date = resolvedDates.start_date;
-      if (resolvedDates.end_date) params.end_date = resolvedDates.end_date;
-
-      // Only pass filters relevant to active report type
-      if (filters.search && filters.search.trim()) params.search = filters.search.trim();
-
-      if (reportType === "all") {
-        if (filters.order_type && filters.order_type !== "all") params.order_type = filters.order_type;
-        if (filters.payment_method && filters.payment_method !== "all") params.payment_method = filters.payment_method;
-        if (filters.status && filters.status !== "all") params.status = filters.status;
-      } else if (reportType === "online") {
-        if (filters.status && filters.status !== "all") params.status = filters.status;
-        if (filters.payment_status && filters.payment_status !== "all") params.payment_status = filters.payment_status;
-        if (filters.payment_method && filters.payment_method !== "all") params.payment_method = filters.payment_method;
-      } else if (reportType === "pos") {
-        if (filters.status && filters.status !== "all") params.status = filters.status;
-        if (filters.payment_method && filters.payment_method !== "all") params.payment_method = filters.payment_method;
-        if (filters.staff_id && filters.staff_id !== "all") params.staff_id = filters.staff_id;
-      } else if (reportType === "customization") {
-        if (filters.status && filters.status !== "all") params.status = filters.status;
-        if (filters.payment_status && filters.payment_status !== "all") params.payment_status = filters.payment_status;
-        if (filters.payment_method && filters.payment_method !== "all") params.payment_method = filters.payment_method;
-      } else if (reportType === "refunds") {
-        if (filters.status && filters.status !== "all") params.status = filters.status;
-        if (filters.refund_type && filters.refund_type !== "all") params.refund_type = filters.refund_type;
-      }
-
-      const res = await adminApi.getSalesReport(params);
+      const res = await adminApi.getSalesReport({ ...reportParams, page, limit: pageSize });
       if (requestId === reportRequestRef.current && res && res.data) {
         setReportData(res.data);
       }
@@ -376,7 +379,7 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
     } finally {
       if (requestId === reportRequestRef.current) setIsLoading(false);
     }
-  }, [reportType, resolvedDates, filters, sortBy, sortOrder, page, pageSize]);
+  }, [reportParams, page, pageSize]);
 
   // Load report on filter/tab/sort changes
   useEffect(() => {
@@ -526,7 +529,7 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
         printedBy,
         datePrinted,
         activeFilters: activeFilterMap,
-        reportData,
+        filters: reportParams,
       });
 
       const url = window.URL.createObjectURL(blob);
@@ -548,140 +551,150 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
   };
 
   // Print Report Handler — Excel-style dedicated print window
-  const handlePrint = () => {
-    const typeTitles = {
-      all: "All Sales & Transactions",
-      online: "Online Sales Report",
-      pos: "Walk-in POS Sales Report",
-      customization: "Customization Projects Report",
-      appointments: "Appointments & Service Bookings Report",
-      refunds: "Refunds & Adjustments Report",
-    };
-    const sheetTitle = typeTitles[reportType] || "Sales Report";
+  const handlePrint = async () => {
+    const win = window.open("", "_blank", "width=1200,height=800");
+    if (!win) {
+      alert("Please allow pop-ups to print the sales report.");
+      return;
+    }
+    setIsPrinting(true);
+    try {
+      win.document.write("<p>Loading complete sales report...</p>");
+      const res = await adminApi.getSalesReport({ ...reportParams, paginate: false });
+      if (!res?.data?.transactions) throw new Error("Failed to load complete sales report");
+      const fullReport = res.data;
+      const summary = fullReport.summary;
+      const typeTitles = {
+        all: "All Sales & Transactions",
+        online: "Online Sales Report",
+        pos: "Walk-in POS Sales Report",
+        customization: "Customization Projects Report",
+        appointments: "Appointments & Service Bookings Report",
+        refunds: "Refunds & Adjustments Report",
+      };
+      const sheetTitle = typeTitles[reportType] || "Sales Report";
 
-    const filterSummary = activeFilterList.length > 0
-      ? activeFilterList.map((f) => f.label).join("  |  ")
-      : "None (All matching records)";
+      const filterSummary = activeFilterList.length > 0
+        ? activeFilterList.map((f) => f.label).join("  |  ")
+        : "None (All matching records)";
 
-    const fmtCur = (v) => {
-      const n = Number(v) || 0;
-      return "₱" + n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    };
-    const fmtInt = (v) => Math.round(Number(v) || 0).toLocaleString("en-PH");
-    const fmtDate = (isoStr) => {
-      if (!isoStr) return "—";
-      try {
-        return new Date(isoStr).toLocaleString("en-PH", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-      } catch { return isoStr; }
-    };
+      const fmtCur = (v) => {
+        const n = Number(v) || 0;
+        return "₱" + n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      };
+      const fmtInt = (v) => Math.round(Number(v) || 0).toLocaleString("en-PH");
+      const fmtDate = (isoStr) => {
+        if (!isoStr) return "—";
+        try {
+          return new Date(isoStr).toLocaleString("en-PH", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+        } catch { return isoStr; }
+      };
 
-    // Column definitions per report type
-    const columnDefs = {
-      all: [
-        { key: "transaction_number", header: "Transaction #" },
-        { key: "date", header: "Date & Time", fmt: fmtDate },
-        { key: "channel", header: "Channel", fmt: (v) => v === "walkIn" ? "Walk-in POS" : v === "appointment" ? "Appointment" : (v || "—") },
-        { key: "customer_name", header: "Customer" },
-        { key: "payment_method", header: "Payment", fmt: (v) => (v || "").replace(/_/g, " ").toUpperCase() },
-        { key: "status", header: "Status", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
-        { key: "gross_amount", header: "Gross Amount", fmt: fmtCur, align: "right" },
-        { key: "adjustment_amount", header: "Adjustments", fmt: (v) => v > 0 ? `-${fmtCur(v)}` : "₱0.00", align: "right" },
-        { key: "net_amount", header: "Net Amount", fmt: fmtCur, align: "right", total: true },
-      ],
-      online: [
-        { key: "transaction_number", header: "Order #" },
-        { key: "date", header: "Order Date", fmt: fmtDate },
-        { key: "customer_name", header: "Customer" },
-        { key: "customer_email", header: "Email" },
-        { key: "status", header: "Order Status", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
-        { key: "payment_status", header: "Payment Status", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
-        { key: "payment_method", header: "Payment", fmt: (v) => (v || "").replace(/_/g, " ").toUpperCase() },
-        { key: "subtotal", header: "Subtotal", fmt: fmtCur, align: "right" },
-        { key: "shipping_cost", header: "Shipping", fmt: fmtCur, align: "right" },
-        { key: "gross_amount", header: "Total Amount", fmt: fmtCur, align: "right", total: true },
-      ],
-      pos: [
-        { key: "transaction_number", header: "Receipt / Sale #" },
-        { key: "date", header: "Date & Time", fmt: fmtDate },
-        { key: "staff_name", header: "Cashier / Staff" },
-        { key: "customer_name", header: "Customer" },
-        { key: "payment_method", header: "Payment", fmt: (v) => (v || "").replace(/_/g, " ").toUpperCase() },
-        { key: "status", header: "Status", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
-        { key: "subtotal", header: "Subtotal", fmt: fmtCur, align: "right" },
-        { key: "discount_amount", header: "Discount", fmt: (v) => v > 0 ? `-${fmtCur(v)}` : "₱0.00", align: "right" },
-        { key: "gross_amount", header: "Total Collected", fmt: fmtCur, align: "right", total: true },
-      ],
-      customization: [
-        { key: "transaction_number", header: "Project / Order #" },
-        { key: "date", header: "Order Date", fmt: fmtDate },
-        { key: "customer_name", header: "Customer" },
-        { key: "status", header: "Project Status", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
-        { key: "payment_status", header: "Payment Status", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
-        { key: "payment_method", header: "Payment", fmt: (v) => (v || "").replace(/_/g, " ").toUpperCase() },
-        { key: "gross_amount", header: "Project Value", fmt: fmtCur, align: "right" },
-        { key: "adjustment_amount", header: "Adjustments", fmt: (v) => v > 0 ? `-${fmtCur(v)}` : "₱0.00", align: "right" },
-        { key: "net_amount", header: "Net Revenue", fmt: fmtCur, align: "right", total: true },
-      ],
-      appointments: [
-        { key: "transaction_number", header: "Ref #" },
-        { key: "date", header: "Scheduled", fmt: fmtDate },
-        { key: "customer_name", header: "Customer" },
-        { key: "service_names", header: "Services" },
-        { key: "status", header: "Status", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
-        { key: "payment_status", header: "Payment Status", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
-        { key: "payment_method", header: "Payment", fmt: (v) => (v || "").replace(/_/g, " ").toUpperCase() },
-        { key: "gross_amount", header: "Service Fee", fmt: fmtCur, align: "right", total: true },
-      ],
-      refunds: [
-        { key: "transaction_number", header: "Request / Ref #" },
-        { key: "date", header: "Date", fmt: fmtDate },
-        { key: "channel", header: "Channel", fmt: (v) => v === "walkIn" ? "Walk-in POS" : (v || "—") },
-        { key: "related_number", header: "Related Order #" },
-        { key: "customer_name", header: "Customer" },
-        { key: "adjustment_type", header: "Type", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
-        { key: "status", header: "Status", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
-        { key: "gross_amount", header: "Amount Requested", fmt: fmtCur, align: "right" },
-        { key: "adjustment_amount", header: "Approved / Refunded", fmt: fmtCur, align: "right", total: true },
-      ],
-    };
+      // Column definitions per report type
+      const columnDefs = {
+        all: [
+          { key: "transaction_number", header: "Transaction #" },
+          { key: "date", header: "Date & Time", fmt: fmtDate },
+          { key: "channel", header: "Channel", fmt: (v) => v === "walkIn" ? "Walk-in POS" : v === "appointment" ? "Appointment" : (v || "—") },
+          { key: "customer_name", header: "Customer" },
+          { key: "payment_method", header: "Payment", fmt: (v) => (v || "").replace(/_/g, " ").toUpperCase() },
+          { key: "status", header: "Status", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
+          { key: "gross_amount", header: "Gross Amount", fmt: fmtCur, align: "right" },
+          { key: "adjustment_amount", header: "Adjustments", fmt: (v) => v > 0 ? `-${fmtCur(v)}` : "₱0.00", align: "right" },
+          { key: "net_amount", header: "Net Amount", fmt: fmtCur, align: "right", total: true },
+        ],
+        online: [
+          { key: "transaction_number", header: "Order #" },
+          { key: "date", header: "Order Date", fmt: fmtDate },
+          { key: "customer_name", header: "Customer" },
+          { key: "customer_email", header: "Email" },
+          { key: "status", header: "Order Status", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
+          { key: "payment_status", header: "Payment Status", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
+          { key: "payment_method", header: "Payment", fmt: (v) => (v || "").replace(/_/g, " ").toUpperCase() },
+          { key: "subtotal", header: "Subtotal", fmt: fmtCur, align: "right" },
+          { key: "gross_amount", header: "Total Amount", fmt: fmtCur, align: "right", total: true },
+        ],
+        pos: [
+          { key: "transaction_number", header: "Receipt / Sale #" },
+          { key: "date", header: "Date & Time", fmt: fmtDate },
+          { key: "staff_name", header: "Cashier / Staff" },
+          { key: "customer_name", header: "Customer" },
+          { key: "payment_method", header: "Payment", fmt: (v) => (v || "").replace(/_/g, " ").toUpperCase() },
+          { key: "status", header: "Status", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
+          { key: "subtotal", header: "Subtotal", fmt: fmtCur, align: "right" },
+          { key: "gross_amount", header: "Total Collected", fmt: fmtCur, align: "right", total: true },
+        ],
+        customization: [
+          { key: "transaction_number", header: "Project / Order #" },
+          { key: "date", header: "Order Date", fmt: fmtDate },
+          { key: "customer_name", header: "Customer" },
+          { key: "status", header: "Project Status", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
+          { key: "payment_status", header: "Payment Status", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
+          { key: "payment_method", header: "Payment", fmt: (v) => (v || "").replace(/_/g, " ").toUpperCase() },
+          { key: "gross_amount", header: "Project Value", fmt: fmtCur, align: "right" },
+          { key: "adjustment_amount", header: "Adjustments", fmt: (v) => v > 0 ? `-${fmtCur(v)}` : "₱0.00", align: "right" },
+          { key: "net_amount", header: "Net Revenue", fmt: fmtCur, align: "right", total: true },
+        ],
+        appointments: [
+          { key: "transaction_number", header: "Ref #" },
+          { key: "date", header: "Scheduled", fmt: fmtDate },
+          { key: "customer_name", header: "Customer" },
+          { key: "service_names", header: "Services" },
+          { key: "status", header: "Status", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
+          { key: "payment_status", header: "Payment Status", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
+          { key: "payment_method", header: "Payment", fmt: (v) => (v || "").replace(/_/g, " ").toUpperCase() },
+          { key: "gross_amount", header: "Service Fee", fmt: fmtCur, align: "right", total: true },
+        ],
+        refunds: [
+          { key: "transaction_number", header: "Request / Ref #" },
+          { key: "date", header: "Date", fmt: fmtDate },
+          { key: "channel", header: "Channel", fmt: (v) => v === "walkIn" ? "Walk-in POS" : (v || "—") },
+          { key: "related_number", header: "Related Order #" },
+          { key: "customer_name", header: "Customer" },
+          { key: "adjustment_type", header: "Type", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
+          { key: "status", header: "Status", fmt: (v) => (v || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) },
+          { key: "gross_amount", header: "Amount Requested", fmt: fmtCur, align: "right" },
+          { key: "adjustment_amount", header: "Approved / Refunded", fmt: fmtCur, align: "right", total: true },
+        ],
+      };
 
-    const cols = columnDefs[reportType] || columnDefs.all;
-    const txList = transactions;
+      const cols = columnDefs[reportType] || columnDefs.all;
+      const txList = fullReport.transactions;
 
-    // Build table rows HTML
-    const buildRows = () => {
-      if (txList.length === 0) {
-        return `<tr><td colspan="${cols.length}" style="text-align:center;padding:16px;font-style:italic;">No transactions recorded for the selected period.</td></tr>`;
-      }
-      return txList.map((tx) => {
-        const cells = cols.map((col) => {
-          const raw = tx[col.key];
-          const val = col.fmt ? col.fmt(raw) : (raw ?? "—");
-          const align = col.align || "left";
-          return `<td style="text-align:${align};padding:5px 8px;border:1px solid #000;font-size:8pt;">${val === null || val === undefined || val === "" ? "—" : val}</td>`;
+      // Build table rows HTML
+      const buildRows = () => {
+        if (txList.length === 0) {
+          return `<tr><td colspan="${cols.length}" style="text-align:center;padding:16px;font-style:italic;">No transactions recorded for the selected period.</td></tr>`;
+        }
+        return txList.map((tx) => {
+          const cells = cols.map((col) => {
+            const raw = tx[col.key];
+            const val = col.fmt ? col.fmt(raw) : (raw ?? "—");
+            const align = col.align || "left";
+            return `<td style="text-align:${align};padding:5px 8px;border:1px solid #000;font-size:8pt;">${val === null || val === undefined || val === "" ? "—" : val}</td>`;
+          }).join("");
+          return `<tr>${cells}</tr>`;
+        }).join("");
+      };
+
+      // Build totals row
+      const buildTotals = () => {
+        const cells = cols.map((col, i) => {
+          if (i === 0) return `<td style="padding:6px 8px;border:1px solid #000;font-weight:bold;font-size:8pt;">TOTAL</td>`;
+          if (col.total) {
+            const sum = txList.reduce((acc, tx) => acc + (Number(tx[col.key]) || 0), 0);
+            return `<td style="text-align:right;padding:6px 8px;border:1px solid #000;font-weight:bold;font-size:8pt;">${fmtCur(sum)}</td>`;
+          }
+          return `<td style="padding:6px 8px;border:1px solid #000;"></td>`;
         }).join("");
         return `<tr>${cells}</tr>`;
-      }).join("");
-    };
+      };
 
-    // Build totals row
-    const buildTotals = () => {
-      const cells = cols.map((col, i) => {
-        if (i === 0) return `<td style="padding:6px 8px;border:1px solid #000;font-weight:bold;font-size:8pt;">TOTAL</td>`;
-        if (col.total) {
-          const sum = txList.reduce((acc, tx) => acc + (Number(tx[col.key]) || 0), 0);
-          return `<td style="text-align:right;padding:6px 8px;border:1px solid #000;font-weight:bold;font-size:8pt;">${fmtCur(sum)}</td>`;
-        }
-        return `<td style="padding:6px 8px;border:1px solid #000;"></td>`;
-      }).join("");
-      return `<tr>${cells}</tr>`;
-    };
+      const headerCells = cols.map((col) =>
+        `<th style="text-align:${col.align || "left"};padding:7px 9px;border:1px solid #000;font-size:9pt;font-weight:bold;">${col.header}</th>`
+      ).join("");
 
-    const headerCells = cols.map((col) =>
-      `<th style="text-align:${col.align || "left"};padding:7px 9px;border:1px solid #000;font-size:9pt;font-weight:bold;">${col.header}</th>`
-    ).join("");
-
-    const html = `<!DOCTYPE html>
+      const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
@@ -761,7 +774,7 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
   </table>
 
   <!-- Transactions Table -->
-  <div class="section-label">Itemized Transactions &mdash; ${txList.length} records shown (Page ${pagination.page} of ${pagination.totalPages || 1} &bull; ${pagination.totalRecords || 0} total records)</div>
+  <div class="section-label">Itemized Transactions &mdash; ${txList.length} matching records</div>
   <table class="tx-table">
     <thead><tr>${headerCells}</tr></thead>
     <tbody>${buildRows()}</tbody>
@@ -778,10 +791,16 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
 </body>
 </html>`;
 
-    const win = window.open("", "_blank", "width=1200,height=800");
-    if (win) {
-      win.document.write(html);
-      win.document.close();
+      if (!win.closed) {
+        win.document.open();
+        win.document.write(html);
+        win.document.close();
+      }
+    } catch (err) {
+      win.close();
+      alert("Failed to print sales report: " + (err.message || "Unknown error"));
+    } finally {
+      setIsPrinting(false);
     }
   };
 
@@ -805,15 +824,16 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
       <div className="flex items-center justify-end gap-3 print:hidden">
         <button
           onClick={handlePrint}
+          disabled={isPrinting || isLoading}
           className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-black bg-white border border-gray-300 rounded-xl hover:border-[var(--gold-primary)] transition-all shadow-sm"
         >
           <Printer className="w-3.5 h-3.5 text-black" />
-          <span className="text-black">Print Report</span>
+          <span className="text-black">{isPrinting ? "Preparing report..." : "Print Report"}</span>
         </button>
 
         <button
           onClick={handleExportExcel}
-          disabled={isExporting}
+          disabled={isExporting || isLoading}
           className="flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl transition-all shadow-lg bg-[var(--gold-primary)] text-black hover:opacity-95 disabled:opacity-50"
         >
           {isExporting ? (
@@ -1485,7 +1505,6 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
                   <th className="py-3 px-4">Payment Status</th>
                   <th className="py-3 px-4">Payment Method</th>
                   <th className="py-3 px-4 text-right">Subtotal</th>
-                  <th className="py-3 px-4 text-right">Shipping</th>
                   <th className="py-3 px-4 text-right">Total Amount</th>
                 </tr>
               )}
@@ -1499,7 +1518,6 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
                   <th className="py-3 px-4">Payment Method</th>
                   <th className="py-3 px-4">Sale Status</th>
                   <th className="py-3 px-4 text-right">Subtotal</th>
-                  <th className="py-3 px-4 text-right">Discount</th>
                   <th className="py-3 px-4 text-right">Total Collected</th>
                 </tr>
               )}
@@ -1549,13 +1567,13 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
             <tbody className="divide-y divide-[var(--border)]/50">
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-[var(--text-muted)] font-medium text-sm">
+                  <td colSpan={["online", "pos", "appointments"].includes(reportType) ? 8 : 9} className="py-12 text-center text-[var(--text-muted)] font-medium text-sm">
                     Loading report records...
                   </td>
                 </tr>
               ) : transactions.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-14 text-center">
+                  <td colSpan={["online", "pos", "appointments"].includes(reportType) ? 8 : 9} className="py-14 text-center">
                     <div className="max-w-md mx-auto space-y-3">
                       <p className="text-sm font-semibold text-[var(--text-primary)]">No transactions match your filters</p>
                       <p className="text-xs text-[var(--text-muted)]">
@@ -1608,7 +1626,6 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
                         <td className="py-3 px-4"><StatusBadge status={tx.payment_status} /></td>
                         <td className="py-3 px-4 uppercase text-[var(--text-muted)] font-medium">{tx.payment_method?.replace(/_/g, " ")}</td>
                         <td className="py-3 px-4 text-right font-mono font-medium text-[var(--text-primary)]">{formatCurrency(tx.subtotal)}</td>
-                        <td className="py-3 px-4 text-right font-mono font-medium text-[var(--text-muted)]">{formatCurrency(tx.shipping_cost)}</td>
                         <td className="py-3 px-4 text-right font-mono font-bold text-[var(--gold-primary)]">{formatCurrency(tx.gross_amount)}</td>
                       </>
                     )}
@@ -1628,9 +1645,6 @@ export function SalesReportTab({ salesReport: initialReport, categories = [] }) 
                         <td className="py-3 px-4 uppercase text-[var(--text-muted)] font-medium">{tx.payment_method}</td>
                         <td className="py-3 px-4"><StatusBadge status={tx.status} /></td>
                         <td className="py-3 px-4 text-right font-mono font-medium text-[var(--text-primary)]">{formatCurrency(tx.subtotal)}</td>
-                        <td className="py-3 px-4 text-right font-mono font-medium text-red-500">
-                          {tx.discount_amount > 0 ? `-${formatCurrency(tx.discount_amount)}` : "₱0.00"}
-                        </td>
                         <td className="py-3 px-4 text-right font-mono font-bold text-[var(--gold-primary)]">{formatCurrency(tx.gross_amount)}</td>
                       </>
                     )}

@@ -69,12 +69,12 @@ exports.getSalesReport = async (req, res, next) => {
     const {
       start_date, end_date, report_type, order_type, payment_method,
       category_id, status, payment_status, staff_id, refund_type,
-      search, sort_by, sort_order, page, limit,
+      search, sort_by, sort_order, page, limit, paginate,
     } = req.query;
     const result = await reportService.getSalesReport({
       start_date, end_date, report_type, order_type, payment_method,
       category_id, status, payment_status, staff_id, refund_type,
-      search, sort_by, sort_order, page, limit,
+      search, sort_by, sort_order, page, limit, paginate,
     });
     res.json({ status: 'success', data: result });
   } catch (err) { next(err); }
@@ -145,15 +145,13 @@ exports.exportSalesExcel = async (req, res, next) => {
       return res.send(buffer);
     }
 
-    let reportData = req.body?.salesReport || req.body?.reportData;
+    const suppliedReport = req.body?.salesReport || req.body?.reportData;
     const dateLabel = req.body?.dateLabel || req.query?.dateLabel || 'All Time';
-    const reportType = req.body?.reportType || req.query?.reportType || reportData?.reportType || 'all';
+    const reportType = req.body?.reportType || req.query?.reportType || suppliedReport?.reportType || 'all';
     const activeFilters = req.body?.activeFilters || {};
 
-    if (!reportData || !reportData.transactions) {
-      const filters = { ...req.query, ...req.body, report_type: reportType, limit: 10000 };
-      reportData = await reportService.getSalesReport(filters);
-    }
+    const filters = { ...req.query, ...req.body?.filters, report_type: reportType, paginate: false };
+    const reportData = await reportService.getSalesReport(filters);
 
     const buffer = await salesExcelService.generateReportWorkbook(reportData, {
       reportType,

@@ -541,7 +541,7 @@ async function getSalesReport(filters = {}) {
     status, payment_status,
     staff_id, refund_type,
     search, sort_by = 'date', sort_order = 'desc',
-    page = 1, limit = 10,
+    page = 1, limit = 10, paginate = true,
   } = filters;
 
   const startDate = parseDate(start_date);
@@ -693,6 +693,8 @@ async function getSalesReport(filters = {}) {
   const numLimit = Math.max(1, parseInt(limit, 10) || 50);
   const numPage = Math.max(1, parseInt(page, 10) || 1);
   const offset = (numPage - 1) * numLimit;
+  const isPaginated = paginate !== false && paginate !== 'false';
+  const paginationSql = isPaginated ? `LIMIT ${numLimit} OFFSET ${offset}` : '';
 
   const validSortCols = {
     date: 'date',
@@ -754,7 +756,7 @@ async function getSalesReport(filters = {}) {
        LEFT JOIN users u ON o.user_id = u.user_id
        WHERE ${whereSql}
        ORDER BY ${resolvedSort} ${resolvedDir}
-       LIMIT ${numLimit} OFFSET ${offset}`,
+       ${paginationSql}`,
       qParams
     );
     txItems = dataQ.rows;
@@ -809,7 +811,7 @@ async function getSalesReport(filters = {}) {
        LEFT JOIN users u ON ps.staff_id = u.user_id
        WHERE ${whereSql}
        ORDER BY ${resolvedSort} ${resolvedDir}
-       LIMIT ${numLimit} OFFSET ${offset}`,
+       ${paginationSql}`,
       qParams
     );
     txItems = dataQ.rows;
@@ -862,7 +864,7 @@ async function getSalesReport(filters = {}) {
        LEFT JOIN users u ON o.user_id = u.user_id
        WHERE ${whereSql}
        ORDER BY ${resolvedSort} ${resolvedDir}
-       LIMIT ${numLimit} OFFSET ${offset}`,
+       ${paginationSql}`,
       qParams
     );
     txItems = dataQ.rows;
@@ -936,7 +938,7 @@ async function getSalesReport(filters = {}) {
        LEFT JOIN users u ON a.user_id = u.user_id
        WHERE ${whereSql}
        ORDER BY ${apptSort} ${resolvedDir}
-       LIMIT ${numLimit} OFFSET ${offset}`,
+       ${paginationSql}`,
       qParams
     );
     txItems = dataQ.rows;
@@ -1018,7 +1020,7 @@ async function getSalesReport(filters = {}) {
        SELECT * FROM unified_refunds
        WHERE ${whereSql}
        ORDER BY ${resolvedSort} ${resolvedDir}
-       LIMIT ${numLimit} OFFSET ${offset}`,
+       ${paginationSql}`,
       qParams
     );
     txItems = dataQ.rows;
@@ -1138,7 +1140,7 @@ async function getSalesReport(filters = {}) {
        SELECT * FROM unified_sales
        WHERE ${whereSql}
        ORDER BY ${resolvedSort} ${resolvedDir}
-       LIMIT ${numLimit} OFFSET ${offset}`,
+       ${paginationSql}`,
       qParams
     );
     txItems = dataQ.rows;
@@ -1295,10 +1297,10 @@ async function getSalesReport(filters = {}) {
     dailyTrend: formattedDailyTrend,
     transactions: formattedTransactions,
     pagination: {
-      page: numPage,
-      limit: numLimit,
+      page: isPaginated ? numPage : 1,
+      limit: isPaginated ? numLimit : totalRecords,
       totalRecords,
-      totalPages: Math.ceil(totalRecords / numLimit) || 1,
+      totalPages: isPaginated ? (Math.ceil(totalRecords / numLimit) || 1) : 1,
     },
     metadata: {
       staffList: (staffListR.rows || []).map((s) => ({

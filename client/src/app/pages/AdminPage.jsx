@@ -1380,8 +1380,9 @@ export function AdminPage() {
       variant: 'danger',
       onConfirm: async () => {
         await adminApi.deleteCategory(id)
+        await fetchCategories()
+        fetchProducts()
         showToast('Category deleted')
-        fetchCategories()
       },
     })
   }
@@ -2801,6 +2802,7 @@ export function AdminPage() {
           {activeTab === 'product-categories' && (
             <ProductCategoriesTab
               categories={categories}
+              searchQuery={searchQuery}
               deleteCategory={deleteCategory}
               openModal={openModal}
               isSuperAdmin={isSuperAdmin}
