@@ -32,21 +32,26 @@ const STATUS_CONFIG = {
   no_show: { label: 'No Show', color: 'bg-orange-500/10 text-orange-400 border border-orange-500/30' },
 }
 
-const SYSTEM_NOTE_PREFIXES = ['Cancelled:', 'Status changed:', 'Rescheduled:', 'Cancelled on', 'Guitar ']
+const SYSTEM_NOTE_PREFIXES = ['Cancelled:', 'Status changed:', 'Rescheduled:', 'Cancelled on']
 
-function cleanCustomerNotes(rawNotes) {
-  if (!rawNotes) return ''
+function parseCustomerNotes(rawNotes) {
+  if (!rawNotes) return { text: '', images: [] }
   const lines = String(rawNotes).split('\n')
   const kept = []
+  const images = []
   lines.forEach((line) => {
-    const trimmed = line.trim()
+    let trimmed = line.trim()
     if (!trimmed) return
-    if (/(https?:\/\/[^\s]+(?:\.jpg|\.jpeg|\.png|\.gif|\.webp|\.bmp)[^\s]*)/i.test(trimmed)) return
+    trimmed = trimmed.replace(/https?:\/\/[^\s]+(?:\.jpg|\.jpeg|\.png|\.gif|\.webp|\.bmp)[^\s]*/gi, (url) => {
+      images.push(url)
+      return ''
+    }).trim()
+    if (!trimmed || /^(?:guitar|service)\s+reference\s+image\s*:?\s*$/i.test(trimmed)) return
     const isSystemLine = SYSTEM_NOTE_PREFIXES.some((prefix) => trimmed.startsWith(prefix))
     if (isSystemLine) return
     kept.push(trimmed)
   })
-  return kept.join('\n')
+  return { text: kept.join('\n'), images: [...new Set(images)] }
 }
 
 function parseServices(services, fallbackName) {
@@ -196,7 +201,7 @@ export default function AppointmentDetailsModal({
     const customerAddress = appointment.customer_address || appointment.address || ''
     const locationId = appointment.location_id
     const guitarInfo = formatGuitarInfo(appointment.guitar_details)
-    const cleanedNotes = cleanCustomerNotes(appointment.notes)
+    const { text: cleanedNotes, images: referenceImages } = parseCustomerNotes(appointment.notes)
     const reason = appointment.reason
 
     return {
@@ -223,6 +228,7 @@ export default function AppointmentDetailsModal({
       locationId,
       guitarInfo,
       cleanedNotes,
+      referenceImages,
       reason,
     }
   }, [appointment])
@@ -546,15 +552,28 @@ export default function AppointmentDetailsModal({
           </section>
 
           {/* Customer Notes */}
-          {(derived.cleanedNotes || appointment?.notes) && (
-            <section className="pt-5 border-t border-[var(--border)]">
+          <section className="pt-5 border-t border-[var(--border)]">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2 flex items-center gap-2">
                 <FileText className="w-3.5 h-3.5 text-[var(--gold-primary)]" />
                 Customer Notes
               </h3>
               <p className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap bg-[var(--surface-dark)]/50 p-3.5 rounded-xl border border-[var(--border)]/60">
-                {derived.cleanedNotes || appointment?.notes}
+                {derived.cleanedNotes || 'No customer notes provided.'}
               </p>
+            </section>
+
+          {derived.referenceImages.length > 0 && (
+            <section className="pt-5 border-t border-[var(--border)]">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">
+                Reference Images
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {derived.referenceImages.map((url, index) => (
+                  <a key={url} href={url} target="_blank" rel="noopener noreferrer" aria-label={`Open reference image ${index + 1}`}>
+                    <img src={url} alt={`Reference image ${index + 1}`} className="max-h-56 w-full rounded-xl object-contain border border-[var(--border)] bg-black/40" />
+                  </a>
+                ))}
+              </div>
             </section>
           )}
 

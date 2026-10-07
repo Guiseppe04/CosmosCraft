@@ -10,6 +10,7 @@ import React from 'react';
 import AppointmentDetailsModal from './AppointmentDetailsModal';
 import { PaginationBar } from '../../pages/admin/components/shared/PaginationBar';
 import { adminApi } from '../../utils/adminApi';
+import { useSocketEvent } from '../../context/SocketContext';
 
 // Status configuration
 const STATUS_CONFIG = {
@@ -181,6 +182,14 @@ export default function AppointmentList({
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const filterMenuRef = useRef(null)
+
+  useSocketEvent('appointment:updated', (data) => {
+    const updated = data?.appointment
+    const id = updated?.appointment_id || updated?.id
+    if (!id) return
+    setSelectedAppointment(prev => prev && String(prev.appointment_id || prev.id) === String(id)
+      ? { ...prev, ...updated } : prev)
+  })
 
   useEffect(() => {
     const handleClickOutside = (event) => {
