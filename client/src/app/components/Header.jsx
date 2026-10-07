@@ -540,7 +540,7 @@ export function Header() {
                   onClick={openLogin}
                   className="rounded-full bg-[var(--gold-primary)] px-5 py-2 text-sm font-semibold text-[var(--text-dark)] transition-colors duration-200 hover:bg-[var(--gold-secondary)]"
                 >
-                  Sign Up
+                  Login
                 </button>
               ) : (
                 <button
