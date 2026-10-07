@@ -2222,7 +2222,7 @@ export function DashboardPage() {
             </div>
           ) : (
             <div className="space-y-6">
-              {sortedOrders.map(order => {
+              {sortedOrders.filter(Boolean).map(order => {
                 const subtotalAmount = Number(order.subtotal || 0)
                 const shippingAmount = Number(order.shipping_cost || 0)
                 const taxAmount = Number(order.tax_amount || 0)
@@ -3208,7 +3208,7 @@ export function DashboardPage() {
           </div>
         ) : (
           <div className="grid gap-6">
-            {myProjects.map((project, index) => {
+            {myProjects.filter(Boolean).map((project, index) => {
               const buildId = project.order_number || project.custom_build_id || project.customBuildId;
 
               // Clean project name - remove any ORD/order references from the stored title
@@ -3475,7 +3475,7 @@ export function DashboardPage() {
               </div>
             ) : (
               <div className="grid md:grid-cols-2 gap-6">
-                {allBuilds.map((build) => {
+                {allBuilds.filter(Boolean).map((build) => {
                   const additionalPartsTotal = (build.additionalParts || []).reduce((sum, p) => sum + (p.price * p.quantity), 0);
                   const grandTotal = build.price + additionalPartsTotal;
                   const buildLockState = getBuildLockState(build)

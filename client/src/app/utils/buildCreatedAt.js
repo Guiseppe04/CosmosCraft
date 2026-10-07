@@ -1,5 +1,7 @@
 export function getBuildCreatedAt(build = {}, customization = {}) {
-  return customization.created_at || build.created_at || build.createdAt || build.savedAt || null
+  const safeCustomization = customization || {}
+  const safeBuild = build || {}
+  return safeCustomization.created_at || safeBuild.created_at || safeBuild.createdAt || safeBuild.savedAt || null
 }
 
 export function formatBuildCreatedAt(build, customization) {

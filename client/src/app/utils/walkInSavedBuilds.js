@@ -26,6 +26,7 @@ export function mergeWalkInSavedBuilds(localBuilds, customizations, userId, guit
   })
 
   for (const { build, config } of received) {
+    if (!build) continue
     const index = result.findIndex(local =>
       String(local.dbCustomizationId || local.customization_id || local.id) === String(build.customization_id),
     )
