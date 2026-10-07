@@ -119,9 +119,14 @@ exports.submitCustomerInstallmentPayment = asyncHandler(async (req, res, next) =
 
   let proofUrl = proofUrlFromBody;
   if (req.file) {
-    // Upload to Cloudinary
-    const dataUri = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-    proofUrl = await uploadImage(dataUri, { folder: 'cosmoscraft_assets/installment_proofs' });
+    try {
+      // Upload to Cloudinary
+      const dataUri = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      proofUrl = await uploadImage(dataUri, { folder: 'cosmoscraft_assets/installment_proofs' });
+    } catch (uploadErr) {
+      console.error('Cloudinary upload failed:', uploadErr);
+      throw new AppError(`Failed to upload payment proof: ${uploadErr.message}`, 500);
+    }
   }
   if (!proofUrl) {
     throw new AppError('Payment proof/receipt is required', 400);
