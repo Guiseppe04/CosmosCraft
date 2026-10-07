@@ -47,6 +47,7 @@ exports.create = async (data) => {
     await exports.recordEvent(db,a,a.user_id,'refund_requested',a.status,{refund_request_id:result.rows[0].refund_request_id,amount});
     await exports.notify(db,a.user_id,'Refund requested','Your appointment refund is awaiting admin processing.',a.appointment_id,true);
     await db.query('COMMIT');
+    require('./socketService').emitToUserAndStaff(a.user_id,'appointment:updated',{action:'refund_requested',appointment_id:a.appointment_id,refund_request_id:result.rows[0].refund_request_id,status:'pending'});
     return result.rows[0];
   } catch (e) { await db.query('ROLLBACK'); throw e; } finally { db.release(); }
 };
@@ -70,17 +71,19 @@ exports.update = async (id, actorId, data) => {
     const r = result.rows[0];
     if (!r) throw new AppError('Refund not found',404);
     if (!transitions[r.status]?.includes(data.status)) throw new AppError('Invalid refund status transition',409);
-    if (data.status === 'refunded' && !String(data.refund_reference || '').trim()) throw new AppError('Completed refund transaction reference is required',400);
+    const refundReference = String(data.refund_reference || r.refund_reference || '').trim();
+    const proofUrl = data.proof_url || r.proof_url;
+    if (data.status === 'refunded' && !refundReference && !proofUrl) throw new AppError('Refund payment proof or a transaction reference is required to complete the refund',400);
     if (data.proof_url && !/^https:\/\//i.test(data.proof_url)) throw new AppError('Proof must be an HTTPS URL',400);
     if (data.status === 'rejected' && !String(data.admin_notes || '').trim()) throw new AppError('Rejection reason is required',400);
     const updated = await db.query(`UPDATE appointment_refunds SET status=$2, refund_reference=$3, proof_url=$4,
       admin_notes=$5, reviewed_by=$6, reviewed_at=now(), updated_at=now() WHERE refund_request_id=$1 RETURNING *`,
-      [id,data.status,data.refund_reference || r.refund_reference,data.proof_url || r.proof_url,data.admin_notes || r.admin_notes,actorId]);
+      [id,data.status,refundReference || r.refund_reference,proofUrl,data.admin_notes ?? r.admin_notes,actorId]);
     if (data.status === 'refunded') await db.query("UPDATE appointments SET payment_status='refunded', updated_at=now() WHERE appointment_id=$1",[r.appointment_id]);
     await exports.recordEvent(db,r,actorId,`refund_${data.status}`,r.status,{ refund_request_id:id,refund_reference:data.refund_reference,amount:r.amount_requested });
-    await exports.notify(db,r.user_id,`Refund ${data.status}`,data.status === 'refunded' ? `Your refund has been processed. Reference: ${data.refund_reference}` : `Your refund is ${data.status}. ${data.admin_notes || ''}`,r.appointment_id);
+    await exports.notify(db,r.user_id,data.status === 'refunded' ? 'Refund Completed' : `Refund ${data.status}`,data.status === 'refunded' ? `Your refund has been completed.${refundReference ? ` Reference: ${refundReference}.` : ''}${proofUrl ? ' View the refund payment proof in your appointment.' : ''}` : `Your refund is ${data.status}. ${data.admin_notes || ''}`,r.appointment_id);
     await db.query('COMMIT');
-    require('./socketService').emitToUserAndStaff(r.user_id,'appointment:updated',{action:'refund_updated'});
+    require('./socketService').emitToUserAndStaff(r.user_id,'appointment:updated',{action:'refund_updated',appointment_id:r.appointment_id,refund_request_id:id,status:data.status});
     return updated.rows[0];
   } catch (e) { await db.query('ROLLBACK'); throw e; } finally { db.release(); }
 };

@@ -1,6 +1,8 @@
 import AppointmentPaymentReview from './AppointmentPaymentReview'
+import { useModalScrollLock } from '../../hooks/useModalScrollLock'
 import { AppointmentRefundAdmin } from './AppointmentRefund'
 import React, { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { format } from 'date-fns'
 import {
   X, Calendar, Clock, Phone, Mail, MapPin, Store, Home,
@@ -137,6 +139,7 @@ export default function AppointmentDetailsModal({
   onPaymentStatusUpdate,
 }) {
   const isVisible = show ?? isOpen
+  useModalScrollLock(Boolean(isVisible && appointment))
   const [showLightbox, setShowLightbox] = useState(false)
   const [actionLoading, setActionLoading] = useState(null)
   const [showCancelModal, setShowCancelModal] = useState(false)
@@ -328,9 +331,9 @@ export default function AppointmentDetailsModal({
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] shadow-2xl my-auto flex flex-col">
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-hidden">
+      <div className="w-full max-w-2xl max-h-[calc(100dvh-2rem)] overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] shadow-2xl my-auto flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-4 sm:px-7 shrink-0">
           <div>
@@ -365,7 +368,7 @@ export default function AppointmentDetailsModal({
         </div>
 
         {/* Modal Body: Clean plain rows, no individual bordered boxes */}
-        <div className="max-h-[75vh] overflow-y-auto px-6 py-5 sm:px-7 sm:py-6 space-y-6">
+        <div className="min-h-0 max-h-[75vh] overflow-y-auto overscroll-contain px-6 py-5 sm:px-7 sm:py-6 space-y-6">
           {/* Client Details */}
           <section>
             <div className="flex items-center justify-between mb-3">
@@ -727,6 +730,6 @@ export default function AppointmentDetailsModal({
           </div>
         </div>
       )}
-    </div>
+    </div>, document.body
   )
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useModalScrollLock } from '../../hooks/useModalScrollLock'
 import { motion } from 'motion/react'
 import {
   X, Search, Loader2, CheckCircle, CalendarDays, Clock3, User,
@@ -66,6 +67,7 @@ export default function AppointmentForm({
   selectedDate = null,
 }) {
   const modalOpen = isOpen ?? open
+  useModalScrollLock(Boolean(modalOpen))
   const isEditing = Boolean(initialData?.appointment_id)
   const [formData, setFormData] = useState({
     user_id: '',

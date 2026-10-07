@@ -92,8 +92,8 @@ const updateCustomizationOrderStatus = async (db, orderId, status, options = {})
 
   const result = await db.query(
     `UPDATE orders
-     SET customization_status = $1,
-         status = CASE WHEN $1 IN ('cancelled', 'resolution_in_progress') THEN 'cancelled' ELSE status END,
+     SET customization_status = $1::varchar(50),
+         status = CASE WHEN $1::varchar(50) IN ('cancelled', 'resolution_in_progress') THEN 'cancelled' ELSE status END,
          customization_hold_reason = COALESCE($2, customization_hold_reason),
          customization_hold_requested_at = COALESCE($3, customization_hold_requested_at),
          customization_hold_approved_by = COALESCE($4, customization_hold_approved_by),

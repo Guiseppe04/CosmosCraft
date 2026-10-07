@@ -5,6 +5,7 @@
  */
 
 const express = require('express');
+const Joi = require('joi');
 const { authenticateToken, optionalAuthenticateToken, authorize } = require('../middleware/auth');
 const appointmentController = require('../controllers/appointmentController');
 const { validate } = require('../utils/validation');
@@ -350,16 +351,14 @@ router.patch('/:id', appointmentController.updateAppointment);
  *   - reason (optional) - Reason for rescheduling
  * Access: Customers reschedule own, Admin/Staff reschedule any
  */
-router.patch('/refund-requests/:refundId', authorize('admin', 'super_admin', 'staff'), async (req, res, next) => {
+router.patch('/refund-requests/:refundId', authorize('admin', 'super_admin', 'staff'), validate(Joi.object({
+  status: Joi.string().valid('processing', 'refunded', 'rejected').required(),
+  refund_reference: Joi.string().trim().max(255).allow('').optional(),
+  proof_url: Joi.string().uri({ scheme: ['https'] }).max(2000).allow('').optional(),
+  admin_notes: Joi.string().trim().max(2000).allow('').optional(),
+})), async (req, res, next) => {
   try {
-    const Joi = require('joi');
-    const data = validate(req.body, Joi.object({
-      status: Joi.string().valid('processing', 'refunded', 'rejected').required(),
-      refund_reference: Joi.string().trim().max(255).allow('').optional(),
-      proof_url: Joi.string().uri({ scheme: ['https'] }).max(2000).allow('').optional(),
-      admin_notes: Joi.string().trim().max(2000).allow('').optional(),
-    }));
-    const refund = await require('../services/appointmentRefundService').update(req.params.refundId, req.user.user_id, data);
+    const refund = await require('../services/appointmentRefundService').update(req.params.refundId, req.user.user_id, req.validatedData);
     res.json({status:'success',data:{refund_request:refund}});
   } catch(e) { next(e); }
 });
