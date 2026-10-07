@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { writeSavedBuilds } from '../utils/savedBuildStorage.js'
+import { canRequestOrderRefund } from '../utils/orderRefundEligibility.js'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
 import { Eye, EyeOff, User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, Bike, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon, Check, RefreshCw, Printer, Info, Camera, Filter, CircleDot, CalendarDays, ArrowDownWideNarrow, ListFilter, DollarSign } from 'lucide-react'
@@ -1251,10 +1252,12 @@ export function DashboardPage() {
     }
     try {
       setIsCancellingOrder(true)
-      await adminApi.cancelMyOrder(cancelOrderTarget.order_id, resolvedReason);
+      const result = await adminApi.cancelMyOrder(cancelOrderTarget.order_id, resolvedReason);
+      const cancelledOrder = { ...cancelOrderTarget, ...result.data, status: 'cancelled' }
       setToastMessage('Order has been cancelled.');
       fetchMyOrders();
       closeCancelOrderModal(true)
+      if (canRequestOrderRefund(cancelledOrder)) openRefundModal(cancelledOrder)
     } catch (err) {
       setToastMessage(`Failed to cancel order: ${err.message}`);
     } finally {
@@ -1280,14 +1283,14 @@ export function DashboardPage() {
     setRefundDestination(emptyRefundDestination())
     setReadingRefundQr(false)
     setRefundTarget(order)
-    setRefundReason('')
+    setRefundReason(order.status === 'cancelled' ? 'Order cancelled by customer' : '')
     setRefundCustomerNotes('')
     const selectableItems = (order.items || []).map(item => ({
       order_item_id: item.order_item_id,
       product_name: item.product_name || 'Product',
       quantity: Number(item.quantity || 1),
       unit_price: Number(item.unit_price || 0),
-      selected: false,
+      selected: order.status === 'cancelled',
       refundQuantity: Number(item.quantity || 1),
     }))
     setRefundSelectedItems(selectableItems)
@@ -2501,14 +2504,14 @@ export function DashboardPage() {
                           Received
                         </button>
                       )}
-                      {(order.status === 'received' || order.status === 'delivered') && order.payment_status !== 'refunded' && !order.has_refund_request && (
+                      {canRequestOrderRefund(order) && (
                         <button
                           onClick={() => openRefundModal(order)}
                           className="purch-action-btn"
                           style={{ border: '1px solid var(--border)', color: 'var(--text-light)' }}
                         >
                           <RefreshCw className="w-4 h-4 text-[var(--gold-primary)]" />
-                          Refund
+                          Request Refund
                         </button>
                       )}
                       {orderIsFulfilled && (
@@ -2522,7 +2525,7 @@ export function DashboardPage() {
                         </button>
                       )}
                     </div>
-                    {(order.status === 'received' || order.status === 'delivered') && order.has_refund_request && (
+                    {['received', 'delivered', 'cancelled'].includes(order.status) && order.has_refund_request && (
                       <div className="mt-3 flex justify-end items-center gap-3 flex-wrap">
                         {(() => {
                           const refundConfig = getRefundStatusConfig(order.refund_request_status)
@@ -6070,6 +6073,9 @@ export function DashboardPage() {
             <div className="space-y-5">
               <RefundDestinationForm value={refundDestination} onChange={setRefundDestination}
                 disabled={isSubmittingRefund || readingRefundQr} onBusyChange={setReadingRefundQr} />
+              {refundTarget.status === 'cancelled' && (
+                <p className="text-sm text-[var(--text-muted)]">This request covers the payment submitted for your cancelled order. The administrator must verify your payment and upload refund proof before marking the refund as sent.</p>
+              )}
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Select Items to Refund</label>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
@@ -6080,7 +6086,7 @@ export function DashboardPage() {
                     return (
                       <div key={item.order_item_id || idx} className={`flex items-center justify-between gap-4 rounded-lg border px-4 py-3 ${selectable.selected ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10' : 'border-[var(--border)] bg-[var(--bg-primary)]'}`}>
                         <div className="flex items-center gap-3 min-w-0">
-                          <button type="button" onClick={() => toggleRefundItem(selectableIdx)} className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${selectable.selected ? 'bg-[var(--gold-primary)] border-[var(--gold-primary)]' : 'border-[var(--border)]'}`}>
+                          <button type="button" disabled={refundTarget.status === 'cancelled'} onClick={() => toggleRefundItem(selectableIdx)} className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${selectable.selected ? 'bg-[var(--gold-primary)] border-[var(--gold-primary)]' : 'border-[var(--border)]'}`}>
                             {selectable.selected && <Check className="w-3 h-3 text-black" />}
                           </button>
                           <div className="min-w-0">
@@ -6088,7 +6094,7 @@ export function DashboardPage() {
                             <p className="text-xs text-[var(--text-muted)]">Qty: {selectable.quantity} • PHP {Number(item.unit_price || 0).toLocaleString('en-PH')}</p>
                           </div>
                         </div>
-                        {selectable.selected && (
+                        {selectable.selected && refundTarget.status !== 'cancelled' && (
                           <div className="flex items-center gap-2">
                             <button type="button" onClick={() => updateRefundQuantity(selectableIdx, selectable.refundQuantity - 1)} className="w-6 h-6 rounded border border-[var(--border)] flex items-center justify-center hover:bg-white/10"><Minus className="w-3 h-3 text-white" /></button>
                             <span className="text-sm text-white w-6 text-center">{selectable.refundQuantity}</span>

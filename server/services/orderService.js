@@ -2096,15 +2096,23 @@ exports.createRefundRequest = async (data) => {
   if (!Array.isArray(items) || new Set(items.map(item => item.order_item_id)).size !== items.length) throw new Error('Duplicate refund items are not allowed');
 
   const orderRes = await pool.query(
-    `SELECT status, delivered_at, received_at FROM orders WHERE order_id = $1 AND user_id = $2`,
+    `SELECT status, delivered_at, received_at, notes FROM orders WHERE order_id = $1 AND user_id = $2`,
     [orderId, userId]
   );
   if (orderRes.rows.length === 0) {
     throw new Error('Order not found');
   }
   const order = orderRes.rows[0];
+  const cancelledByCustomer = order.status === 'cancelled' && /Customer cancellation reason \(/.test(order.notes || '');
+  let cancellationPayment = null;
+  if (cancelledByCustomer) {
+    cancellationPayment = (await pool.query(`SELECT COALESCE(SUM(amount),0) AS submitted,
+      COALESCE(SUM(amount) FILTER (WHERE status='verified'),0) AS verified
+      FROM payments WHERE order_id=$1 AND status IN ('pending','for_verification','verified')`, [orderId])).rows[0];
+    if (Number(cancellationPayment.submitted) <= 0) throw new Error('No submitted payment is available to refund');
+  }
   const eligibleStatuses = ['delivered', 'received'];
-  if (!eligibleStatuses.includes(order.status)) {
+  if (!eligibleStatuses.includes(order.status) && !cancelledByCustomer) {
     throw new Error(`Refund requests are only allowed for delivered or received orders. Current status: ${order.status}`);
   }
 
@@ -2117,10 +2125,14 @@ exports.createRefundRequest = async (data) => {
   }
 
   const existingRes = await pool.query(
-    `SELECT refund_request_id FROM refund_requests WHERE order_id = $1 AND status NOT IN ('rejected', 'refunded', 'completed', 'withdrawn') AND deleted_at IS NULL LIMIT 1`,
+    `SELECT * FROM refund_requests WHERE order_id = $1 AND status NOT IN ('rejected', 'refunded', 'completed', 'withdrawn') AND deleted_at IS NULL LIMIT 1`,
     [orderId]
   );
-  if (existingRes.rows.length > 0) {
+  const automaticRefund = existingRes.rows[0];
+  const completeAutomatic = cancelledByCustomer && automaticRefund && automaticRefund.workflow_version !== 2 &&
+    automaticRefund.reason === 'Automatic refund request from order cancellation' &&
+    ['pending', 'pending_payment_verification', 'approved', 'processing'].includes(automaticRefund.status);
+  if (existingRes.rows.length > 0 && !completeAutomatic) {
     throw new Error('A refund request already exists for this order');
   }
 
@@ -2132,13 +2144,18 @@ exports.createRefundRequest = async (data) => {
   try {
     await client.query('BEGIN');
 
-    const requestNumber = await generateRefundRequestNumber(client, 'RF');
-
-    const refundRes = await client.query(
-      `INSERT INTO refund_requests (order_id, user_id, reason, customer_notes, request_number) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [orderId, userId, reason, customerNotes || null, requestNumber]
-    );
-    const refundRequest = refundRes.rows[0];
+    let refundRequest;
+    if (completeAutomatic) {
+      refundRequest = (await client.query(`UPDATE refund_requests SET reason=$2, customer_notes=$3
+        WHERE refund_request_id=$1 AND workflow_version<>2 AND status IN ('pending','pending_payment_verification','approved','processing') RETURNING *`, [automaticRefund.refund_request_id, reason, customerNotes || null])).rows[0];
+      if (!refundRequest) throw new Error('This refund request has already been submitted or reviewed');
+    } else {
+      const requestNumber = await generateRefundRequestNumber(client, 'RF');
+      refundRequest = (await client.query(
+        `INSERT INTO refund_requests (order_id, user_id, reason, customer_notes, request_number) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [orderId, userId, reason, customerNotes || null, requestNumber]
+      )).rows[0];
+    }
 
     for (const item of items) {
       if (!item.order_item_id) {
@@ -2172,7 +2189,8 @@ exports.createRefundRequest = async (data) => {
       }
     }
 
-    const attachedRequest = await workflow.attachRequest(client, refundRequest, destination, userId);
+    const attachedRequest = await workflow.attachRequest(client, refundRequest, destination, userId,
+      cancellationPayment ? { cancellationAmount: Number(cancellationPayment.submitted), awaitingVerification: Number(cancellationPayment.verified) < Number(cancellationPayment.submitted) } : {});
     await client.query('COMMIT');
     return attachedRequest;
   } catch (error) {

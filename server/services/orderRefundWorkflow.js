@@ -47,7 +47,7 @@ function validateDestination(destination) {
   return value;
 }
 
-async function attachRequest(db, refund, destination, actorId) {
+async function attachRequest(db, refund, destination, actorId, options = {}) {
   const value = validateDestination(destination);
   const { qrImage, method, ...details } = value;
   if (qrImage) await saveFile(db, refund.refund_request_id, 'qr', qrImage, actorId);
@@ -56,10 +56,17 @@ async function attachRequest(db, refund, destination, actorId) {
     refund_type='money_refund', amount_requested=(
       SELECT COALESCE(SUM(refund_amount),0) FROM refund_request_items WHERE refund_request_id=$1 AND deleted_at IS NULL)
     WHERE refund_request_id=$1 RETURNING *`, [refund.refund_request_id, method]);
+  if (options.cancellationAmount != null) {
+    const cancellation = await db.query(`UPDATE refund_requests SET amount_requested=$2, status=$3
+      WHERE refund_request_id=$1 RETURNING *`, [refund.refund_request_id, options.cancellationAmount,
+      options.awaitingVerification ? 'pending_payment_verification' : 'pending']);
+    result.rows[0] = cancellation.rows[0];
+  }
   const available = await db.query(`SELECT
-    (SELECT COALESCE(SUM(amount),0) FROM payments WHERE order_id=$1 AND status='verified') AS paid,
+    (SELECT COALESCE(SUM(amount),0) FROM payments WHERE order_id=$1 AND
+      (status='verified' OR ($3::boolean AND status IN ('pending','for_verification')))) AS paid,
     (SELECT COALESCE(SUM(COALESCE(refunded_amount,approved_amount,amount_requested)),0) FROM refund_requests
-      WHERE order_id=$1 AND refund_request_id<>$2 AND deleted_at IS NULL AND status IN ('refunded','refund_sent','completed')) AS refunded`, [refund.order_id,refund.refund_request_id]);
+      WHERE order_id=$1 AND refund_request_id<>$2 AND deleted_at IS NULL AND status IN ('refunded','refund_sent','completed')) AS refunded`, [refund.order_id,refund.refund_request_id, options.cancellationAmount != null]);
   const requested = Number(result.rows[0].amount_requested);
   if (!Number.isFinite(requested) || requested <= 0 || requested + Number(available.rows[0].refunded) > Number(available.rows[0].paid)) throw new AppError('The requested refund exceeds the remaining verified payment', 400);
   return publicRefund(result.rows[0]);

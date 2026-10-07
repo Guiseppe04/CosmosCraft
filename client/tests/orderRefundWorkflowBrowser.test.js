@@ -18,6 +18,11 @@ const css = await postcss([tailwindcss({ content: readdirSync(componentDirectory
 for (const viewport of [{ width:1280,height:900 },{ width:390,height:844 }]) {
   test(`customer request → admin review → proof → customer confirmation at ${viewport.width}px using PostgreSQL`, async () => {
     const fixture = await createFixture()
+    if (viewport.width === 390) {
+      await fixture.db.query("UPDATE orders SET status='cancelled',notes='Customer cancellation reason (date): Changed mind',delivered_at=NULL WHERE order_id=$1", [fixture.ids.order])
+      await fixture.db.query(`INSERT INTO refund_requests(order_id,user_id,reason,status,amount_requested)
+        VALUES($1,$2,'Automatic refund request from order cancellation','pending',1000)`, [fixture.ids.order,fixture.ids.customer])
+    }
     const bundle = await build({
       stdin: { resolveDir:fileURLToPath(new URL('../', import.meta.url)),loader:'jsx', contents:`
         import React,{useState} from 'react'; import {createRoot} from 'react-dom/client';

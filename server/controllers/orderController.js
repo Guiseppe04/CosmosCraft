@@ -292,13 +292,16 @@ exports.getRefundRequest = asyncHandler(async (req, res, next) => {
 
 exports.updateRefundStatus = asyncHandler(async (req, res, next) => {
   const workflow = require('../services/orderRefundWorkflow')
-  const current = await pool.query("SELECT (to_jsonb(refund_requests)->>'workflow_version')::int AS workflow_version FROM refund_requests WHERE refund_request_id=$1 AND deleted_at IS NULL", [req.params.refundId])
+  const current = await pool.query("SELECT reason, (to_jsonb(refund_requests)->>'workflow_version')::int AS workflow_version FROM refund_requests WHERE refund_request_id=$1 AND deleted_at IS NULL", [req.params.refundId])
   if (current.rows[0]?.workflow_version === 2) {
     const refundRequest = await workflow.update(req.params.refundId, req.body.status, req.user, req.validatedData || req.body)
     socketService.emitRefundChanged(refundRequest)
     return res.status(200).json({ status: 'success', data: refundRequest })
   }
   const { status, adminNotes } = req.validatedData || req.body
+  if (current.rows[0]?.reason === 'Automatic refund request from order cancellation' && status !== 'rejected') {
+    throw new AppError('The customer must complete the refund form before this cancellation refund can be processed', 409)
+  }
   const adminUserId = req.user?.user_id || req.user?.id
   if (!status) {
     throw new AppError('Status is required', 400)
