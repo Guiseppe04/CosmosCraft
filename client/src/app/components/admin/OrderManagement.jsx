@@ -795,30 +795,6 @@ function OrderFulfillmentPanel({ order, onRefreshOrder, onManageProject }) {
             )}
           </div>
 
-          {/* Staff Notes */}
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/50 p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs uppercase font-bold tracking-wider text-[var(--text-muted)]">
-                Internal Staff / Admin Notes
-              </label>
-              <button
-                type="button"
-                onClick={handleSaveNotes}
-                disabled={notesSaving}
-                className="text-[11px] font-bold text-[var(--gold-primary)] hover:underline cursor-pointer disabled:opacity-50"
-              >
-                {notesSaving ? 'Saving...' : 'Save Notes'}
-              </button>
-            </div>
-            <textarea
-              value={adminNotes}
-              onChange={(e) => setAdminNotes(e.target.value)}
-              rows={2}
-              placeholder="Add courier tracking #, rider details, or pickup inspection notes..."
-              className="w-full px-3 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-xs text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)] resize-none"
-            />
-          </div>
-
           {/* Next Stage Action */}
           {nextStatus && (
             <div className="pt-2">
