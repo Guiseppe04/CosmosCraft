@@ -148,12 +148,13 @@ test('approved e-wallet and bank payments can request refunds for cancelled and 
     }
   }
 });
-test('refund completion requires processing and a transaction reference', async () => {
+test('refund completion requires processing and either a transaction reference or payment proof', async () => {
   const original = pool.connect;
   try {
     for (const [status, data, message] of [
       ['pending',{status:'refunded',refund_reference:'x'},/Invalid/],
       ['processing',{status:'refunded'},/reference/],
+      ['processing',{status:'refunded',refund_reference:'x',proof_url:'http://example.test/proof.png'},/HTTPS/],
       ['refunded',{status:'processing'},/Invalid/],
       ['processing',{status:'rejected'},/reason/],
     ]) {
@@ -161,6 +162,42 @@ test('refund completion requires processing and a transaction reference', async 
       await assert.rejects(service.update('r','admin',data),message);
     }
   } finally { pool.connect = original; }
+});
+
+test('refund status updates persist details and broadcast appointment identifiers after commit', async t => {
+  const sockets = require('../services/socketService');
+  const broadcasts = [];
+  let committed = false;
+  let saved;
+  t.mock.method(service, 'recordEvent', async () => {});
+  t.mock.method(service, 'notify', async () => {});
+  t.mock.method(sockets, 'emitToUserAndStaff', (userId, event, payload) => {
+    assert.equal(committed, true, 'Broadcast must follow commit');
+    broadcasts.push({ userId, event, payload });
+  });
+  for (const data of [
+    { status: 'processing' },
+    { status: 'refunded', refund_reference: ' TRANSFER-123 ', proof_url: 'https://example.test/proof.png', admin_notes: 'Sent' },
+    { status: 'refunded', proof_url: 'https://example.test/proof.png', admin_notes: 'Sent' },
+    { status: 'refunded', refund_reference: ' TRANSFER-123 ', admin_notes: 'Sent' },
+    { status: 'rejected', admin_notes: 'Invalid destination' },
+  ]) {
+    const status = data.status;
+    committed = false;
+    t.mock.method(pool, 'connect', async () => ({ async query(sql, params) {
+      if (sql.includes('FOR UPDATE OF r,a')) return { rows: [{ appointment_id: 'a', user_id: 'customer', status: status === 'processing' ? 'pending' : 'processing' }] };
+      if (sql.startsWith('UPDATE appointment_refunds')) {
+        saved = params;
+        return { rows: [{ refund_request_id: 'r', status: params[1], refund_reference: params[2], proof_url: params[3], admin_notes: params[4] }] };
+      }
+      if (sql === 'COMMIT') committed = true;
+      return { rows: [] };
+    }, release() {} }));
+    const result = await service.update('r', 'admin', data);
+    assert.equal(result.status, status);
+    if (status === 'refunded') assert.deepEqual(saved.slice(2, 5), [data.refund_reference?.trim(), data.proof_url, 'Sent']);
+    assert.deepEqual(broadcasts.at(-1), { userId: 'customer', event: 'appointment:updated', payload: { action: 'refund_updated', appointment_id: 'a', refund_request_id: 'r', status } });
+  }
 });
 
 test('customer rescheduling preserves the original schedule and creates one successor', async () => {

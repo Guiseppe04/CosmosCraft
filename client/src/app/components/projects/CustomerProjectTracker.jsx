@@ -244,6 +244,11 @@ function PayInstallmentModal({ isOpen, installment, projectId, onClose, onSucces
   const handleSubmit = async (e) => {
     e?.preventDefault();
 
+    if (!receiptFile) {
+      setError('Please upload a payment receipt / proof before submitting.');
+      return;
+    }
+
     try {
       setSubmitting(true);
       setError('');
@@ -252,9 +257,7 @@ function PayInstallmentModal({ isOpen, installment, projectId, onClose, onSucces
         formData.append('reference_number', referenceNumber.trim());
       }
       formData.append('method', paymentMethod);
-      if (receiptFile) {
-        formData.append('proof', receiptFile);
-      }
+      formData.append('proof', receiptFile);
 
       const res = await adminApi.submitInstallmentPayment(projectId, installment.schedule_id, formData);
       onSuccess(res?.data || res);
@@ -388,7 +391,7 @@ function PayInstallmentModal({ isOpen, installment, projectId, onClose, onSucces
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5">
-              Payment Reference Number
+              Payment Reference Number (OPTIONAL)
             </label>
             <input
               type="text"
@@ -401,7 +404,7 @@ function PayInstallmentModal({ isOpen, installment, projectId, onClose, onSucces
 
           <div>
             <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5">
-              Upload Payment Receipt / Proof
+              Upload Payment Receipt / Proof <span style={{ color: '#ef4444' }}>*</span>
             </label>
             {receiptPreview ? (
               <div className="relative rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-3 flex items-center gap-3">

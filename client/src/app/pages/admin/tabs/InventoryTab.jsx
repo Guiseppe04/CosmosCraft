@@ -111,8 +111,6 @@ export function InventoryTab({
               <option value="out_of_stock">Out of Stock</option>
               <option value="low_stock">Low Stock</option>
               <option value="healthy">Healthy</option>
-              <option value="critical">Critical</option>
-              <option value="warning">Low Stock (Warning)</option>
             </select>
           </div>
 

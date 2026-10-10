@@ -2,9 +2,9 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useNavigate } from 'react-router'
 import { useCart } from '../../context/CartContext.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { Trash2 } from 'lucide-react'
+import { ShoppingBag, X, ArrowRight } from 'lucide-react'
 import { SelectableCartItemRow } from './SelectableCartItemRow.jsx'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 export function CartDrawer() {
   const {
@@ -14,7 +14,6 @@ export function CartDrawer() {
     updateQuantity,
     removeFromCart,
     getTotalPrice,
-    selectedItemIds,
     toggleItemSelection,
     toggleSelectAllItems,
     getSelectedItemIds,
@@ -27,6 +26,13 @@ export function CartDrawer() {
   const selectedProductIds = getSelectedItemIds()
   const selectedCount = selectedProductIds.length
   const allItemsSelected = cart.length > 0 && cart.every(item => selectedProductIds.includes(String(item.id)))
+
+  useEffect(() => {
+    if (!isOpen) return
+    const closeOnEscape = event => { if (event.key === 'Escape') setIsOpen(false) }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [isOpen, setIsOpen])
 
   const handleCheckout = async () => {
     if (selectedProductIds.length === 0) {
@@ -54,7 +60,8 @@ export function CartDrawer() {
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          className="fixed inset-0 z-50 flex justify-end bg-black/60"
+          className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm"
+          onClick={event => { if (event.target === event.currentTarget) setIsOpen(false) }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -64,19 +71,23 @@ export function CartDrawer() {
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'tween', duration: 0.25 }}
-            className="w-full max-w-md h-full shadow-2xl flex flex-col bg-[var(--bg-primary)]"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cart-drawer-title"
+            className="w-full max-w-lg h-[100dvh] shadow-2xl flex flex-col bg-[var(--bg-primary)] border-l border-[var(--border)]"
           >
             <div className="px-6 py-5 border-b border-[var(--border)] flex items-center justify-between bg-gradient-to-r from-[var(--surface-dark)] to-[var(--surface-dark)]">
               <div>
-                <h2 className="text-xl font-bold text-[var(--text-light)]">Shopping Cart</h2>
+                <h2 id="cart-drawer-title" className="text-xl font-bold text-[var(--text-light)]">Your Cart</h2>
                 <p className="text-xs text-[var(--text-muted)] mt-0.5">{cart.length} item{cart.length !== 1 ? 's' : ''}</p>
               </div>
               <button
                 type="button"
+                aria-label="Close cart"
                 onClick={() => setIsOpen(false)}
                 className="p-2 rounded-lg hover:bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors"
               >
-                <span className="flex items-center justify-center w-6 h-6 text-xl">×</span>
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -84,10 +95,11 @@ export function CartDrawer() {
               {cart.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center py-12">
                   <div className="w-16 h-16 rounded-full bg-[var(--surface-dark)] flex items-center justify-center mb-3">
-                    <Trash2 className="w-8 h-8 text-[var(--text-muted)]" />
+                    <ShoppingBag className="w-8 h-8 text-[var(--gold-primary)]" />
                   </div>
                   <p className="text-sm font-medium text-[var(--text-light)] mb-1">Your cart is empty</p>
                   <p className="text-xs text-[var(--text-muted)]">Add items to get started</p>
+                  <button type="button" onClick={() => { setIsOpen(false); navigate('/shop') }} className="mt-5 rounded-xl bg-[var(--gold-primary)] px-5 py-3 text-sm font-semibold text-[var(--text-dark)]">Browse Shop</button>
                 </div>
               ) : (
                 <>
@@ -124,27 +136,23 @@ export function CartDrawer() {
             <div className="border-t border-[var(--border)] px-5 py-5 space-y-4 bg-[var(--surface-dark)]/50">
               <div className="space-y-2">
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-[var(--text-muted)]">Subtotal</span>
+                  <span className="text-[var(--text-muted)]">Selected subtotal ({selectedCount} {selectedCount === 1 ? 'item' : 'items'})</span>
                   <span className="font-semibold text-[var(--text-light)]">
                     ₱{getTotalPrice().toLocaleString('en-PH')}
                   </span>
                 </div>
-                <div className="h-px bg-[var(--border)]" />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-[var(--text-light)]">Total</span>
-                  <span className="text-lg font-bold text-[var(--gold-primary)]">
-                    ₱{getTotalPrice().toLocaleString('en-PH')}
-                  </span>
-                </div>
+                <p className="text-xs text-[var(--text-muted)]">Delivery fees are calculated at checkout.</p>
               </div>
               <button
                 type="button"
                 disabled={cart.length === 0 || selectedCount === 0}
                 onClick={handleCheckout}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] text-sm font-bold hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] text-sm font-bold flex items-center justify-center gap-2 hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Proceed to Checkout
+                <ArrowRight className="w-4 h-4" />
               </button>
+              {cart.length > 0 && <button type="button" onClick={() => { setIsOpen(false); navigate('/cart') }} className="w-full py-2 text-sm font-semibold text-[var(--text-muted)] hover:text-[var(--gold-primary)]">View Full Cart</button>}
               {checkoutError && <p role="alert" className="text-sm text-red-400">{checkoutError}</p>}
             </div>
           </motion.div>

@@ -86,6 +86,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const toast = useToast();
   const [hierarchy, setHierarchy] = useState(null);
   const [requiredParts, setRequiredParts] = useState([]);
+  const [partsExpanded, setPartsExpanded] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -1015,11 +1016,18 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
-                <h3 className="text-lg font-bold text-white">Parts Needed</h3>
+                {isAdmin ? (
+                  <button type="button" onClick={() => setPartsExpanded(expanded => !expanded)}
+                    aria-expanded={partsExpanded} aria-controls={`project-parts-${projectId}`}
+                    className="flex items-center gap-2 rounded-lg text-lg font-bold text-white hover:text-[var(--gold-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold-primary)]">
+                    <ChevronDown aria-hidden="true" className={`w-5 h-5 transition-transform ${partsExpanded ? '' : '-rotate-90'}`} />
+                    Parts Needed
+                  </button>
+                ) : <h3 className="text-lg font-bold text-white">Parts Needed</h3>}
                 <p className="text-sm text-[var(--text-muted)]">Parts required to complete this build.</p>
               </div>
               <div className="flex flex-wrap items-center gap-3 text-xs">
-                {isAdmin && (
+                {isAdmin && partsExpanded && (
                   <button type="button" onClick={handleMarkAllReceived}
                     disabled={togglingSaving || isOnHold || isTaskUpdateBlocked || !requiredParts.some(part => !part.is_received && (!(part.product_id || part.builder_part_id) || (part.stock_status !== 'out_of_stock' && Number(part.stock) > 0)))}
                     className="rounded-lg border border-[var(--gold-primary)]/40 px-3 py-2 font-semibold text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 disabled:opacity-50">
@@ -1034,7 +1042,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
             {togglingFeedback && !togglingPartKey && (
               <p className={`mt-3 text-xs ${togglingFeedback.type === 'error' ? 'text-red-400' : 'text-emerald-300'}`}>{togglingFeedback.message}</p>
             )}
-            <div className="mt-5 border border-[var(--border)] rounded-2xl overflow-hidden bg-[var(--bg-primary)]/40">
+            <div id={`project-parts-${projectId}`} hidden={isAdmin && !partsExpanded} className="mt-5 border border-[var(--border)] rounded-2xl overflow-hidden bg-[var(--bg-primary)]/40">
               <div className="divide-y divide-[var(--border)]">
                 {requiredParts.map((part, idx) => {
                   const isReceived = Boolean(part.is_received);

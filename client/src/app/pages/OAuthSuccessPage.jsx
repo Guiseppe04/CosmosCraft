@@ -1,21 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router'
 import { useAuth } from '../context/AuthContext.jsx'
 import { setAuthToken } from '../utils/apiConfig'
 
-function getOAuthReturnPath() {
-  try {
-    const returnTo = window.sessionStorage.getItem('cosmoscraft.auth.returnTo')
-    window.sessionStorage.removeItem('cosmoscraft.auth.returnTo')
-    if (!returnTo) return '/'
-
-    const target = new URL(returnTo, window.location.origin)
-    if (target.origin !== window.location.origin || target.pathname === '/auth/success') return '/'
-    return `${target.pathname}${target.search}${target.hash}`
-  } catch {
-    return '/'
-  }
-}
+import { getAuthDestination, takeAuthReturnPath } from '../utils/authRedirect.js'
 
 export function OAuthSuccessPage() {
   const [searchParams] = useSearchParams()
@@ -23,12 +11,15 @@ export function OAuthSuccessPage() {
   const { login, fetchUser } = useAuth()
   const [error, setError] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
+  const initializationStarted = useRef(false)
 
   useEffect(() => {
+    if (initializationStarted.current) return
+    initializationStarted.current = true
     const userId = searchParams.get('userId')
     const token = searchParams.get('token') || searchParams.get('accessToken')
-    const returnPath = getOAuthReturnPath()
-    const fallbackPath = returnPath && returnPath !== '/auth/success' ? returnPath : '/'
+    const returnPath = takeAuthReturnPath()
+    const fallbackPath = '/login'
 
     if (token) {
       setAuthToken(token)
@@ -47,7 +38,7 @@ export function OAuthSuccessPage() {
 
         if (userData) {
           login(userData, token)
-          setTimeout(() => navigate(fallbackPath, { replace: true }), 300)
+          navigate(getAuthDestination(userData.role, returnPath, window.location.origin), { replace: true })
           return
         }
 

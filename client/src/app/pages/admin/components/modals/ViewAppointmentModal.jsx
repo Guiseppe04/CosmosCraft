@@ -1,10 +1,12 @@
 import AppointmentPaymentReview from '../../../../components/appointments/AppointmentPaymentReview'
+import { useModalScrollLock } from '../../../../hooks/useModalScrollLock'
 import { AppointmentRefundAdmin } from '../../../../components/appointments/AppointmentRefund'
 import { ModalHeader } from '../shared/ModalHeader'
 import { CreditCard } from 'lucide-react'
 import { formatPaymentMethod } from '../../../../utils/paymentMethodUtils'
 
 export function ViewAppointmentModal({ modal, closeModal, onPaymentStatusUpdate }) {
+  useModalScrollLock(Boolean(modal.data))
   if (!modal.data) return null
 
   const apt = modal.data

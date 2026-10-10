@@ -17,16 +17,16 @@ export function ProjectsTable({ projects, archived = false, isAdmin, openModal, 
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1000px] text-left text-xs">
-          <caption className="sr-only">{archived ? 'Archived' : 'Active'} projects with progress, assignment and actions</caption>
+          <caption className="sr-only">{archived ? 'Archived' : 'Active'} projects with progress and actions</caption>
           <thead className="border-b border-[var(--border)] bg-[var(--bg-primary)] font-bold uppercase tracking-wider text-[var(--text-muted)]">
             <tr>
-              {['Project / Order #', 'Customer', 'Claimed By', 'Status', 'Progress', 'Estimated Completion', 'Notes', 'Actions'].map((label) => (
+              {['Project / Order #', 'Customer', 'Status', 'Progress', 'Estimated Completion', 'Notes', 'Actions'].map((label) => (
                 <th key={label} scope="col" className="px-4 py-3">{label}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]/50">
-            {projects.length === 0 && <tr><td colSpan={8} className="py-12 text-center text-[var(--text-muted)]">No projects match your filters.</td></tr>}
+            {projects.length === 0 && <tr><td colSpan={7} className="py-12 text-center text-[var(--text-muted)]">No projects match your filters.</td></tr>}
             {projects.map((project) => {
               const name = project.name || project.title || 'Untitled Project'
               const status = String(project.status || 'not_started').toLowerCase()
@@ -39,7 +39,6 @@ export function ProjectsTable({ projects, archived = false, isAdmin, openModal, 
                     <p className="mt-1 text-[var(--text-muted)]">{project.order_number || project.custom_build_id || 'No order number'}</p>
                   </td>
                   <td className="px-4 py-3 text-white">{project.customer_name || 'Unassigned'}</td>
-                  <td className="px-4 py-3 text-white">{project.claimed_first_name ? [project.claimed_first_name, project.claimed_last_name].filter(Boolean).join(' ') : 'Unassigned'}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 font-semibold capitalize ${statusClasses[status] || statusClasses.not_started}`}>{status.replace(/_/g, ' ')}</span>
                     {status === 'on_hold' && project.hold_reason && <p className="mt-2 max-w-48 text-amber-300/80">Hold reason: {project.hold_reason}</p>}

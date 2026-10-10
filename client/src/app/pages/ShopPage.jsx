@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { Filter, Search, ShoppingCart, Zap, Star, Folder, Tag, X, SlidersHorizontal, Package, Wrench } from 'lucide-react'
+import { AddToCartButton } from '../components/cart/AddToCartButton.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useNavigate } from 'react-router'
@@ -766,16 +767,10 @@ export function ShopPage() {
                                 Buy Now
                               </button>
                             )}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleAddToCart(product); }}
-                              disabled={buttonState === 'out_of_stock'}
-                              className={`flex-1 px-4 py-2.5 rounded-full text-xs tracking-wide font-bold transition-all border ${buttonState === 'out_of_stock'
-                                  ? 'border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] cursor-not-allowed'
-                                  : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-light)] hover:text-[var(--gold-primary)] hover:border-[var(--gold-primary)] shadow-sm'
-                                }`}
-                            >
-                              {buttonState === 'out_of_stock' ? 'Out of Stock' : 'Add to cart'}
-                            </button>
+                            <AddToCartButton
+                  state={buttonState}
+                  onClick={(event) => { event.stopPropagation(); handleAddToCart(product); }}
+                />
                           </div>
                         </div>
                       </div>
@@ -945,16 +940,10 @@ export function ShopPage() {
                     Buy Now
                   </button>
                 )}
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleAddToCart(product); }}
-                  disabled={buttonState === 'out_of_stock'}
-                  className={`flex-1 px-4 py-2.5 rounded-full text-xs tracking-wide font-bold transition-all border ${buttonState === 'out_of_stock'
-                      ? 'border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] cursor-not-allowed'
-                      : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-light)] hover:text-[var(--gold-primary)] hover:border-[var(--gold-primary)] shadow-sm'
-                    }`}
-                >
-                  {buttonState === 'out_of_stock' ? 'Out of Stock' : 'Add to cart'}
-                </button>
+                <AddToCartButton
+                  state={buttonState}
+                  onClick={(event) => { event.stopPropagation(); handleAddToCart(product); }}
+                />
               </div>
             </div>
           </div>
@@ -994,6 +983,7 @@ export function ShopPage() {
             initial={{ opacity: 0, y: -20, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
             exit={{ opacity: 0, y: -20, x: '-50%' }}
+            role="status"
             className="fixed top-24 left-1/2 z-[200] px-6 py-3 bg-[var(--gold-primary)] text-[#111111] rounded-full flex items-center justify-center text-sm font-bold shadow-[0_10px_25px_rgba(212,175,55,0.4)] pointer-events-none"
           >
             {notification}

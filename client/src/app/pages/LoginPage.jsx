@@ -1,10 +1,10 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { useState, useEffect, useRef } from 'react'
+import { Link, useNavigate, useLocation } from 'react-router'
 import { motion } from 'motion/react'
 import { Mail, Lock, ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { API } from '../utils/apiConfig'
-import { normalizeRole } from '../utils/roles'
+import { API, setAuthToken } from '../utils/apiConfig'
+import { getAuthDestination, takeAuthReturnPath } from '../utils/authRedirect.js'
 
 /**
  * LoginPage - User Authentication
@@ -22,7 +22,17 @@ export function LoginPage() {
   const [redirectingProvider, setRedirectingProvider] = useState(null)
 
   const navigate = useNavigate()
-  const { login, fetchUser } = useAuth()
+  const { login, fetchUser, isAuthenticated, isLoadingUser, user } = useAuth()
+  const location = useLocation()
+  const redirectStarted = useRef(false)
+
+  useEffect(() => {
+    if (!isAuthenticated || isLoadingUser || !user || redirectStarted.current) return
+    redirectStarted.current = true
+    const from = location.state?.from
+    const returnTo = takeAuthReturnPath() || (from?.pathname ? from.pathname + (from.search || '') + (from.hash || '') : null)
+    navigate(getAuthDestination(user.role, returnTo, window.location.origin), { replace: true })
+  }, [isAuthenticated, isLoadingUser, user, location.state, navigate])
 
   const validateEmail = (value) => emailPattern.test(value.trim())
 
@@ -76,8 +86,8 @@ export function LoginPage() {
 
       if (!response.ok) {
         if (data.code === 'EMAIL_NOT_VERIFIED') {
-          const email = data.data?.email || email.trim()
-          navigate(`/verify-otp?email=${encodeURIComponent(email)}`, { replace: true })
+          const verificationEmail = data.data?.email || email.trim()
+          navigate(`/verify-otp?email=${encodeURIComponent(verificationEmail)}`, { replace: true })
           return
         }
         if (data.errors && Array.isArray(data.errors) && data.errors.length > 0) {
@@ -107,33 +117,11 @@ export function LoginPage() {
         login(userData, token)
       } else {
         // Fallback: fetch the current user from the backend to populate auth state
+        if (token) setAuthToken(token)
         resolvedUser = await fetchUser()
       }
 
-      const storedReturnTo = (() => {
-        try {
-          const value = window.sessionStorage.getItem('cosmoscraft.auth.returnTo')
-          window.sessionStorage.removeItem('cosmoscraft.auth.returnTo')
-          if (!value) return null
-          const parsed = new URL(value, window.location.origin)
-          if (parsed.origin !== window.location.origin || parsed.pathname === '/auth/success') return null
-          return `${parsed.pathname}${parsed.search}${parsed.hash}`
-        } catch {
-          return null
-        }
-      })()
-
-      const rawRole = resolvedUser?.role || 'customer'
-      const role = normalizeRole(rawRole)
-      if (storedReturnTo) {
-        navigate(storedReturnTo, { replace: true })
-      } else if (role === 'admin') {
-        navigate('/admin', { replace: true })
-      } else if (role === 'staff') {
-        navigate('/staff', { replace: true })
-      } else {
-        navigate('/dashboard', { replace: true })
-      }
+      if (!resolvedUser) setError('Unable to complete sign-in. Please try again.')
 
     } catch (err) {
       console.error('Login error:', err)
@@ -145,10 +133,10 @@ export function LoginPage() {
 
   const handleSocialLogin = (provider) => {
     try {
-      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`
-      if (returnTo && !returnTo.startsWith('/auth')) {
-        window.sessionStorage.setItem('cosmoscraft.auth.returnTo', returnTo)
-      }
+      const from = location.state?.from
+      const returnTo = from?.pathname ? from.pathname + (from.search || '') + (from.hash || '') : null
+      if (returnTo) window.sessionStorage.setItem('cosmoscraft.auth.returnTo', returnTo)
+      else window.sessionStorage.removeItem('cosmoscraft.auth.returnTo')
     } catch {}
 
     setRedirectingProvider(provider)

@@ -139,7 +139,11 @@ export function CartPage() {
           transition={{ duration: 0.5 }}
           className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8"
         >
-          <h1 className="text-4xl lg:text-5xl font-bold text-white">Shopping Cart</h1>
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--gold-primary)]">Your next great sound</p>
+            <h1 className="text-3xl lg:text-4xl font-bold text-white">Shopping Cart</h1>
+            <p className="mt-3 text-sm text-[var(--text-muted)]">Review your picks and select the items you’re ready to order.</p>
+          </div>
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2 px-4 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl">
               <ShoppingBag className="w-5 h-5 text-[var(--gold-primary)]" />
@@ -197,7 +201,8 @@ export function CartPage() {
             className="lg:col-span-1"
           >
             <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 space-y-5 sticky top-24">
-              <h2 className="text-2xl font-bold text-white">Order Summary</h2>
+              <h2 className="text-xl font-bold text-white">Order Summary</h2>
+              <p className="text-sm text-[var(--text-muted)]">{selectedCount} selected {selectedCount === 1 ? 'item' : 'items'} ready for checkout</p>
 
               <div className="space-y-3 border-t border-b border-[var(--border)] py-4">
                 <div className="flex justify-between">
@@ -205,7 +210,7 @@ export function CartPage() {
                   <span className="font-bold text-white">₱{subtotal.toLocaleString('en-PH')}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[var(--text-muted)]">Shipping</span>
+                  <span className="text-[var(--text-muted)]">Estimated Shipping</span>
                   <span className="font-bold text-white">
                     {shipping === 0 ? (
                       <span className="text-green-400">FREE</span>
@@ -226,7 +231,7 @@ export function CartPage() {
               </div>
 
               <div className="flex justify-between items-center">
-                <span className="text-xl font-bold text-white">Total</span>
+                <span className="text-lg font-bold text-white">Estimated Total</span>
                 <span className="text-3xl font-bold bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] bg-clip-text text-transparent">
                   ₱{total.toLocaleString('en-PH', { maximumFractionDigits: 2 })}
                 </span>
@@ -295,7 +300,7 @@ export function CartPage() {
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--surface-dark)] border-t border-[var(--border)] p-4 z-40">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-sm text-[var(--text-muted)]">Total ({totalItems} items)</p>
+            <p className="text-sm text-[var(--text-muted)]">Estimated total ({selectedCount} selected)</p>
             <p className="text-2xl font-bold text-[var(--gold-primary)]">₱{total.toLocaleString('en-PH', { maximumFractionDigits: 2 })}</p>
           </div>
           <button

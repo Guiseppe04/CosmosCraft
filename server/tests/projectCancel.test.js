@@ -20,10 +20,11 @@ async function run() {
   try {
     // ─── 1. Cancel not-started project with verified payment creates pending refund ──
     {
+      let cancelledOrderUpdated = false
       mockPool({
         queryFn: async (sql, params) => {
           if (sql.includes('FROM projects p') && sql.includes('FOR UPDATE')) {
-            return { rows: [{ project_id: 'proj-1', order_id: 'order-1', customer_id: 'user-1', status: 'not_started', title: 'Test Build', custom_build_id: 'CMB-260814-0001', payment_plan: 'full_payment', total_amount: 25000 }] }
+            return { rows: [{ project_id: 'proj-1', order_id: 'order-1', order_type: 'customization', customer_id: 'user-1', status: 'not_started', title: 'Test Build', custom_build_id: 'CMB-260814-0001', payment_plan: 'full_payment', total_amount: 25000 }] }
           }
           if (sql.includes('FROM project_subtasks')) {
             return { rows: [{ total: 0, completed: 0 }] }
@@ -31,7 +32,11 @@ async function run() {
           if (sql.includes('UPDATE projects SET status = \'cancelled\'') && sql.includes('project_id')) {
             return { rows: [{ project_id: 'proj-1', status: 'cancelled' }] }
           }
-          if (sql.includes('UPDATE orders SET status = \'cancelled\'')) {
+          if (sql.includes('SET customization_status = $1')) {
+            assert.strictEqual(params[0], 'cancelled')
+            assert.strictEqual(params[6], 'order-1')
+            assert.ok(sql.includes("status = CASE WHEN $1 IN ('cancelled', 'resolution_in_progress') THEN 'cancelled' ELSE status END"))
+            cancelledOrderUpdated = true
             return { rows: [{ order_id: 'order-1', status: 'cancelled' }] }
           }
           if (sql.includes('FROM payments') && sql.includes('rejected') && sql.includes('LIMIT 1')) {
@@ -57,6 +62,7 @@ async function run() {
       })
       const result = await projectService.cancelProject('proj-1', 'user-1', 'customer')
       assert.strictEqual(result.status, 'cancelled')
+      assert.strictEqual(cancelledOrderUpdated, true)
     }
 
     // ─── 2. Cancel not-started project with unverified payment creates pending_payment_verification refund ──

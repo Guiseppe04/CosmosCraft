@@ -986,7 +986,13 @@ export function AdminPage() {
     showToast('New appointment booked!', 'info')
   })
 
-  useSocketEvent('appointment:updated', () => {
+  useSocketEvent('appointment:updated', (data) => {
+    const updated = data?.appointment
+    const id = updated?.appointment_id || updated?.id
+    if (id) {
+      setSelectedAppointment(prev => prev && String(prev.appointment_id || prev.id) === String(id)
+        ? { ...prev, ...updated } : prev)
+    }
     refreshAppointmentsRealtime()
   })
 
@@ -996,6 +1002,7 @@ export function AdminPage() {
     refreshAppointmentsRealtime()
     fetchUnavailableDates()
     fetchAvailableDates()
+    fetchOpenOverrides()
   })
 
   useSocketEvent('project:updated', () => {
@@ -1073,6 +1080,9 @@ export function AdminPage() {
     if (['appointments', 'dashboard'].includes(activeTab)) {
       fetchAppointments({ silent: true })
       fetchCalendarAppointments()
+      fetchUnavailableDates()
+      fetchAvailableDates()
+      fetchOpenOverrides()
     }
     if (['dashboard', 'pos', 'inventory', 'sales-report'].includes(activeTab)) {
       fetchInventory({ silent: true })
