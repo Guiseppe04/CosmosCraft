@@ -798,6 +798,7 @@ exports.createOrder = async (orderData) => {
     )
     
     const order = orderRes.rows[0]
+    await require('./termsService').attachCheckout(client, userId, orderData.checkoutAcknowledgmentId, items, order.order_id)
     const inventoryReservations = collectInventoryReservations(items)
     const customizationIds = []
     const orderedCustomBuilds = []

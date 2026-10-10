@@ -376,7 +376,7 @@ async function prepareCheckout(userId, { cart_item_ids, shipping_address_id, not
   };
 }
 
-async function convertCartToOrder(userId, { shipping_address_id, notes, payment_method }) {
+async function convertCartToOrder(userId, { shipping_address_id, notes, payment_method, checkoutAcknowledgmentId }) {
   const cart = await getCartWithItems(userId);
 
   if (cart.items.length === 0) {
@@ -419,6 +419,7 @@ async function convertCartToOrder(userId, { shipping_address_id, notes, payment_
     );
 
     const order = orderResult.rows[0];
+    await require('./termsService').attachCheckout(client, userId, checkoutAcknowledgmentId, cart.items, order.order_id);
 
     for (const item of cart.items) {
       await client.query(

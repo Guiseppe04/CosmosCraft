@@ -78,6 +78,7 @@ exports.facebookCallback = asyncHandler(async (req, res, next) => {
 
 // OAuth Signup(for new users)
 exports.oauthSignup = asyncHandler(async (req, res, next) => {
+  require('../services/termsService').validateAgreement(req.body.termsAgreement, ['account']);
   const { provider, googleId, facebookId, email, firstName, middleName, lastName } = req.body;
 
   if (!['google', 'facebook'].includes(provider)) throw new AppError('Provider must be google or facebook', 400);
@@ -97,6 +98,7 @@ exports.oauthSignup = asyncHandler(async (req, res, next) => {
     firstName,
     middleName: middleName || '',
     lastName,
+    termsAgreement: req.body.termsAgreement,
   });
 
   const roleSummary = await rbacService.getUserRoleSummary(newUser.user_id, false);
@@ -114,6 +116,7 @@ exports.oauthSignup = asyncHandler(async (req, res, next) => {
 });
 // Email Signup
 exports.emailSignup = asyncHandler(async (req, res, next) => {
+  require('../services/termsService').validateAgreement(req.body.termsAgreement, ['account']);
   const { error, value } = emailSignupSchema.validate(req.body, { abortEarly: false });
   if (error) {
     const errors = error.details.map((detail) => ({ field: detail.path.join('.'), message: detail.message }));
@@ -174,6 +177,7 @@ exports.emailSignup = asyncHandler(async (req, res, next) => {
     if (error.message && error.message.includes('already exists')) {
       const existingUser = await userService.getUserByEmail(value.email.toLowerCase());
       if (existingUser && !existingUser.is_verified && existingUser.password_hash) {
+        await require('../services/termsService').recordAccount(existingUser.user_id, value.termsAgreement, 'registration');
         const { code: otp, expiresAt: otpExpires } = generateOTPWithExpiry(15);
         await userService.saveOTP(existingUser.user_id, otp, otpExpires, 'signup');
 

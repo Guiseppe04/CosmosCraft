@@ -10,7 +10,7 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
     throw new AppError('You must be logged in to place an order', 401)
   }
 
-  const { items, cartItemIds, notes, shippingMethod, paymentMethod, shippingAddressId, billingAddress, termsAccepted, paymentPlan, initialPaymentPercentage, installmentTenureMonths } = req.validatedData || req.body
+  const { items, cartItemIds, notes, shippingMethod, paymentMethod, shippingAddressId, billingAddress, termsAccepted, checkoutAcknowledgmentId, paymentPlan, initialPaymentPercentage, installmentTenureMonths } = req.validatedData || req.body
 
   // Validate required fields
   if ((!items || items.length === 0) && (!cartItemIds || cartItemIds.length === 0)) {
@@ -58,6 +58,7 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
     shippingAddressId,
     billingAddress,
     termsAccepted,
+    checkoutAcknowledgmentId,
     paymentPlan,
     initialPaymentPercentage,
     installmentTenureMonths,

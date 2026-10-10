@@ -186,6 +186,7 @@ exports.resetPasswordSchema = Joi.object({
 
 // Email/Password Signup
 exports.emailSignupSchema = Joi.object({
+  termsAgreement: Joi.object({ agreed: Joi.boolean().valid(true).required(), versions: Joi.object({ account: Joi.string().required() }).required() }).required(),
   firstName: nameFields.firstName,
   middleName: nameFields.middleName,
   lastName: nameFields.lastName,
@@ -829,6 +830,7 @@ exports.createOrderSchema = Joi.object({
       'any.required': 'Country is required',
     }),
   }).required(),
+  checkoutAcknowledgmentId: Joi.string().uuid().required(),
   termsAccepted: Joi.boolean().valid(true).required().messages({
     'any.only': 'You must accept the terms and conditions',
     'any.required': 'Terms acceptance is required',

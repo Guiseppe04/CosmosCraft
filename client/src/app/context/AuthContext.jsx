@@ -1,6 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { API, getAuthHeaders, setAuthToken, removeAuthToken, getAuthToken } from '../utils/apiConfig'
 import { normalizeRole } from '../utils/roles'
+
+import TermsAndConditionsModal from '../components/TermsAndConditionsModal'
+import { accountAgreement, saveAgreement } from '../utils/termsAgreement'
 
 const AuthContext = createContext(null)
 
@@ -97,6 +100,22 @@ export function AuthProvider({ children }) {
   const [isLoadingUser, setIsLoadingUser] = useState(true)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
+  const [termsOpen, setTermsOpen] = useState(false)
+  const pendingTerms = useRef(null)
+  const ensureAccountTerms = useCallback(async () => {
+    const response = await fetch(API + '/auth/terms/status', { headers: getAuthHeaders(), credentials: 'include' })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.message || 'Unable to check account agreement.')
+    if (!data.data.required) return true
+    if (!pendingTerms.current) {
+      let resolve
+      const promise = new Promise(done => { resolve = done })
+      pendingTerms.current = { promise, resolve }
+      setTermsOpen(true)
+    }
+    return pendingTerms.current.promise
+  }, [])
+
   // Fetch current authenticated user from backend
   const fetchUser = useCallback(async () => {
     try {
@@ -115,6 +134,7 @@ export function AuthProvider({ children }) {
       if (response.ok) {
         const data = await response.json()
         if (data.data?.isAuthenticated && data.data?.user) {
+          if (!await ensureAccountTerms()) return null
           // If auth check doesn't include addresses, fetch profile for full data
           let userData = data.data.user
 
@@ -161,7 +181,7 @@ export function AuthProvider({ children }) {
       setIsLoadingUser(false)
     }
     return null
-  }, [])
+  }, [ensureAccountTerms])
 
   // Verify authentication on app mount
   useEffect(() => {
@@ -171,12 +191,7 @@ export function AuthProvider({ children }) {
         try {
           const parsed = JSON.parse(stored)
           if (parsed?.id || parsed?.user_id || parsed?._id) {
-            // Restore user immediately from localStorage
-            setIsAuthenticated(true)
-            setUser(parsed)
-            setIsLoadingUser(false)
-
-            // Verify with backend in background
+            // Verify the session and current agreement before restoring access.
             await fetchUser()
           } else {
             setIsLoadingUser(false)
@@ -220,7 +235,9 @@ export function AuthProvider({ children }) {
   }, [])
 
   const login = useCallback(
-    (userData, token = null) => {
+    async (userData, token = null) => {
+      if (token) setAuthToken(token)
+      if (!await ensureAccountTerms()) return null
       setIsAuthenticated(true)
       setUser(userData)
       setLoginOpen(false)
@@ -233,8 +250,9 @@ export function AuthProvider({ children }) {
         loginCallback()
         setLoginCallback(null)
       }
+      return userData
     },
-    [loginCallback],
+    [loginCallback, ensureAccountTerms],
   )
 
   const logout = useCallback(async () => {
@@ -333,6 +351,19 @@ export function AuthProvider({ children }) {
       }}
     >
       {children}
+      <TermsAndConditionsModal isOpen={termsOpen} account
+        onClose={async () => {
+          await logout()
+          setTermsOpen(false)
+          pendingTerms.current?.resolve(false)
+          pendingTerms.current = null
+        }}
+        onAgree={async () => {
+          await saveAgreement('account', accountAgreement())
+          setTermsOpen(false)
+          pendingTerms.current?.resolve(true)
+          pendingTerms.current = null
+        }} />
     </AuthContext.Provider>
   )
 }

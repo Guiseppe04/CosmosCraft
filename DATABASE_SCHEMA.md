@@ -173,3 +173,6 @@ Run `schema.sql` against a fresh PostgreSQL database to create the full schema.
 - `ensure_payment_for_verification_status()` sets `payments.status` to `for_verification` when proof or reference is present.
 - `sync_order_payment_status_from_payment()` propagates payment status changes into related `orders` fields.
 - `normalize_guitar_builder_part()` normalizes builder part category/type and folder key values.
+## Terms and Conditions acknowledgments
+
+`terms_acknowledgments` records the customer (`user_id`), policy type and version, registration/login/checkout context, and server timestamp. Checkout records include a checkout UUID and become linked to `orders.order_id` within the order transaction. Unique indexes deduplicate account acceptance per version and checkout acceptance per transaction, policy and version. `users.terms_registration_pending` keeps newly provisioned OAuth identities pending until account acceptance. Existing installations apply migration 44; fresh installations include these structures in `schema.sql`.

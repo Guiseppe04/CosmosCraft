@@ -37,7 +37,7 @@ export function OAuthSuccessPage() {
         const userData = await fetchUser()
 
         if (userData) {
-          login(userData, token)
+          await login(userData, token)
           navigate(getAuthDestination(userData.role, returnPath, window.location.origin), { replace: true })
           return
         }

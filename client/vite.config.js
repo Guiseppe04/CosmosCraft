@@ -15,6 +15,7 @@ export default defineConfig(({ mode }) => {
         '/auth/google': apiUrl,
         '/auth/facebook': apiUrl,
         '/auth/check': apiUrl,
+        '/auth/terms': apiUrl,
         '/auth/refresh': apiUrl,
         '/auth/logout': apiUrl,
         '/auth/email-signup': apiUrl,

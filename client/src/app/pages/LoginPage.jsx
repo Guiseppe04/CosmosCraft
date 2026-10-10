@@ -114,7 +114,7 @@ export function LoginPage() {
 
       let resolvedUser = userData
       if (userData) {
-        login(userData, token)
+        await login(userData, token)
       } else {
         // Fallback: fetch the current user from the backend to populate auth state
         if (token) setAuthToken(token)

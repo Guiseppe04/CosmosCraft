@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router'
-import SitePolicyAgreement from '../components/SitePolicyAgreement'
+import TermsAndConditionsModal from '../components/TermsAndConditionsModal'
+import { accountAgreement } from '../utils/termsAgreement'
 import { motion } from 'motion/react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { API } from '../utils/apiConfig'
@@ -65,7 +66,6 @@ export function SignupPage() {
       postalZipCode: '',
       country: 'PH',
     },
-    terms: false,
   })
 
   // PH-specific cascading state
@@ -90,7 +90,6 @@ export function SignupPage() {
   const fieldRefs = useRef({})
 
   const getAddressError = (field) => addressValidationAttempted && errors[`address.${field}`]
-  const showTermsError = addressValidationAttempted && errors.terms
 
   // ZIP Code validation hook
   const {
@@ -126,7 +125,6 @@ export function SignupPage() {
       'address.city',
       'address.barangay',
       'address.postalZipCode',
-      'terms',
     ]
     const firstKey = fieldOrder.find((key) => validationErrors[key]) || Object.keys(validationErrors)[0]
     if (!firstKey) return
@@ -272,9 +270,6 @@ export function SignupPage() {
       newErrors['address.postalZipCode'] = zipError || 'The ZIP code entered is incorrect for the selected city. Please verify and try again.'
     }
 
-    // Terms
-    if (!form.terms) newErrors.terms = 'You must agree to the terms to continue.'
-
     setErrors(newErrors)
     if (Object.keys(newErrors).length > 0) {
       setTimeout(() => focusFirstInvalidField(newErrors), 0)
@@ -338,7 +333,6 @@ export function SignupPage() {
       if (phMunicipality && form.address.postalZipCode.trim() && zipValid === false) {
         newErrors['address.postalZipCode'] = zipError || 'The ZIP code entered is incorrect for the selected city. Please verify and try again.'
       }
-      if (!form.terms) newErrors.terms = 'You must agree to the terms to continue.'
     }
 
     setErrors(newErrors)
@@ -367,7 +361,7 @@ export function SignupPage() {
     const stepForError = (key) => {
       if (['firstName', 'lastName', 'email', 'phone', 'middleName'].includes(key)) return 1
       if (['password', 'confirmPassword'].includes(key)) return 2
-      if (key.startsWith('address.') || key === 'terms') return 3
+      if (key.startsWith('address.')) return 3
       return 1
     }
 
@@ -379,8 +373,12 @@ export function SignupPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [errors])
 
-  const handleSubmit = async e => {
+  const [showTermsModal, setShowTermsModal] = useState(false)
+  const signupSubmitting = useRef(false)
+  const handleSubmit = async (e, agreed = false) => {
     e.preventDefault()
+    if (signupSubmitting.current || (showTermsModal && !agreed)) return
+    if (agreed) setShowTermsModal(false)
     setSuccess('')
     setAddressValidationAttempted(true)
     setErrors({})
@@ -403,9 +401,12 @@ export function SignupPage() {
       return
     }
 
+    if (!agreed) { setShowTermsModal(true); return }
+    signupSubmitting.current = true
     setIsLoading(true)
     try {
       const payload = {
+        termsAgreement: accountAgreement(),
         firstName: form.firstName.trim(),
         middleName: form.middleName.trim(),
         lastName: form.lastName.trim(),
@@ -468,6 +469,7 @@ export function SignupPage() {
       setErrors({ submit: 'Network error. Please check your connection and try again.' })
     } finally {
       setIsLoading(false)
+      signupSubmitting.current = false
     }
   }
 
@@ -565,6 +567,8 @@ export function SignupPage() {
             </div>
           </div>
 
+          <TermsAndConditionsModal isOpen={showTermsModal} account onClose={() => setShowTermsModal(false)}
+            onAgree={() => handleSubmit({ preventDefault() {} }, true)} />
           <form onSubmit={handleSubmit} className="space-y-10" noValidate>
 
             {/* 1. PERSONAL INFO */}
@@ -947,9 +951,8 @@ export function SignupPage() {
 
               {/* TERMS & ACTIONS */}
               <div className="pt-6 border-t border-white/10">
-                <motion.div animate={showTermsError ? shakeAnimation : {}} className="mt-2 mb-8">
-                  <SitePolicyAgreement checked={form.terms} onChange={checked => updateField('terms', checked)}
-                    inputRef={registerFieldRef('terms')} error={showTermsError} />
+                <motion.div className="mt-2 mb-8">
+                  <p className="text-sm text-[var(--text-muted)]">Before creating your account, review and acknowledge the Terms and Conditions.</p>
                 </motion.div>
 
                 {/* Desktop submit (unchanged) */}

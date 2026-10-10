@@ -101,7 +101,7 @@ export function OTPVerificationPage() {
       if (token) {
         const userData = await fetchUser()
         if (userData) {
-          login(userData, token)
+          await login(userData, token)
         }
       }
 

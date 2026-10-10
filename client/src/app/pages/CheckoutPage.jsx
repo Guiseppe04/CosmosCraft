@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
 import { useCart } from '../context/CartContext.jsx'
@@ -12,8 +12,8 @@ import {
 import { ShippingFeeNotice } from '../components/ShippingFeeNotice.jsx'
 import { PaymentModal } from '../components/PaymentModal.jsx'
 import TermsAndConditionsModal from '../components/TermsAndConditionsModal.jsx'
-import CheckoutTermsAgreement from '../components/CheckoutTermsAgreement.jsx'
-import { getCheckoutTermsTypes, hasAcceptedCheckoutTerms, TERMS_BY_TYPE } from '../utils/checkoutTerms'
+import { TERMS_VERSIONS, createCheckoutId, saveAgreement } from '../utils/termsAgreement'
+import { getCheckoutTermsTypes, TERMS_BY_TYPE } from '../utils/checkoutTerms'
 import { AddressForm } from '../components/AddressForm.jsx'
 import { API, getAuthHeaders } from '../utils/apiConfig'
 import api from '../services/api.js'
@@ -482,12 +482,6 @@ function CheckoutSummaryCard({
   onPlaceOrder,
   isProcessing,
   disabled,
-  onViewTerms,
-  onToggleTerms,
-  termsAccepted = false,
-  termsTypes = [],
-  acceptedTermsByType = {},
-  termsError = '',
   monthlyPayment = 0,
   estimatedCompletion,
 }) {
@@ -497,7 +491,7 @@ function CheckoutSummaryCard({
   const safeRemainingBalance = Number.isFinite(Number(remainingBalance)) ? Number(remainingBalance) : 0
   const safeMonthlyPayment = Number.isFinite(Number(monthlyPayment)) ? Number(monthlyPayment) : 0
   const safeItemCount = Number.isFinite(Number(itemCount)) ? Number(itemCount) : 0
-  const isCheckoutDisabled = Boolean(disabled) || !termsAccepted
+  const isCheckoutDisabled = Boolean(disabled)
 
   return (
     <div className="bg-[var(--surface-dark)] border border-white/10 rounded-2xl p-6 space-y-5 shadow-lg shadow-black/20">
@@ -603,9 +597,6 @@ function CheckoutSummaryCard({
           </div>
         )}
       </div>
-
-      <CheckoutTermsAgreement types={termsTypes} accepted={acceptedTermsByType}
-        onViewTerms={onViewTerms} onToggleTerms={onToggleTerms} error={termsError} />
 
       <button
         onClick={onPlaceOrder}
@@ -798,9 +789,7 @@ export function CheckoutPage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showTermsModal, setShowTermsModal] = useState(false)
-  const [termsAcceptance, setTermsAcceptance] = useState({ scope: '', accepted: {} })
-  const [viewedTermsType, setViewedTermsType] = useState('orders')
-  const [termsError, setTermsError] = useState('')
+  const [termsAcceptance, setTermsAcceptance] = useState({ scope: '' })
   const [selectionError, setSelectionError] = useState(false)
   const [preparedCartItems, setPreparedCartItems] = useState([])
   const [preparedTaxRate, setPreparedTaxRate] = useState(0)
@@ -930,13 +919,12 @@ export function CheckoutPage() {
   const fullPaymentTotal = subtotal + shippingCost + taxAmount
   const hasSelectedCustomBuild = checkoutItems.some(item => isCustomBuildItem(item))
   const termsTypes = getCheckoutTermsTypes(checkoutItems.some(item => !isCustomBuildItem(item)), hasSelectedCustomBuild)
-  const termsScope = termsTypes.join(',')
-  const acceptedTermsByType = termsAcceptance.scope === termsScope ? termsAcceptance.accepted : {}
-  const acceptedTerms = hasAcceptedCheckoutTerms(termsTypes, acceptedTermsByType)
+  const termsScope = JSON.stringify([termsTypes, checkoutItems.map(item => [item.id, item.quantity, item.price]), selectedAddressId, shippingMethod])
+  const acceptedTerms = Boolean(termsAcceptance.scope === termsScope && termsAcceptance.checkoutId)
   useEffect(() => {
-    setTermsAcceptance((previous) => previous.scope === termsScope ? previous : { scope: termsScope, accepted: {} })
-    setTermsError('')
+    setTermsAcceptance((previous) => previous.scope === termsScope ? previous : { scope: termsScope })
     setShowPaymentModal(false)
+    setShowTermsModal(false)
   }, [termsScope])
   const total = hasSelectedCustomBuild ? fullPaymentTotal * CUSTOM_BUILD_DOWN_PAYMENT_RATE : fullPaymentTotal
   const remainingBalance = Math.max(0, fullPaymentTotal - total)
@@ -982,23 +970,25 @@ export function CheckoutPage() {
     updateQuantity(itemId, quantity)
   }
 
-  const handleOpenTermsModal = (type) => {
-    setViewedTermsType(type)
-    setShowTermsModal(true)
-  }
-
-  const handleCloseTermsModal = () => {
-    setShowTermsModal(false)
-  }
-
-  const handleToggleTerms = (type, checked) => {
-    setTermsAcceptance((previous) => ({
-      scope: termsScope,
-      accepted: { ...(previous.scope === termsScope ? previous.accepted : {}), [type]: Boolean(checked) },
-    }))
-    if (checked) {
-      setTermsError('')
+  const checkoutTermsRequest = useRef(null)
+  const currentTermsScope = useRef(termsScope)
+  currentTermsScope.current = termsScope
+  const handleCloseTermsModal = () => setShowTermsModal(false)
+  const handleAgreeTerms = async () => {
+    const scope = termsScope
+    if (checkoutTermsRequest.current?.scope !== scope) {
+      checkoutTermsRequest.current = { scope, id: createCheckoutId() }
     }
+    const checkoutId = checkoutTermsRequest.current.id
+    await saveAgreement('checkout', { agreed: true, checkoutId, types: termsTypes,
+      versions: Object.fromEntries(termsTypes.map(type => [type, TERMS_VERSIONS[type]])) })
+    if (currentTermsScope.current !== scope) {
+      setOrderError('Your checkout changed. Please review it again.')
+      throw new Error('Your checkout changed. Please review it again.')
+    }
+    setTermsAcceptance({ scope, checkoutId })
+    setShowTermsModal(false)
+    setShowPaymentModal(true)
   }
 
   const handleSaveAddress = async (addressData) => {
@@ -1111,62 +1101,65 @@ export function CheckoutPage() {
     return !!receipt
   }
 
+  const openingTerms = useRef(false)
   const handlePlaceOrderClick = async () => {
-    if (!await waitForCartUpdates()) {
-      setOrderError('Cart quantity could not be saved. Please review your cart and try again.')
-      return
-    }
-    if (!isAuthenticated) {
-      setOrderError('Please log in to place an order.')
-      return
-    }
-    if (!hasSelectedItems) {
-      setSelectionError(true)
-      return
-    }
-    const selectedAddress = uniqueAddresses.find(address => address.address_id === selectedAddressId)
-    const requiredAddressFields = [
-      selectedAddress?.street_line1 ?? selectedAddress?.street ?? selectedAddress?.line1,
-      selectedAddress?.city,
-      selectedAddress?.province ?? selectedAddress?.stateProvince,
-      selectedAddress?.postal_code ?? selectedAddress?.postalZipCode ?? selectedAddress?.postalCode,
-      selectedAddress?.country ?? selectedAddress?.country_code,
-    ]
-    if (!selectedAddressId || requiredAddressFields.some(value => !String(value || '').trim())) {
-      setAddressError(true)
-      return
-    }
-    if (!['standard', 'express'].includes(shippingMethod)) {
-      setOrderError('Please select a valid shipping method.')
-      return
-    }
-    if (!acceptedTerms) {
-      setTermsError('Please accept each applicable agreement before placing your order.')
-      return
-    }
-    const outOfStockItem = checkoutItems.find((item) => {
-      if (isCustomBuildItem(item)) return false
-      if (item.stock === null || item.stock === undefined || item.stock === '') return false
-      const stock = Number(item.stock)
-      return Number.isFinite(stock) && stock >= 0 && Number(item.quantity || 0) > stock
-    })
-    if (outOfStockItem) {
-      const availableStock = Number(outOfStockItem.stock ?? 0)
-      setOrderError(`Not enough stock for ${outOfStockItem.name}. Available stock: ${availableStock}.`)
-      return
-    }
-    setTermsError('')
-    setShowPaymentModal(true)
+    if (openingTerms.current || showTermsModal || showPaymentModal || isProcessing) return
+    openingTerms.current = true
+    try {
+      if (!await waitForCartUpdates()) {
+        setOrderError('Cart quantity could not be saved. Please review your cart and try again.')
+        return
+      }
+      if (!isAuthenticated) {
+        setOrderError('Please log in to place an order.')
+        return
+      }
+      if (!hasSelectedItems) {
+        setSelectionError(true)
+        return
+      }
+      const selectedAddress = uniqueAddresses.find(address => address.address_id === selectedAddressId)
+      const requiredAddressFields = [
+        selectedAddress?.street_line1 ?? selectedAddress?.street ?? selectedAddress?.line1,
+        selectedAddress?.city,
+        selectedAddress?.province ?? selectedAddress?.stateProvince,
+        selectedAddress?.postal_code ?? selectedAddress?.postalZipCode ?? selectedAddress?.postalCode,
+        selectedAddress?.country ?? selectedAddress?.country_code,
+      ]
+      if (!selectedAddressId || requiredAddressFields.some(value => !String(value || '').trim())) {
+        setAddressError(true)
+        return
+      }
+      if (!['standard', 'express'].includes(shippingMethod)) {
+        setOrderError('Please select a valid shipping method.')
+        return
+      }
+      const outOfStockItem = checkoutItems.find((item) => {
+        if (isCustomBuildItem(item)) return false
+        if (item.stock === null || item.stock === undefined || item.stock === '') return false
+        const stock = Number(item.stock)
+        return Number.isFinite(stock) && stock >= 0 && Number(item.quantity || 0) > stock
+      })
+      if (outOfStockItem) {
+        const availableStock = Number(outOfStockItem.stock ?? 0)
+        setOrderError(`Not enough stock for ${outOfStockItem.name}. Available stock: ${availableStock}.`)
+        return
+      }
+      setShowTermsModal(true)
+    } finally { openingTerms.current = false }
   }
 
+  const paymentSubmitting = useRef(false)
   const handlePaymentSubmit = async (paymentMethod, receipt, paymentPlan = 'full') => {
+    if (paymentSubmitting.current) return
     if (!acceptedTerms) {
-      setTermsError('Please accept each applicable agreement before placing your order.')
+      setOrderError('Please accept the current Terms and Conditions before payment.')
       setShowPaymentModal(false)
       return
     }
     if (!validatePayment(paymentMethod, receipt)) return
 
+    paymentSubmitting.current = true
     setIsProcessing(true)
 
     const persistOrderedCustomBuildLinks = (orderedCustomBuilds = []) => {
@@ -1276,6 +1269,7 @@ export function CheckoutPage() {
         shippingMethod,
         paymentMethod: mappedPaymentMethod,
         termsAccepted: acceptedTerms,
+        checkoutAcknowledgmentId: termsAcceptance.checkoutId,
         shippingAddressId: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedAddressId) ? selectedAddressId : undefined,
         billingAddress: {
           street: finalAddress.street,
@@ -1374,6 +1368,7 @@ export function CheckoutPage() {
       setShowPaymentModal(false)
     } finally {
       setIsProcessing(false)
+      paymentSubmitting.current = false
     }
   }
 
@@ -1502,12 +1497,6 @@ export function CheckoutPage() {
                   onPlaceOrder={handlePlaceOrderClick}
                   isProcessing={isProcessing}
                   disabled={hasNoAddresses || !hasSelectedItems || isPreparingCart}
-                  onViewTerms={handleOpenTermsModal}
-                  onToggleTerms={handleToggleTerms}
-                  termsAccepted={acceptedTerms}
-                  termsTypes={termsTypes}
-                  acceptedTermsByType={acceptedTermsByType}
-                  termsError={termsError}
                   monthlyPayment={monthlyPayment}
                   estimatedCompletion={estimatedCompletion}
                 />
@@ -1550,7 +1539,7 @@ export function CheckoutPage() {
         isOpen={showTermsModal}
         onClose={handleCloseTermsModal}
         types={termsTypes}
-        initialType={viewedTermsType}
+        onAgree={handleAgreeTerms}
       />
     </>
   )

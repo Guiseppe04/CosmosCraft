@@ -55,9 +55,9 @@ exports.createOAuthUser = async (userData) => {
 
     // Insert user
     const userRes = await client.query(
-      `INSERT INTO users (email, first_name, middle_name, last_name, is_verified) 
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [userData.email, userData.firstName, userData.middleName || null, userData.lastName, isVerified]
+      `INSERT INTO users (email, first_name, middle_name, last_name, is_verified, terms_registration_pending)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [userData.email, userData.firstName, userData.middleName || null, userData.lastName, isVerified, !userData.termsAgreement]
     );
     const user = userRes.rows[0];
 
@@ -78,6 +78,9 @@ exports.createOAuthUser = async (userData) => {
       await rbacService.assignRoleToUser(user.user_id, defaultRole.role_id, user.user_id, null, client);
     }
 
+    if (userData.termsAgreement) {
+      await require('./termsService').recordAccount(user.user_id, userData.termsAgreement, 'registration', client);
+    }
     await client.query('COMMIT');
     return user;
   } catch (err) {
@@ -139,6 +142,7 @@ exports.createEmailUser = async (userData) => {
       await rbacService.assignRoleToUser(user.user_id, defaultRole.role_id, user.user_id, null, client);
     }
 
+    await require('./termsService').recordAccount(user.user_id, userData.termsAgreement, 'registration', client);
     await client.query('COMMIT');
     delete user.password_hash;
     return user;

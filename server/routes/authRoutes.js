@@ -8,6 +8,10 @@ const rbacService = require('../services/rbacService');
 const { oauthSingleUseGuard } = require('../middleware/oauthGuard');
 
 const router = express.Router();
+const termsController = require('../controllers/termsController');
+router.get('/terms/status', authenticateToken, termsController.status);
+router.post('/terms/account', authenticateToken, termsController.acceptAccount);
+router.post('/terms/checkout', authenticateToken, termsController.acceptCheckout);
 
 // Dedicated rate limiter scoped to the forgot-password route only.
 // Prevents abuse/spam of the email-sending endpoint (max 5 requests per IP per hour).
