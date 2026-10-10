@@ -4,8 +4,16 @@ import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 import { chromium } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
+import postcss from 'postcss'
+import tailwindcss from 'tailwindcss'
+import autoprefixer from 'autoprefixer'
 
-test('checkout survives cart empty/refill transitions and completes a multiple-item order', async () => {
+for (const shippingAddress of [
+  { city: 'Manila', barangay: 'Barangay 1', province: 'Metro Manila', postal_code: '1000' },
+  { city: 'Quezon City', barangay: 'Batasan Hills', province: null, postal_code: '1126' },
+]) test('checkout survives cart transitions and completes an order: ' + shippingAddress.city, async () => {
+  const css = await postcss([tailwindcss({content:['./src/app/pages/CheckoutPage.jsx','./src/app/components/PaymentModal.jsx','./src/app/components/TermsAndConditionsModal.jsx']}),autoprefixer]).process((await readFile(new URL('../src/styles/globals.css',import.meta.url),'utf8')).replace(/^@import.*$/gm,''),{from:undefined});
   const items = [
     { cart_item_id: 11, id: 'guitar', name: 'Guitar', price: 12000, quantity: 2, stock: 5, type: 'product' },
     { cart_item_id: 12, id: 'strings', name: 'Strings', price: 500, quantity: 3, stock: 10, type: 'product' },
@@ -29,7 +37,7 @@ test('checkout survives cart empty/refill transitions and completes a multiple-i
       builder.onLoad({ filter: /AuthContext\.jsx$/ }, () => ({ loader: 'js', contents: `
         const user = {id:'customer', name:{firstName:'Test',lastName:'Customer'}, addresses:[{
           address_id:'11111111-1111-4111-8111-111111111111', street_line1:'123 Test Street',
-          city:'Manila', province:'Metro Manila', postal_code:'1000', country:'PH', is_default:true
+          ...${JSON.stringify(shippingAddress)}, country:'PH', is_default:true
         }]};
         export const useAuth = () => ({isAuthenticated:true,user});
       ` }))
@@ -55,6 +63,7 @@ test('checkout survives cart empty/refill transitions and completes a multiple-i
   const removed = []
   const server = createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json')
+    if (req.url === '/style.css') { res.setHeader('Content-Type','text/css'); return res.end(css.css) }
     if (req.url === '/bundle.js') {
       res.setHeader('Content-Type', 'application/javascript')
       return res.end(fixture.outputFiles[0].text)
@@ -63,6 +72,7 @@ test('checkout survives cart empty/refill transitions and completes a multiple-i
       cart:{items:items.map(item=>({cart_item_id:item.cart_item_id,quantity:item.quantity,unit_price:item.price,
         product:{product_id:item.id,name:item.name,stock:item.stock}}))}, checkout_data:{tax_rate:0},
     }}))
+    if (req.url === '/auth/terms/checkout') return res.end(JSON.stringify({data:{}}))
     if (req.url === '/api/orders') {
       let body = ''
       for await (const chunk of req) body += chunk
@@ -72,7 +82,7 @@ test('checkout survives cart empty/refill transitions and completes a multiple-i
     if (req.method === 'DELETE' && req.url.startsWith('/api/cart/items/')) removed.push(req.url)
     if (req.url.startsWith('/api/')) return res.end(JSON.stringify({status:'success',data:{}}))
     res.setHeader('Content-Type', 'text/html')
-    res.end(`<div id="root"></div><script>window.testCart=${JSON.stringify(items)}</script><script src="/bundle.js"></script>`)
+    res.end(`<link rel="stylesheet" href="/style.css"><div id="root"></div><script>window.testCart=${JSON.stringify(items)}</script><script src="/bundle.js"></script>`)
   })
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   let browser
@@ -88,8 +98,11 @@ test('checkout survives cart empty/refill transitions and completes a multiple-i
     await page.getByRole('heading',{name:'Your Cart is Empty',exact:true}).waitFor()
     await page.evaluate(()=>window.replaceCart(window.testCart))
     await page.getByRole('heading',{name:'Checkout',exact:true}).waitFor()
-    await page.getByRole('checkbox',{name:'I have read and agree to the Order Terms and Conditions.'}).check()
     await page.getByRole('button',{name:'Continue to Payment',exact:true}).click()
+    const terms = page.getByRole('dialog', { name: 'Terms and Conditions', exact: true });
+    await terms.waitFor();
+    await terms.locator('[tabindex="0"]').evaluate(element => { element.scrollTop = element.scrollHeight; element.dispatchEvent(new Event('scroll', { bubbles: true })); });
+    await page.getByRole('button', { name: 'I Have Read and Agree to the Terms and Conditions', exact: true }).click();
     await page.locator('input[type=file]').setInputFiles({
       name:'receipt.png',mimeType:'image/png',
       buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64'),
@@ -98,6 +111,8 @@ test('checkout survives cart empty/refill transitions and completes a multiple-i
     await page.getByRole('heading',{name:'Order Placed!',exact:true}).waitFor()
     assert.equal(await page.getByRole('heading',{name:'Your Cart is Empty',exact:true}).count(),0)
     assert.equal(orders.length,1)
+    assert.equal(orders[0].billingAddress.stateProvince, null)
+    assert.equal(orders[0].billingAddress.city, shippingAddress.city)
     assert.deepEqual(orders[0].cartItemIds,[11,12])
     assert.deepEqual(removed.sort(),['/api/cart/items/11','/api/cart/items/12'])
     await page.getByRole('heading',{name:'My Purchases',exact:true}).waitFor()

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { getMunicipalityByCode, getProvinceByCode, getPostalCodesByMunicipality } = require('@aivangogh/ph-address');
 
 let _dataset = null;
 let _loadError = null;
@@ -86,7 +87,17 @@ function getCityByCode(cityCode) {
   if (!cityCode) return null;
   const cities = getCities();
   const city = cities.find(c => c.code === String(cityCode));
-  if (!city) return null;
+  if (!city) {
+    const location = getMunicipalityByCode(String(cityCode));
+    if (!location) return null;
+    return {
+      code: location.psgcCode, city: location.name,
+      province: getProvinceByCode(location.provinceCode)?.name || '',
+      provinceCode: location.provinceCode,
+      zips: [...new Set(getPostalCodesByMunicipality(location.psgcCode).map(p => p.postalCode))],
+      zipCoverage: 'partial',
+    };
+  }
   return {
     code: city.code,
     city: city.city,
@@ -143,6 +154,13 @@ function validateZipCode(cityCode, zipCode) {
     return { valid: false, message: 'Selected city is not recognized.' };
   }
 
+  // The PSGC postal supplement only contains base delivery codes, not every
+  // district ZIP (for example Quezon City 1126). Do not reject valid addresses
+  // based on that incomplete coverage; keep exact checks for the existing dataset.
+  if (city.zipCoverage === 'partial') {
+    const valid = /^\d{4}$/.test(normalized);
+    return { valid, message: valid ? 'ZIP code format is valid. Please confirm the postal code for your delivery address.' : 'Philippine ZIP code must contain four digits.', city: { code: city.code, city: city.city, province: city.province }, zips: city.zips, zipCoverage: 'partial' };
+  }
   if (city.zips.length === 0) {
     return {
       valid: false,

@@ -1,4 +1,5 @@
 const Joi = require('joi');
+const { validateShippingAddress } = require('./phAddress');
 const shippingFeeSchema = Joi.number().min(0).max(9999999999.99).precision(2).strict().messages({
   'any.required': 'Additional shipping fee is required before shipping.',
   'number.base': 'Additional shipping fee must be a number.',
@@ -225,6 +226,7 @@ exports.emailSignupSchema = Joi.object({
       'any.required': 'Confirmation password is required',
     }),
   address: Joi.object({
+    regionCode: Joi.string().pattern(/^\d{10}$/).optional(),
     streetLine1: Joi.string()
       .min(2)
       .max(100)
@@ -268,7 +270,7 @@ exports.emailSignupSchema = Joi.object({
     stateProvince: Joi.string()
       .min(2)
       .max(50)
-      .required()
+      .optional().allow(null, '')
       .trim()
       .pattern(PH_PLACE_NAME_PATTERN)
       .messages({
@@ -290,8 +292,8 @@ exports.emailSignupSchema = Joi.object({
         'any.required': 'Postal code is required',
       }),
      country: Joi.string()
-      .length(2)
-      .required()
+      .valid('PH')
+      .default('PH')
       .trim()
       .pattern(/^[A-Z]{2}$/)
       .uppercase()
@@ -314,7 +316,7 @@ exports.emailSignupSchema = Joi.object({
       .messages({
         'string.pattern.base': 'Province PSGC code must be a 10-digit number',
       }),
-  }).required(),
+  }).custom(validateShippingAddress).required(),
 });
 
 // Admin-created staff/admin accounts (Users tab → Add Staff)
@@ -371,7 +373,8 @@ exports.emailLoginSchema = Joi.object({
 });
 
 // Add/Update Single Address
-exports.addAddressSchema = Joi.object({
+const baseAddressSchema = Joi.object({
+  regionCode: Joi.string().pattern(/^\d{10}$/).optional(),
   label: Joi.string()
     .max(50)
     .optional()
@@ -387,14 +390,18 @@ exports.addAddressSchema = Joi.object({
     then: addressFields.barangay.required().messages({ 'any.required': 'Barangay is required' }),
     otherwise: addressFields.barangay.optional().allow(''),
   }),
-  stateProvince: addressFields.stateProvince,
+  stateProvince: addressFields.stateProvince.optional().allow(null, ''),
   postalZipCode: addressFields.postalZipCode,
-  country: addressFields.country,
+  country: Joi.string().valid('PH').default('PH'),
   isDefault: addressFields.isDefault,
 });
+exports.addAddressSchema = baseAddressSchema.custom(validateShippingAddress);
+// Branch settings retain their existing validation, independently of shipping addresses.
+exports.branchAddressBaseSchema = baseAddressSchema.keys({ country: addressFields.country, stateProvince: addressFields.stateProvince });
 
 // Update Address (partial fields allowed)
 exports.updateAddressSchema = Joi.object({
+  regionCode: Joi.string().pattern(/^\d{10}$/).optional(),
   label: Joi.string()
     .max(50)
     .optional()
@@ -406,9 +413,9 @@ exports.updateAddressSchema = Joi.object({
   streetLine2: addressFields.streetLine2,
   city: addressFields.city.optional(),
   barangay: addressFields.barangay.optional(),
-  stateProvince: addressFields.stateProvince.optional(),
+  stateProvince: addressFields.stateProvince.optional().allow(null, ''),
   postalZipCode: addressFields.postalZipCode.optional(),
-  country: addressFields.country.optional(),
+  country: Joi.string().valid('PH').optional(),
   isDefault: addressFields.isDefault,
 });
 
@@ -815,7 +822,7 @@ exports.createOrderSchema = Joi.object({
         'string.max': 'Barangay must not exceed 80 characters',
       }),
     }),
-    stateProvince: Joi.string().min(2).max(50).required().trim().messages({
+    stateProvince: Joi.string().min(2).max(50).optional().allow(null, '').trim().messages({
       'string.min': 'Province must be at least 2 characters',
       'string.max': 'Province must not exceed 50 characters',
       'any.required': 'Province is required',
@@ -825,11 +832,11 @@ exports.createOrderSchema = Joi.object({
       'string.max': 'Postal code must not exceed 20 characters',
       'any.required': 'Postal code is required',
     }),
-    country: Joi.string().length(2).required().trim().uppercase().messages({
+    country: Joi.string().valid('PH').default('PH').trim().uppercase().messages({
       'string.length': 'Country code must be 2 characters',
       'any.required': 'Country is required',
     }),
-  }).required(),
+  }).custom(validateShippingAddress).required(),
   checkoutAcknowledgmentId: Joi.string().uuid().required(),
   termsAccepted: Joi.boolean().valid(true).required().messages({
     'any.only': 'You must accept the terms and conditions',

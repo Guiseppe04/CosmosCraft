@@ -1,60 +1,41 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Country } from 'country-state-city'
-import {
-  getAllProvinces,
-  getMunicipalitiesByProvince,
-  getBarangaysByMunicipality
-} from '@aivangogh/ph-address'
+import { useEffect, useMemo, useState, useId as reactUseId } from 'react'
+import { regions, provincesInRegion, citiesFor, barangaysFor, resolveSavedLocation } from '../utils/phAddress'
 import { Home, Building, X, CheckCircle2, AlertCircle, Loader } from 'lucide-react'
 import { useZipValidation } from '../hooks/useZipValidation'
-
-const ALL_COUNTRIES = Country.getAllCountries()
-const PHILIPPINES = ALL_COUNTRIES.find((c) => c.isoCode === 'PH')
-const COUNTRIES = PHILIPPINES
-  ? [PHILIPPINES, ...ALL_COUNTRIES.filter((c) => c.isoCode !== 'PH')]
-  : ALL_COUNTRIES
-
 const ADDRESS_CATEGORIES = ['Home', 'Work', 'Other']
 
-const resolveProvinceCode = (country, rawProvince) => {
-  if (country !== 'PH' || !rawProvince) return rawProvince || ''
-  const provinces = getAllProvinces()
-  const matched = provinces.find(
-    (p) => p.psgcCode === rawProvince || p.name?.toLowerCase() === String(rawProvince).toLowerCase()
-  )
-  return matched ? matched.psgcCode : rawProvince
-}
+const locationSelectClass = 'w-full min-w-0 px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)] disabled:opacity-50'
 
-const resolveCityCode = (provinceCode, rawCity) => {
-  if (!provinceCode || !rawCity) return rawCity || ''
-  try {
-    const cities = getMunicipalitiesByProvince(provinceCode)
-    const matchedCity = cities.find(
-      (c) => c.psgcCode === rawCity || c.name?.toLowerCase() === String(rawCity).toLowerCase()
-    )
-    return matchedCity ? matchedCity.psgcCode : rawCity
-  } catch (err) {
-    return rawCity || ''
-  }
+function LocationSelect({ id, label, value, onChange, options, placeholder, disabled, error, required = true }) {
+  return (
+    <div className="min-w-0">
+      <label htmlFor={id} className="block text-sm font-medium text-[var(--text-muted)] mb-2">
+        {label} {required && <span className="text-red-400">*</span>}
+      </label>
+      <select id={id} aria-label={label} aria-required={required} aria-invalid={Boolean(error)}
+        aria-describedby={error ? id + '-error' : undefined} value={value}
+        onChange={event => onChange(event.target.value)} disabled={disabled} className={locationSelectClass}>
+        <option value="">{placeholder}</option>
+        {options.map(item => <option key={item.psgcCode} value={item.psgcCode}>
+          {item.designation ? (item.designation === 'NCR' ? 'NCR – ' + item.name : item.name + ' – ' + item.designation) : item.name}
+        </option>)}
+      </select>
+      {error && <p id={id + '-error'} role="alert" className="text-xs text-red-400 mt-1.5">{error}</p>}
+    </div>
+  )
 }
 
 const normalizeInitialAddress = (address = {}) => {
-  const rawCountry = String(address.country || address.country_code || 'PH').toUpperCase()
-  const rawProvince = address.stateProvince ?? address.province ?? ''
-  const resolvedProvinceCode = resolveProvinceCode(rawCountry, rawProvince)
-  const rawCity = address.city ?? ''
-  const resolvedCityCode = resolveCityCode(resolvedProvinceCode, rawCity)
+  const location = resolveSavedLocation(address)
   const rawLabel = address.label || address.category || 'Home'
 
   return {
     label: ADDRESS_CATEGORIES.includes(rawLabel) ? rawLabel : 'Home',
-    country: /^[A-Z]{2}$/.test(rawCountry) ? rawCountry : 'PH',
+    country: 'PH',
     streetLine1: address.streetLine1 ?? address.street_line1 ?? address.street ?? '',
     streetLine2: address.streetLine2 ?? address.street_line2 ?? address.street2 ?? '',
-    province: resolvedProvinceCode || '',
-    city: resolvedCityCode || '',
-    barangay: address.barangay ?? '',
-    stateProvince: rawProvince || '',
+    ...location,
+    stateProvince: address.stateProvince ?? address.province ?? '',
     postalZipCode: address.postalZipCode ?? address.postal_code ?? address.postalCode ?? '',
     isDefault: Boolean(address.isDefault ?? address.is_default),
   }
@@ -69,14 +50,21 @@ export function AddressForm({
   showCategory = true,
   showDefault = true,
 }) {
+  const addressFormId = reactUseId()
   const [formData, setFormData] = useState(() => normalizeInitialAddress(initialAddress))
   const [errors, setErrors] = useState({})
-  const [locationData, setLocationData] = useState({ provinces: [], cities: [], barangays: [] })
-
-  const isPhilippines = formData.country === 'PH'
+  const isPhilippines = true
+  const isNcr = formData.region === '1300000000'
+  const locationData = useMemo(() => ({
+    provinces: provincesInRegion(formData.region),
+    cities: citiesFor(formData.region, formData.province),
+    barangays: formData.city ? barangaysFor(formData.city) : [],
+  }), [formData.region, formData.province, formData.city])
+  const provinceRequired = !isNcr && !locationData.cities.some(c => c.psgcCode === formData.city && !formData.province)
 
   const {
     isValid: zipValid,
+    message: zipMessage,
     isLoading: zipLoading,
     error: zipError,
     validate: validateZip,
@@ -105,84 +93,13 @@ export function AddressForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialAddressKey])
 
-  useEffect(() => {
-    if (!isPhilippines) {
-      setLocationData({ provinces: [], cities: [], barangays: [] })
-      return
-    }
-
-    if (locationData.provinces.length > 0) return
-
-    try {
-      const provinces = getAllProvinces()
-      setLocationData((prev) => ({ ...prev, provinces, cities: [], barangays: [] }))
-    } catch (err) {
-      console.error('Failed to load provinces:', err)
-      setLocationData({ provinces: [], cities: [], barangays: [] })
-    }
-  }, [isPhilippines, locationData.provinces.length])
-
-  useEffect(() => {
-    if (!isPhilippines || !formData.province) return
-    try {
-      const cities = getMunicipalitiesByProvince(formData.province)
-      setLocationData((prev) => ({ ...prev, cities, barangays: [] }))
-    } catch (err) {
-      console.error('Failed to load cities:', err)
-      setLocationData((prev) => ({ ...prev, cities: [], barangays: [] }))
-    }
-  }, [isPhilippines, formData.province])
-
-  useEffect(() => {
-    if (!isPhilippines || !formData.city) return
-    try {
-      const barangays = getBarangaysByMunicipality(formData.city)
-      setLocationData((prev) => ({ ...prev, barangays }))
-    } catch (err) {
-      console.error('Failed to load barangays:', err)
-      setLocationData((prev) => ({ ...prev, barangays: [] }))
-    }
-  }, [isPhilippines, formData.city])
-
-  const handleProvinceChange = (provinceCode, provinceName) => {
-    setFormData((prev) => ({
-      ...prev,
-      province: provinceCode,
-      stateProvince: provinceName,
-      city: '',
-      barangay: '',
-    }))
-    if (!provinceCode) {
-      setLocationData((prev) => ({ ...prev, cities: [], barangays: [] }))
-      return
-    }
-    try {
-      const cities = getMunicipalitiesByProvince(provinceCode)
-      setLocationData((prev) => ({ ...prev, cities, barangays: [] }))
-    } catch (err) {
-      console.error('Failed to load cities:', err)
-      setLocationData((prev) => ({ ...prev, cities: [], barangays: [] }))
-    }
+  const resetLocation = (changes) => {
+    setFormData(prev => ({ ...prev, ...changes }))
+    setErrors({})
   }
-
-  const handleCityChange = (cityCode, cityName) => {
-    setFormData((prev) => ({
-      ...prev,
-      city: cityCode,
-      barangay: '',
-    }))
-    if (!cityCode) {
-      setLocationData((prev) => ({ ...prev, barangays: [] }))
-      return
-    }
-    try {
-      const barangays = getBarangaysByMunicipality(cityCode)
-      setLocationData((prev) => ({ ...prev, barangays }))
-    } catch (err) {
-      console.error('Failed to load barangays:', err)
-      setLocationData((prev) => ({ ...prev, barangays: [] }))
-    }
-  }
+  const handleRegionChange = region => resetLocation({ region, province: '', stateProvince: '', city: '', barangay: '' })
+  const handleProvinceChange = province => resetLocation({ province, city: '', barangay: '' })
+  const handleCityChange = city => resetLocation({ city, barangay: '' })
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -196,14 +113,10 @@ export function AddressForm({
     if (showCategory && !formData.label?.trim()) nextErrors.label = 'Address label is required'
     if (!formData.streetLine1?.trim()) nextErrors.streetLine1 = 'Street address is required'
     if (!formData.country?.trim()) nextErrors.country = 'Country is required'
-    if (isPhilippines) {
-      if (!formData.province) nextErrors.province = 'Province is required'
-      if (!formData.city) nextErrors.city = 'City is required'
-      if (!formData.barangay) nextErrors.barangay = 'Barangay is required'
-    } else {
-      if (!formData.stateProvince?.trim()) nextErrors.stateProvince = 'Province is required'
-      if (!formData.city?.trim()) nextErrors.city = 'City is required'
-    }
+    if (!formData.region) nextErrors.region = 'Select a region'
+    if (provinceRequired && !locationData.provinces.some(p => p.psgcCode === formData.province)) nextErrors.province = 'Select a province or an independent city'
+    if (!locationData.cities.some(c => c.psgcCode === formData.city)) nextErrors.city = 'Select a city in the selected region or province'
+    if (!locationData.barangays.some(b => b.psgcCode === formData.barangay)) nextErrors.barangay = 'Select a barangay in the selected city'
     if (!formData.postalZipCode?.trim()) {
       nextErrors.postalZipCode = 'Postal code is required'
     } else if (isPhilippines && formData.city && formData.postalZipCode.trim() && zipValid === false) {
@@ -221,6 +134,7 @@ export function AddressForm({
 
   const resolveProvinceName = () => {
     if (!isPhilippines) return formData.stateProvince?.trim() || ''
+    if (!formData.province) return null
     const selectedProvince = locationData.provinces.find((p) => p.psgcCode === formData.province)
     return selectedProvince?.name || String(formData.stateProvince || formData.province || '').trim()
   }
@@ -229,12 +143,13 @@ export function AddressForm({
     if (!validate()) return
     const payload = {
       ...(showCategory ? { label: formData.label } : {}),
-      country: formData.country,
+      country: 'PH',
+      regionCode: formData.region,
       streetLine1: formData.streetLine1.trim(),
       streetLine2: formData.streetLine2?.trim() || '',
       city: resolveCityName(),
       stateProvince: resolveProvinceName(),
-      barangay: formData.barangay?.trim() || '',
+      barangay: locationData.barangays.find(b => b.psgcCode === formData.barangay)?.name || '',
       postalZipCode: formData.postalZipCode.trim(),
       ...(showDefault ? { isDefault: Boolean(formData.isDefault) } : {}),
     }
@@ -268,18 +183,7 @@ export function AddressForm({
 
       <div>
         <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Country <span className="text-red-400" style={{ color: '#f87171' }}>*</span></label>
-        <select
-          value={formData.country}
-          onChange={(e) => handleChange('country', e.target.value)}
-          className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)] appearance-none cursor-pointer"
-        >
-          <option value="" disabled className="bg-[var(--surface-dark)]">Select Country</option>
-          {COUNTRIES.map((country) => (
-            <option key={country.isoCode} value={country.isoCode} className="bg-[var(--surface-dark)]">
-              {country.name}
-            </option>
-          ))}
-        </select>
+        <input value="Philippines" readOnly aria-label="Country" className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)]" />
         {errors.country && <p className="text-xs text-red-400 mt-1.5">{errors.country}</p>}
       </div>
 
@@ -306,97 +210,22 @@ export function AddressForm({
         />
       </div>
 
-      {isPhilippines ? (
-        <>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Province <span className="text-red-400" style={{ color: '#f87171' }}>*</span></label>
-              <select
-                value={formData.province}
-                onChange={(e) => {
-                  const selected = locationData.provinces.find((option) => option.psgcCode === e.target.value)
-                  handleProvinceChange(e.target.value, selected?.name || '')
-                }}
-                className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)] appearance-none cursor-pointer"
-              >
-                <option value="" className="bg-[var(--surface-dark)]">Select Province</option>
-                {locationData.provinces.map((province) => (
-                  <option key={province.psgcCode} value={province.psgcCode} className="bg-[var(--surface-dark)]">
-                    {province.name}
-                  </option>
-                ))}
-              </select>
-              {errors.province && <p className="text-xs text-red-400 mt-1.5">{errors.province}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">City / Municipality <span className="text-red-400" style={{ color: '#f87171' }}>*</span></label>
-              <select
-                value={formData.city}
-                onChange={(e) => {
-                  const selected = locationData.cities.find((option) => option.psgcCode === e.target.value)
-                  handleCityChange(e.target.value, selected?.name || '')
-                }}
-                disabled={!formData.province}
-                className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)] appearance-none cursor-pointer disabled:opacity-50"
-              >
-                <option value="" className="bg-[var(--surface-dark)]">
-                  {formData.province ? 'Select City' : 'Select a province first'}
-                </option>
-                {locationData.cities.map((city) => (
-                  <option key={city.psgcCode} value={city.psgcCode} className="bg-[var(--surface-dark)]">
-                    {city.name}
-                  </option>
-                ))}
-              </select>
-              {errors.city && <p className="text-xs text-red-400 mt-1.5">{errors.city}</p>}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Barangay <span className="text-red-400" style={{ color: '#f87171' }}>*</span></label>
-            <select
-              value={formData.barangay}
-              onChange={(e) => handleChange('barangay', e.target.value)}
-              disabled={!formData.city}
-              className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)] appearance-none cursor-pointer disabled:opacity-50"
-            >
-              <option value="" className="bg-[var(--surface-dark)]">
-                {formData.city ? 'Select Barangay' : 'Select a city first'}
-              </option>
-              {locationData.barangays.map((barangay) => (
-                <option key={barangay.psgcCode} value={barangay.name} className="bg-[var(--surface-dark)]">
-                  {barangay.name}
-                </option>
-              ))}
-            </select>
-            {errors.barangay && <p className="text-xs text-red-400 mt-1.5">{errors.barangay}</p>}
-          </div>
-        </>
-      ) : (
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">State / Province <span className="text-red-400" style={{ color: '#f87171' }}>*</span></label>
-            <input
-              type="text"
-              value={formData.stateProvince}
-              onChange={(e) => handleChange('stateProvince', e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)]"
-              placeholder="State / Province"
-            />
-            {errors.stateProvince && <p className="text-xs text-red-400 mt-1.5">{errors.stateProvince}</p>}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">City <span className="text-red-400" style={{ color: '#f87171' }}>*</span></label>
-            <input
-              type="text"
-              value={formData.city}
-              onChange={(e) => handleChange('city', e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)]"
-              placeholder="City"
-            />
-            {errors.city && <p className="text-xs text-red-400 mt-1.5">{errors.city}</p>}
-          </div>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <LocationSelect id={addressFormId + '-region'} label="Region" value={formData.region}
+          onChange={handleRegionChange} options={regions} placeholder="Select Region" error={errors.region} />
+        {!isNcr && <LocationSelect id={addressFormId + '-province'} label="Province" value={formData.province}
+          onChange={handleProvinceChange} options={locationData.provinces} placeholder="Select Province"
+          disabled={!formData.region} required={provinceRequired} error={errors.province} />}
+        <LocationSelect id={addressFormId + '-city'} label="City / Municipality" value={formData.city}
+          onChange={handleCityChange} options={locationData.cities}
+          placeholder={!formData.region ? 'Select a region first' : !locationData.cities.length ? 'Select a province first' : 'Select City / Municipality'}
+          disabled={!formData.region || !locationData.cities.length} error={errors.city} />
+        <LocationSelect id={addressFormId + '-barangay'} label="Barangay" value={formData.barangay}
+          onChange={value => handleChange('barangay', value)} options={locationData.barangays}
+          placeholder={formData.city ? 'Select Barangay' : 'Select a city first'} disabled={!formData.city} error={errors.barangay} />
+      </div>
+      {!isNcr && formData.region && !formData.province && locationData.cities.length > 0 && (
+        <p className="text-xs text-[var(--text-muted)]">Select a province, or choose an independent city directly.</p>
       )}
 
       <div>
@@ -428,7 +257,7 @@ export function AddressForm({
           <p className="text-xs text-red-400 mt-1.5">{zipError}</p>
         )}
         {!errors.postalZipCode && isPhilippines && formData.city && formData.postalZipCode.trim() && !zipLoading && zipValid === true && (
-          <p className="text-xs text-green-400 mt-1.5"><span style={{ color: '#10b981' }}>Valid ZIP code for the selected city ✓</span></p>
+          <p className="text-xs text-green-400 mt-1.5"><span style={{ color: '#10b981' }}>{zipMessage || 'Valid ZIP code for the selected city ✓'}</span></p>
         )}
       </div>
 
@@ -455,7 +284,7 @@ export function AddressForm({
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={isSubmitting}
+          disabled={isSubmitting || zipLoading}
           className="flex-1 py-3 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-sm font-semibold text-[var(--text-dark)] hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting ? 'Saving...' : submitLabel}

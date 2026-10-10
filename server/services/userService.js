@@ -1,4 +1,6 @@
 const bcrypt = require('bcryptjs');
+const { normalizeShippingAddress } = require('../utils/phAddress');
+const { AppError } = require('../middleware/errorHandler');
 const { pool } = require('../config/database');
 const rbacService = require('./rbacService');
 const { lockAppointmentCapacity } = require('../middleware/appointmentCapacityLock');
@@ -352,6 +354,16 @@ exports.updateAddress = async (userId, addressId, updates) => {
   try {
     await client.query('BEGIN');
     
+    if (['regionCode', 'city', 'barangay', 'stateProvince', 'country'].some(key => Object.hasOwn(updates, key))) {
+      const existing = await client.query('SELECT * FROM addresses WHERE address_id = $1 AND user_id = $2 FOR UPDATE', [addressId, userId]);
+      if (!existing.rows[0]) throw new AppError('Address not found', 404);
+      const record = existing.rows[0];
+      try {
+        const normalized = normalizeShippingAddress({ city: record.city, barangay: record.barangay, stateProvince: record.province, country: record.country, ...updates });
+        updates = { ...updates, city: normalized.city, barangay: normalized.barangay, stateProvince: normalized.stateProvince, country: 'PH' };
+      } catch (error) { throw new AppError(error.message, 400); }
+    }
+
     if (updates.isDefault) {
       await client.query('UPDATE addresses SET is_default = false WHERE user_id = $1', [userId]);
     }

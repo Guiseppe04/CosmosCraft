@@ -761,7 +761,7 @@ function OrderFulfillmentPanel({ order, onRefreshOrder, onManageProject }) {
                   <p className="font-semibold text-white">{addr.label || 'Customer Delivery Address'}</p>
                   <p>{addr.line1}{addr.line2 ? `, ${addr.line2}` : ''}</p>
                   {addr.barangay && <p>Brgy. {addr.barangay}</p>}
-                  <p>{addr.city}, {addr.province} {addr.postal_code || ''}</p>
+                  <p>{[addr.city, addr.province].filter(Boolean).join(', ')} {addr.postal_code || ''}</p>
                   <p className="text-[var(--text-muted)]">{addr.country || 'Philippines'}</p>
                 </div>
               ) : (

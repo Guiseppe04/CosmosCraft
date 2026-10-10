@@ -154,7 +154,7 @@ CREATE TABLE addresses (
     line2 VARCHAR(150),
     city VARCHAR(80) NOT NULL,
     barangay VARCHAR(80),
-    province VARCHAR(80) NOT NULL,
+    province VARCHAR(80),
     postal_code VARCHAR(20) NOT NULL,
     country CHAR(2) NOT NULL,
     is_default BOOLEAN NOT NULL DEFAULT FALSE,

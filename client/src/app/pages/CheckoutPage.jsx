@@ -14,6 +14,7 @@ import { PaymentModal } from '../components/PaymentModal.jsx'
 import TermsAndConditionsModal from '../components/TermsAndConditionsModal.jsx'
 import { TERMS_VERSIONS, createCheckoutId, saveAgreement } from '../utils/termsAgreement'
 import { getCheckoutTermsTypes, TERMS_BY_TYPE } from '../utils/checkoutTerms'
+import { resolveSavedLocation } from '../utils/phAddress'
 import { AddressForm } from '../components/AddressForm.jsx'
 import { API, getAuthHeaders } from '../utils/apiConfig'
 import api from '../services/api.js'
@@ -1010,6 +1011,7 @@ export function CheckoutPage() {
       }
       
       const payload = {
+        regionCode: addressData.regionCode,
         label: addressData.label,
         streetLine1: addressData.streetLine1,
         streetLine2: addressData.streetLine2,
@@ -1122,11 +1124,12 @@ export function CheckoutPage() {
       const requiredAddressFields = [
         selectedAddress?.street_line1 ?? selectedAddress?.street ?? selectedAddress?.line1,
         selectedAddress?.city,
-        selectedAddress?.province ?? selectedAddress?.stateProvince,
         selectedAddress?.postal_code ?? selectedAddress?.postalZipCode ?? selectedAddress?.postalCode,
         selectedAddress?.country ?? selectedAddress?.country_code,
       ]
-      if (!selectedAddressId || requiredAddressFields.some(value => !String(value || '').trim())) {
+      const location = resolveSavedLocation(selectedAddress || {})
+      const provinceMissing = location.province && !String(selectedAddress?.province ?? selectedAddress?.stateProvince ?? '').trim()
+      if (provinceMissing || !selectedAddressId || requiredAddressFields.some(value => !String(value || '').trim())) {
         setAddressError(true)
         return
       }
@@ -1199,7 +1202,7 @@ export function CheckoutPage() {
       street: selectedAddress?.street_line1 || '',
       street2: selectedAddress?.street_line2 || '',
       city: selectedAddress?.city || '',
-      province: selectedAddress?.province || '',
+      province: resolveSavedLocation(selectedAddress || {}).province ? selectedAddress?.province || selectedAddress?.stateProvince || '' : null,
       barangay: selectedAddress?.barangay || '',
       postalCode: selectedAddress?.postal_code || '',
       country: selectedAddress?.country || 'PH'

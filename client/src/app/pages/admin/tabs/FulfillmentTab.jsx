@@ -290,9 +290,9 @@ export function FulfillmentTab({ showToast }) {
                       <td className="py-4 px-4 max-w-[200px]">
                         {method === 'delivery' ? (
                           addr ? (
-                            <div className="text-[11px] text-white/80 truncate" title={`${addr.line1}, ${addr.city}, ${addr.province}`}>
+                            <div className="text-[11px] text-white/80 truncate" title={[addr.line1, addr.city, addr.province].filter(Boolean).join(', ')}>
                               <span className="block font-medium text-white truncate">{addr.line1}</span>
-                              <span className="text-[var(--text-muted)] block truncate">{addr.city}, {addr.province}</span>
+                              <span className="text-[var(--text-muted)] block truncate">{[addr.city, addr.province].filter(Boolean).join(', ')}</span>
                             </div>
                           ) : (
                             <span className="text-xs text-[var(--text-muted)]">Saved Address</span>
