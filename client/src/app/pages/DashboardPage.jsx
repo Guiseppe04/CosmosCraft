@@ -20,6 +20,7 @@ import { useDebounce } from '../hooks/useDebounce'
 import { uploadToCloudinary } from '../utils/cloudinary.js'
 import { formatCurrency } from '../utils/formatCurrency.js'
 import { ShippingFeeNotice } from '../components/ShippingFeeNotice.jsx'
+import { getFulfillmentProgress, getOrderDisplayTotal } from '../utils/orderDisplay.js'
 import RefundDestinationForm from '../components/refunds/RefundDestinationForm'
 import CustomerRefundTracking from '../components/refunds/CustomerRefundTracking'
 import { emptyRefundDestination, refundDestinationError } from '../utils/refundWorkflow'
@@ -148,36 +149,6 @@ const NEUTRAL_BADGE = { background: 'var(--surface-light)', color: 'var(--text-l
 
 const orderBadge = (status) => ORDER_STATUS_BADGE[String(status || '').toLowerCase()] || NEUTRAL_BADGE
 const paymentBadge = (status) => PAYMENT_STATUS_BADGE[String(status || '').toLowerCase()] || NEUTRAL_BADGE
-
-// Fulfillment progress. 'received' counts as the final step alongside 'delivered'.
-const FULFILLMENT_STEPS = [
-  { key: 'processing', label: 'Processing' },
-  { key: 'shipped', label: 'Shipped' },
-  { key: 'out_for_delivery', label: 'Out for Delivery' },
-  { key: 'delivered', label: 'Delivered' },
-]
-
-const FULFILLMENT_ALIASES = {
-  processing: 'processing',
-  shipped: 'shipped',
-  out_for_delivery: 'out_for_delivery',
-  delivered: 'delivered',
-  received: 'delivered',
-}
-
-function getFulfillmentProgress(order) {
-  const statusKey = FULFILLMENT_ALIASES[String(order?.status || '').toLowerCase()]
-  if (!statusKey) return null
-  const currentIndex = FULFILLMENT_STEPS.findIndex(step => step.key === statusKey)
-  if (currentIndex === -1) return null
-  return {
-    currentIndex,
-    steps: FULFILLMENT_STEPS.map((step, index) => ({
-      ...step,
-      state: index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'upcoming',
-    })),
-  }
-}
 
 // One source of truth for the purchase tabs so labels and filters cannot drift apart.
 const PURCHASE_TABS = [
@@ -1265,7 +1236,8 @@ export function DashboardPage() {
     if (!order?.order_id) return
     try {
       setIsMarkingReceived(true)
-      await adminApi.markAsReceived(order.order_id)
+      const response = await adminApi.markAsReceived(order.order_id)
+      applyOrderUpdateFromSocket({ ...order, ...response.data, status: 'received' })
       setToastMessage('Order marked as received.')
       fetchMyOrders()
     } catch (err) {
@@ -2223,13 +2195,7 @@ export function DashboardPage() {
           ) : (
             <div className="space-y-6">
               {sortedOrders.filter(Boolean).map(order => {
-                const subtotalAmount = Number(order.subtotal || 0)
-                const shippingAmount = Number(order.shipping_cost || 0)
-                const taxAmount = Number(order.tax_amount || 0)
-                const totalAmount = Number(order.total_amount || 0)
-                const displayTotalAmount = totalAmount > 0
-                  ? Math.max(totalAmount - taxAmount, 0)
-                  : subtotalAmount + shippingAmount
+                const displayTotalAmount = getOrderDisplayTotal(order)
                 const orderItems = Array.isArray(order.items) ? order.items : []
                 const orderIsFulfilled = isFulfilled(order.status)
                 const hasCustomItems = orderItems.some(i => i.customization_id)
@@ -2457,12 +2423,6 @@ export function DashboardPage() {
                           <dt>Items</dt>
                           <dd className="text-white font-medium">{orderItems.length}</dd>
                         </div>
-                        {shippingAmount > 0 && (
-                          <div className="flex gap-2">
-                            <dt>Shipping included in order</dt>
-                            <dd className="text-white font-medium">₱{shippingAmount.toLocaleString('en-PH')}</dd>
-                          </div>
-                        )}
                       </dl>
                       <div className="text-right">
                         <span className="text-sm text-[var(--text-muted)] mb-1 block">Total Amount</span>
