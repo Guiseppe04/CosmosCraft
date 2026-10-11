@@ -23,7 +23,7 @@ test('staff POS supports void/return, pagination, filters and cash checkout', as
     plugins: [{ name: 'isolated-pos', setup(builder) {
       builder.onLoad({ filter: /AuthContext\.jsx$/ }, () => ({ loader: 'js', contents: `export const useAuth=()=>({user:{role:'staff'}});` }))
       builder.onLoad({ filter: /SocketContext\.jsx$/ }, () => ({ loader: 'js', contents: `export const useSocketEvent=()=>{}; export const useSocket=()=>({socket:null,isConnected:false});` }))
-      builder.onLoad({ filter: /apiConfig\.js$/ }, () => ({ loader: 'js', contents: `export const API=window.location.origin; export const getAuthHeaders=()=>({});` }))
+      builder.onLoad({ filter: /apiConfig\.js$/ }, () => ({ loader: 'js', contents: `export const API=window.location.origin; export const getAuthHeaders=()=>({}); export const setAuthToken=()=>{};` }))
     } }],
   })
   const requests = [], sales = [], adjustments = [], saleStatuses = new Map()

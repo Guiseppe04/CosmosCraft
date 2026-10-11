@@ -3,7 +3,7 @@
  * All functions use credentials: 'include' so the access token cookie is sent automatically.
  */
 
-import { API, getAuthHeaders } from './apiConfig'
+import { API, getAuthHeaders, setAuthToken } from './apiConfig'
 import { feedbackService } from '../services/feedbackService'
 
 const API_URL = API
@@ -29,12 +29,18 @@ async function request(path, options = {}) {
       body: isFormData ? options.body : (options.body ? JSON.stringify(options.body) : undefined),
     })
   } catch (networkError) {
+    if (options.signal?.aborted || networkError?.name === 'AbortError') {
+      throw networkError
+    }
     // fetch() rejects before any response exists (backend down, wrong port, CORS,
     // offline). Report that plainly instead of leaking the raw "Failed to fetch".
     const error = new Error('Cannot reach the server. Make sure the backend is running, then try again.')
     error.cause = networkError
     throw error
   }
+  const refreshedToken = res.headers.get('X-New-Access-Token')
+  if (refreshedToken) setAuthToken(refreshedToken)
+
   const data = await res.json()
   if (!res.ok) {
     const error = new Error(data.message || 'Request failed')
