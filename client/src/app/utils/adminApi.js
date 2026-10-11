@@ -4,6 +4,7 @@
  */
 
 import { API, getAuthHeaders, setAuthToken } from './apiConfig'
+import { authFetch } from './authFetch.js'
 import { feedbackService } from '../services/feedbackService'
 
 const API_URL = API
@@ -22,7 +23,7 @@ async function request(path, options = {}) {
 
   let res
   try {
-    res = await fetch(`${API_URL}${path}`, {
+    res = await authFetch(`${API_URL}${path}`, {
       credentials: 'include',
       ...options,
       headers,

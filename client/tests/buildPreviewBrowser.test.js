@@ -4,6 +4,7 @@ import { createServer } from 'node:http'
 import { build } from 'esbuild'
 import { chromium } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
+import securityPolicy from '../../shared/securityPolicy.cjs'
 import postcss from 'postcss'
 import tailwindcss from 'tailwindcss'
 import tailwindConfig from '../tailwind.config.js'
@@ -52,6 +53,7 @@ test('export clips multiple rotated stickers, preserves their geometry and layer
     };
   `,resolveDir:process.cwd(),loader:'jsx'},bundle:true,write:false,format:'iife',jsx:'automatic',define:{'import.meta.env':'{}'},logLevel:'silent'})
   const server=createServer((req,res)=>{
+    for (const [name,value] of Object.entries(securityPolicy.createFrontendHeaders({}, {documentOrigin:`http://${req.headers.host}`}))) res.setHeader(name,value)
     res.setHeader('Content-Type',req.url==='/bundle.js'?'application/javascript':'text/html')
     res.end(req.url==='/bundle.js'?fixture.outputFiles[0].text:'<style>body{margin:0}#root{width:400px;height:200px;background:#141414}img{height:auto}</style><div id="root"></div><script src="/bundle.js"></script>')
   })
@@ -102,6 +104,7 @@ test('electric and bass saved-build baselines ignore loading/view changes but pr
   }}]})
   const saved=[]
   const server=createServer(async(req,res)=>{
+    for (const [name,value] of Object.entries(securityPolicy.createFrontendHeaders({}, {documentOrigin:`http://${req.headers.host}`}))) res.setHeader(name,value)
     res.setHeader('Content-Type','application/json')
     if(req.url==='/styles.css'){res.setHeader('Content-Type','text/css');return res.end(stylesheet.css)}
     if(req.url==='/bundle.js'){res.setHeader('Content-Type','application/javascript');return res.end(fixture.outputFiles[0].text)}

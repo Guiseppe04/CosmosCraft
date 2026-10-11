@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
-const { generateTokens, verifyRefreshToken, revokeRefreshToken } = require('../utils/generateTokens');
+const { generateTokens, generateAccessToken, verifyRefreshToken, revokeRefreshToken } = require('../utils/generateTokens');
 const { generateOTPWithExpiry, verifyOTP } = require('../utils/otp');
 const userService = require('../services/userService');
 const rbacService = require('../services/rbacService');
@@ -288,20 +288,18 @@ exports.refreshAccessToken = asyncHandler(async (req, res, next) => {
   }
 
   const roleSummary = await rbacService.getUserRoleSummary(user.user_id, false);
-  const tokens = await generateTokens(user.user_id, roleSummary.role);
+  const accessToken = await generateAccessToken(user.user_id, roleSummary.role);
 
   const cookieOptions = getCookieOptions();
 
-  res.cookie('accessToken', tokens.accessToken, cookieOptions);
-  res.cookie('refreshToken', tokens.refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
+  res.cookie('accessToken', accessToken, cookieOptions);
 
   res.status(200).json({
     status: 'success',
     message: 'Token refreshed',
     data: {
-      token: tokens.accessToken,
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
+      token: accessToken,
+      accessToken,
     },
   });
 });
@@ -311,6 +309,7 @@ exports.logout = asyncHandler(async (req, res, next) => {
   if (refreshToken) await revokeRefreshToken(refreshToken);
 
   const cookieOptions = getCookieOptions();
+  delete cookieOptions.maxAge;
   res.clearCookie('accessToken', cookieOptions);
   res.clearCookie('refreshToken', cookieOptions);
   res.status(200).json({ status: 'success', message: 'Logged out successfully' });

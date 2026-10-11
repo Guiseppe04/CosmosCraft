@@ -20,6 +20,14 @@ import { GUITAR_TYPE_OPTIONS } from '../lib/guitarBuilderData.js'
 import { hasRole } from '../utils/roles.js'
 import { scrollToHomeSection } from '../utils/sectionNavigation.js'
 
+function SessionLoadingIndicator() {
+  return (
+    <span role="status" aria-label="Checking session" className="inline-flex h-9 w-9 items-center justify-center">
+      <span aria-hidden="true" className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--gold-primary)]" />
+    </span>
+  )
+}
+
 export function Header() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -36,7 +44,7 @@ export function Header() {
   const profileMenuRef = useRef(null)
   const mobileProfileRef = useRef(null)
   const { getCartCount, setIsOpen: setCartOpen } = useCart()
-  const { isAuthenticated, user, openLogin, logout } = useAuth()
+  const { isAuthenticated, isLoadingUser, user, openLogin, logout } = useAuth()
   const cartCount = getCartCount()
 
   const isAdminOrStaff =
@@ -250,7 +258,7 @@ export function Header() {
           </button>
 
           <div className="relative" ref={mobileProfileRef}>
-            {isAuthenticated ? (
+            {isLoadingUser ? <SessionLoadingIndicator /> : isAuthenticated ? (
               <>
                 <button
                   type="button"
@@ -424,7 +432,7 @@ export function Header() {
         </nav>
 
         <div className="ml-auto hidden items-center gap-2 lg:flex">
-          {!isAuthenticated && <ThemeToggle />}
+          {!isLoadingUser && !isAuthenticated && <ThemeToggle />}
 
           <button
             type="button"
@@ -439,11 +447,12 @@ export function Header() {
             )}
           </button>
 
-          {isAuthenticated ? (
+          {isLoadingUser ? <SessionLoadingIndicator /> : isAuthenticated ? (
             <div className="relative" ref={profileMenuRef}>
               <button
                 type="button"
                 onClick={() => setProfileMenuOpen((prev) => !prev)}
+                aria-label="Open profile menu"
                 className="flex items-center gap-2 rounded-full bg-[var(--surface-elevated)] px-3 py-1.5 text-[var(--text-light)] transition-colors duration-200 hover:text-[var(--gold-primary)]"
               >
                 {userAvatar ? (
