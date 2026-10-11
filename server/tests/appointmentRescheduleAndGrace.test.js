@@ -3,16 +3,13 @@ const { test } = require('node:test');
 const { pool } = require('../config/database');
 const service = require('../services/appointmentService');
 const settings = require('../services/paymentSettingsService');
-const audit = require('../services/auditService');
 const sockets = require('../services/socketService');
 
 test('no-show sweep uses configured minutes, exact deadline, and publishes changes', async () => {
-  const original = { query: pool.query, ensure: settings.ensurePaymentSettingsTable, log: audit.logAppointmentEvent, emit: sockets.emitToUserAndStaff };
+  const original = { query: pool.query, ensure: settings.ensurePaymentSettingsTable, emit: sockets.emitToUserAndStaff };
   const events = [];
-  const auditEvents = [];
   let configuredMinutes = 30;
   settings.ensurePaymentSettingsTable = async () => {};
-  audit.logAppointmentEvent = async event => auditEvents.push(event);
   sockets.emitToUserAndStaff = (...args) => events.push(args);
   pool.query = async (sql, params) => {
     if (sql.startsWith('SELECT no_show_grace_minutes')) return { rows: [{ no_show_grace_minutes: configuredMinutes }] };
@@ -31,20 +28,16 @@ test('no-show sweep uses configured minutes, exact deadline, and publishes chang
     assert.equal(events[0][0], 'customer-1');
     assert.equal(events[0][1], 'appointment:updated');
     assert.equal(events[0][2].appointment.status, 'no_show');
-    assert.deepEqual(auditEvents.map(event => event.previousStatus), ['pending', 'confirmed', 'pending', 'confirmed']);
-    assert.deepEqual(auditEvents.map(event => event.details.grace_minutes), [0, 30, 0, 45]);
   } finally {
     pool.query = original.query;
     settings.ensurePaymentSettingsTable = original.ensure;
-    audit.logAppointmentEvent = original.log;
     sockets.emitToUserAndStaff = original.emit;
   }
 });
 
 test('rescheduling approved payments preserves payment data and reopens no-shows', async () => {
-  const original = { connect: pool.connect, get: service.getAppointmentById, log: audit.logAppointmentEvent };
+  const original = { connect: pool.connect, get: service.getAppointmentById };
   const id = '12345678-1234-4234-8234-123456789012';
-  audit.logAppointmentEvent = async () => {};
   try {
     for (const paymentStatus of ['approved', 'verified', 'paid', 'pending']) {
       const row = { appointment_id: id, status: 'no_show', payment_status: paymentStatus, payment_method: 'e_wallet', payment_proof_url: 'existing-proof', scheduled_at: '2026-10-03T07:00:00Z' };
@@ -78,6 +71,5 @@ test('rescheduling approved payments preserves payment data and reopens no-shows
   } finally {
     pool.connect = original.connect;
     service.getAppointmentById = original.get;
-    audit.logAppointmentEvent = original.log;
   }
 });

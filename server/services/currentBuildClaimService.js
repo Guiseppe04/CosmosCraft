@@ -126,16 +126,6 @@ const isValidTransition = (from, to) => {
   return allowed.includes(to);
 };
 
-// ─── HELPERS ──────────────────────────────────────────────────────────────────
-
-const logClaimActivity = async (db, projectId, userId, action, details = {}) => {
-  await db.query(
-    `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [userId, action, 'project', projectId, JSON.stringify(details)]
-  );
-};
-
 /**
  * Build a structured build-state from the project's milestones and subtasks.
  * This is the backend source of truth — the frontend must not invent states.
@@ -345,14 +335,6 @@ exports.createClaimForCancelledProject = async (db, projectId, customerId, order
     ]
   );
 
-  await logClaimActivity(db, projectId, customerId, 'build_claim_created', {
-    claim_id: insertRes.rows[0].claim_id,
-    progress_at_cancellation: progress,
-    current_build_stage: current_stage,
-    amount_paid: amountPaid,
-    claim_method: claimMethod,
-  });
-
   return insertRes.rows[0];
 };
 
@@ -476,11 +458,6 @@ exports.submitClaimMethod = async (projectId, userId, userRole, data = {}) => {
       updateValues
     );
 
-    await logClaimActivity(client, projectId, userId, 'build_claim_method_selected', {
-      claim_id: claim.claim_id,
-      method,
-    });
-
     // Notify admins
     const adminRes = await client.query(
       `SELECT user_id FROM users WHERE role IN ('admin', 'super_admin') AND deleted_at IS NULL`
@@ -576,12 +553,6 @@ exports.confirmBuildState = async (projectId, adminId, data = {}) => {
       updateValues
     );
 
-    await logClaimActivity(client, projectId, adminId, 'build_claim_confirmed', {
-      claim_id: claim.claim_id,
-      claim_method: claim.claim_method,
-      next_status: nextStatus,
-    });
-
     try {
       const statusMsg = claim.claim_method === 'courier'
         ? 'Your guitar is being prepared for delivery.'
@@ -666,13 +637,6 @@ exports.arrangeCourier = async (projectId, adminId, data = {}) => {
       updateValues
     );
 
-    await logClaimActivity(client, projectId, adminId, 'build_claim_courier_arranged', {
-      claim_id: claim.claim_id,
-      courier_service: data.courier_service,
-      courier_reference: data.courier_reference,
-      delivery_fee: data.delivery_fee,
-    });
-
     try {
       await notificationService.createNotification({
         user_id: claim.customer_id,
@@ -753,12 +717,6 @@ exports.updateClaimStatus = async (projectId, adminId, newStatus, data = {}) => 
       );
     }
 
-    await logClaimActivity(client, projectId, adminId, 'build_claim_status_updated', {
-      claim_id: claim.claim_id,
-      from: claim.claim_status,
-      to: newStatus,
-    });
-
     const statusMessages = {
       out_for_delivery: 'Your build/parts are now out for delivery.',
       delivered: 'Your build/parts have been delivered successfully. Please confirm receipt.',
@@ -829,11 +787,6 @@ exports.markAsReceived = async (projectId, userId, userRole) => {
       [userId, claim.claim_id]
     );
 
-    await logClaimActivity(client, projectId, userId, 'build_claim_received', {
-      claim_id: claim.claim_id,
-      claim_method: claim.claim_method,
-    });
-
     await getProjectService().syncFulfillmentCompletion(
       client,
       projectId,
@@ -894,11 +847,6 @@ exports.markAsPickedUp = async (projectId, adminId, data = {}) => {
        WHERE claim_id = $${idx} RETURNING *`,
       updateValues
     );
-
-    await logClaimActivity(client, projectId, adminId, 'build_claim_picked_up', {
-      claim_id: claim.claim_id,
-      staff_id: adminId,
-    });
 
     try {
       await notificationService.createNotification({

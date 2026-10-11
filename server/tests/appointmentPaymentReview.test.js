@@ -2,12 +2,11 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { pool } = require('../config/database');
 const appointments = require('../services/appointmentService');
-const audit = require('../services/auditService');
 const refunds = require('../services/appointmentRefundService');
 const id = '12345678-1234-4234-8234-123456789012';
 
-test('admin payment reviews persist the status, approval amount, audit and notification', async () => {
-  const original = { connect: pool.connect, get: appointments.getAppointmentById, log: audit.logAppointmentEvent, notify: refunds.notify };
+test('admin payment reviews persist the status, approval amount and notification', async () => {
+  const original = { connect: pool.connect, get: appointments.getAppointmentById, notify: refunds.notify };
   try {
     for (const status of ['pending', 'approved', 'rejected']) {
       const events = [];
@@ -29,17 +28,14 @@ test('admin payment reviews persist the status, approval amount, audit and notif
         return { rows: [] };
       }, release() {} });
       appointments.getAppointmentById = async () => ({ ...row });
-      audit.logAppointmentEvent = async event => events.push(event);
       refunds.notify = async (...args) => events.push(args);
       const result = await appointments.updatePaymentStatus(id, status, null, null, 'admin');
       assert.equal(result.payment_status, status);
       assert.equal(committed, true);
-      assert.ok(events.some(event => event.action === 'PAYMENT' && event.status === status));
       assert.ok(events.some(event => Array.isArray(event) && event[1] === 'customer'));
     }
   } finally {
     pool.connect = original.connect; appointments.getAppointmentById = original.get;
-    audit.logAppointmentEvent = original.log; refunds.notify = original.notify;
   }
 });
 

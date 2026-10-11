@@ -84,6 +84,7 @@ test('sending saves only a customer-owned build, is atomic and idempotent, and r
         if (sql.includes('INSERT INTO customizations')) {
           inserts++;
           if (failBuild) throw new Error('Build write failed');
+          if (failAudit) throw new Error('Audit trigger failed');
           row = { user_id: values[0], customization_id: values[15], config_json: JSON.parse(values[12]), total_price: values[10] };
           return { rows: [row] };
         }
@@ -105,7 +106,7 @@ test('sending saves only a customer-owned build, is atomic and idempotent, and r
     assert.equal(auditEntries.length,0);
     failBuild = false;
     failAudit = true;
-    await assert.rejects(guitars.assignWalkInCustomization('admin',payload),/Audit write failed/);
+    await assert.rejects(guitars.assignWalkInCustomization('admin',payload),/Audit trigger failed/);
     assert.equal(row,undefined);
     assert.equal(auditEntries.length,0);
     failAudit = false;
@@ -117,11 +118,7 @@ test('sending saves only a customer-owned build, is atomic and idempotent, and r
     const retry = await guitars.assignWalkInCustomization('admin', { ...payload, quantity: 5 });
     assert.equal(retry.alreadyAssigned, true);
     assert.equal(inserts, 3); // Includes both rolled-back attempts.
-    assert.equal(auditEntries.length,1);
-    assert.deepEqual(auditEntries[0].slice(0,4),['admin','BUILD_SENT_TO_CUSTOMER','customizations',buildId]);
-    assert.equal(JSON.parse(auditEntries[0][7]).customerName,'Juan Dela Cruz');
-    assert.equal(JSON.parse(auditEntries[0][7]).customerId,customerId);
-    assert.equal(JSON.parse(auditEntries[0][7]).buildName,payload.design.name);
+    assert.equal(auditEntries.length,0, 'The customization trigger creates the audit event');
     assert.ok(statements.every(sql => !/\bcarts\b|\bcart_items\b/.test(sql)));
     await assert.rejects(guitars.assignWalkInCustomization('other-admin', payload), /different customer or administrator/);
     await assert.rejects(guitars.assignWalkInCustomization('admin', { ...payload, customer_id: 'another-customer' }), /different customer or administrator/);

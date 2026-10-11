@@ -418,11 +418,11 @@ export const adminApi = {
 
   // Audit Logs
   // Read-only: the API exposes no way to edit or delete audit records.
-  getAuditLogs: (params = {}) => {
+  getAuditLogs: (params = {}, options = {}) => {
     const qs = new URLSearchParams(params).toString()
-    return request(`/api/audit-logs${qs ? '?' + qs : ''}`)
+    return request(`/api/audit-logs${qs ? '?' + qs : ''}`, options)
   },
-  getAuditLog: (id) => request(`/api/audit-logs/${id}`),
+  getAuditLog: (id, options = {}) => request(`/api/audit-logs/${id}`, options),
   getAuditActions: () => request('/api/audit-logs/actions'),
   getAuditSummary: (params = {}) => {
     const qs = new URLSearchParams(params).toString()

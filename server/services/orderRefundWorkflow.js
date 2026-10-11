@@ -137,8 +137,7 @@ async function update(id, status, user, data = {}) {
         await db.query("UPDATE orders SET payment_status='refunded', updated_at=now() WHERE order_id=$1", [refund.order_id]);
       }
     }
-    await require('./auditService').logRefundEvent({ userId: userId(user), action: `refund_${status}`, entityId: refund.order_id,
-      status, previousStatus: refund.status, details: { refund_request_id: id, amount }, executor: db });
+
     await db.query('COMMIT');
     return publicRefund(updated.rows[0]);
   } catch (error) { await db.query('ROLLBACK'); throw error; } finally { db.release(); }

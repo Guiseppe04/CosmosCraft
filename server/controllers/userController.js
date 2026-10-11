@@ -11,7 +11,7 @@ const { lockAppointmentCapacity } = require('../middleware/appointmentCapacityLo
 exports.getCurrentUser = asyncHandler(async (req, res, next) => {
   const user = await userService.getUserById(req.user.id);
   const authInfo = await userService.getUserAuthInfo(req.user.id);
-  
+
   const { pool } = require('../config/database');
   const addressesRes = await pool.query('SELECT * FROM addresses WHERE user_id = $1', [user.user_id]);
   const addresses = addressesRes.rows.map(addr => ({
@@ -202,19 +202,9 @@ exports.createUser = asyncHandler(async (req, res, next) => {
   }
 
   const role = value.role || 'staff';
-  const auditService = require('../services/auditService');
 
   try {
     const newUser = await userService.createStaffUser(value, req.user.user_id);
-
-    const fullName = [newUser.first_name, newUser.last_name].filter(Boolean).join(' ') || newUser.email;
-    await auditService.logUserEvent({
-      userId: req.user.user_id,
-      action: 'USER_CREATED',
-      entityId: newUser.user_id,
-      details: { role, note: 'Staff/Admin account created via admin Users tab' },
-      context: { userId: newUser.user_id, fullName, email: newUser.email, role },
-    });
 
     res.status(201).json({
       status: 'success',
@@ -259,19 +249,13 @@ exports.updateUserRole = asyncHandler(async (req, res, next) => {
   if (!roleRecord) throw new AppError('Role not found', 404);
 
   const { pool } = require('../config/database');
-  const auditService = require('../services/auditService');
+
   const client = await pool.connect();
   let updatedUser;
-  let previousUser;
+
   try {
     await client.query('BEGIN');
-    const beforeRes = await client.query(
-      `SELECT user_id, email, role, is_active,
-              TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))) AS full_name
-       FROM users WHERE user_id = $1`,
-      [userId]
-    );
-    previousUser = beforeRes.rows[0] || null;
+
 
     await rbacService.setUserRoles(userId, [roleRecord.role_id], req.user.user_id, client);
     const result = await client.query(
@@ -281,28 +265,6 @@ exports.updateUserRole = asyncHandler(async (req, res, next) => {
       [roleRecord.name, userId]
     );
     if (!result.rows[0]) throw new AppError('User not found', 404);
-
-    // Recorded inside the transaction: a role change is one of the most sensitive
-    // administrative actions, and the trail must name the affected person.
-    await auditService.logUserEvent({
-      userId: req.user.user_id,
-      action: 'USER_ROLE_CHANGED',
-      entityId: userId,
-      details: {
-        from: previousUser?.role ?? null,
-        to: roleRecord.name,
-        note: 'Role updated via admin Users tab',
-      },
-      context: {
-        userId,
-        fullName: result.rows[0].full_name,
-        email: result.rows[0].email,
-        role: roleRecord.name,
-        previousRole: previousUser?.role ?? null,
-      },
-      changes: { role: { from: previousUser?.role ?? null, to: roleRecord.name } },
-      executor: client,
-    });
 
     await client.query('COMMIT');
     updatedUser = result.rows[0];
@@ -332,20 +294,14 @@ exports.updateUserStatus = asyncHandler(async (req, res, next) => {
   }
 
   const { pool } = require('../config/database');
-  const auditService = require('../services/auditService');
+
   const client = await pool.connect();
   let result;
-  let previousUser;
+
   try {
     await client.query('BEGIN');
     await lockAppointmentCapacity(client);
-    const beforeRes = await client.query(
-      `SELECT is_active, role, email,
-              TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))) AS full_name
-       FROM users WHERE user_id = $1`,
-      [userId]
-    );
-    previousUser = beforeRes.rows[0] || null;
+
 
     result = await client.query(
       `UPDATE users SET is_active = $1, updated_at = now() WHERE user_id = $2
@@ -353,23 +309,6 @@ exports.updateUserStatus = asyncHandler(async (req, res, next) => {
                  TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))) AS full_name`,
       [is_active, userId]
     );
-
-    if (previousUser && previousUser.is_active !== is_active) {
-      await auditService.logUserEvent({
-        userId: req.user.user_id,
-        action: is_active ? 'USER_ACTIVATED' : 'USER_DEACTIVATED',
-        entityId: userId,
-        details: { from: previousUser.is_active, to: is_active },
-        context: {
-          userId,
-          fullName: result.rows[0]?.full_name,
-          email: result.rows[0]?.email,
-          role: result.rows[0]?.role,
-        },
-        changes: { is_active: { from: previousUser.is_active, to: is_active } },
-        executor: client,
-      });
-    }
 
     await client.query('COMMIT');
   } catch (error) {
@@ -386,7 +325,6 @@ exports.updateUserStatus = asyncHandler(async (req, res, next) => {
     data: { user: result.rows[0] },
   });
 });
-
 
 /**
  * Deactivate Account
@@ -457,4 +395,3 @@ exports.requestPasswordChange = asyncHandler(async (req, res, next) => {
     },
   });
 });
-

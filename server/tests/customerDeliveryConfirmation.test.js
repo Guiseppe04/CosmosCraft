@@ -123,9 +123,7 @@ async function runTests() {
       assert.strictEqual(orderUpdate.params[1], 'customer');
 
       const auditLog = executedQueries.find((q) => q.sql.includes('INSERT INTO audit_logs'));
-      assert.ok(auditLog, 'Expected INSERT INTO audit_logs query');
-      assert.strictEqual(auditLog.params[0], 'user-cust-1');
-      assert.strictEqual(auditLog.params[1], mockRequest.id);
+      assert.equal(auditLog, undefined, 'Audit history is created by the fulfillment database trigger');
 
       // Verify notifications sent to admin/staff AND customer
       assert.ok(notificationsCreated.some((n) => n.user_id === 'admin-1' && n.title === 'Custom Guitar Delivered'));
