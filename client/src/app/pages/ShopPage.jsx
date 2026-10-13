@@ -12,6 +12,41 @@ import { API } from '../utils/apiConfig.js'
 import '../../styles/ShopPage.css'
 
 const DEFAULT_PRODUCT_IMAGE = '/default-image.png'
+const CATALOG_ERROR_MESSAGE = 'We couldn’t load the products right now. Please try again.'
+
+function ProductSkeletons() {
+  return (
+    <>
+      <p role="status" className="sr-only">Loading products…</p>
+      {Array.from({ length: 6 }, (_, index) => (
+        <div key={index} className="product-card shop-product-skeleton" aria-hidden="true">
+          <div className="product-card-image-wrapper shop-skeleton-block" />
+          <div className="product-card-info">
+            <div className="shop-skeleton-block shop-skeleton-brand" />
+            <div className="shop-skeleton-block shop-skeleton-name" />
+            <div className="shop-skeleton-block shop-skeleton-price" />
+            <div className="shop-skeleton-block shop-skeleton-reviews" />
+            <div className="product-card-controls">
+              <div className="shop-skeleton-block shop-skeleton-stock" />
+              <div className="shop-skeleton-block shop-skeleton-action" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </>
+  )
+}
+
+function CatalogError({ onRetry, loading }) {
+  return (
+    <div className="shop-catalog-error mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm">
+      <p role="alert">{CATALOG_ERROR_MESSAGE}</p>
+      <button type="button" onClick={onRetry} disabled={loading} className="mt-3 rounded-full border border-current px-4 py-2 font-semibold disabled:opacity-50">
+        Try again
+      </button>
+    </div>
+  )
+}
 
 function handleProductImageError(event) {
   event.currentTarget.onerror = null
@@ -361,7 +396,7 @@ export function ShopPage() {
     const isCurrent = () => !cancelled && requestId === catalogRequestRef.current
     const fetchData = async () => {
       try {
-        if (catalogRevision === 0) setLoading(true)
+        setLoading(true)
         setLoadError('')
         const fetchAllActiveProducts = async () => {
           const byId = new Map()
@@ -417,7 +452,7 @@ export function ShopPage() {
       } catch (err) {
         if (!isCurrent()) return
         console.error("Failed to fetch shop data", err)
-        setLoadError(err?.message || 'Failed to load products. Please refresh and try again.')
+        setLoadError(CATALOG_ERROR_MESSAGE)
       } finally {
         if (isCurrent()) setLoading(false)
       }
@@ -643,9 +678,7 @@ export function ShopPage() {
             </div>
 
             {loadError && (
-              <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-                {loadError}
-              </div>
+              <CatalogError onRetry={refreshCatalog} loading={loading} />
             )}
 
             <ActiveFiltersBar
@@ -662,11 +695,9 @@ export function ShopPage() {
               onSearchClear={() => setSearchQuery('')}
             />
 
-            <div className="shop-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '1.25rem' }}>
-              {loading ? (
-                <div className="col-span-full flex items-center justify-center py-20 ...">
-                  <p className="text-[var(--text-muted)] text-sm">Loading products...</p>
-                </div>
+            <div className="shop-grid" aria-busy={loading} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '1.25rem' }}>
+              {loading && products.length === 0 ? (
+                <ProductSkeletons />
               ) : filteredProducts.length > 0 ? (
                 filteredProducts.map((product, index) => {
                   const buttonState = getAddButtonState(product)
@@ -777,7 +808,7 @@ export function ShopPage() {
                     </motion.div>
                   )
                 })
-              ) : (
+              ) : loadError ? null : (
                 <div className="col-span-full flex flex-col items-center justify-center py-20 bg-[var(--surface-dark)] rounded-2xl border border-white/5">
                   <Search className="w-12 h-12 text-white/20 mb-4" />
                   <p className="text-white font-medium text-lg mb-1">No products found</p>
@@ -816,9 +847,7 @@ export function ShopPage() {
           <div className="flex justify-end mb-4">{sortControl}</div>
 
           {loadError && (
-            <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-              {loadError}
-            </div>
+            <CatalogError onRetry={refreshCatalog} loading={loading} />
           )}
 
           <ActiveFiltersBar
@@ -835,11 +864,9 @@ export function ShopPage() {
             onSearchClear={() => setSearchQuery('')}
           />
 
-          <div className="shop-grid shop-mobile-grid">
-  {loading ? (
-    <div className="col-span-full flex items-center justify-center py-20 bg-[var(--surface-dark)] rounded-2xl border border-white/5">
-      <p className="text-[var(--text-muted)] text-sm">Loading products...</p>
-    </div>
+          <div className="shop-grid shop-mobile-grid" aria-busy={loading}>
+  {loading && products.length === 0 ? (
+    <ProductSkeletons />
   ) : filteredProducts.length > 0 ? (
     filteredProducts.map((product, index) => {
       const buttonState = getAddButtonState(product)
@@ -950,7 +977,7 @@ export function ShopPage() {
         </motion.div>
       )
     })
-  ) : (
+  ) : loadError ? null : (
     <div className="col-span-full flex flex-col items-center justify-center py-20 bg-[var(--surface-dark)] rounded-2xl border border-white/5">
       <Search className="w-12 h-12 text-white/20 mb-4" />
       <p className="text-white font-medium text-lg mb-1">No products found</p>
