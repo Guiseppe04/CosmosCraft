@@ -241,7 +241,7 @@ export function OrderDetailsModal({
                               if (!isAllowed) return
                               setForm((f) => ({ ...f, order_status: status.value }))
                             }}
-                            disabled={!isAllowed}
+                            disabled={paymentStatusUpdate.loading || !isAllowed}
                             className={`p-2 rounded-lg border text-xs font-medium transition-all ${
                               isActive ? `${status.bgColor} ${status.textColor} ${status.borderColor}` : isAllowed ? 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50' : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-muted)]/70 font-semibold opacity-60 cursor-not-allowed'
                             }`}

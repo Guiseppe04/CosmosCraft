@@ -1,5 +1,7 @@
 const {AppError} = require('../middleware/errorHandler');
-const settings = Object.freeze(require('../config/refundPolicy.json'));
+// Fixed client-approved policies. There is no editable policy settings API.
+const settings = Object.freeze({version:2,regularRefundDays:14,customWarrantyMonths:3,regularRefundPercent:50,
+  regularProcessingDaysMin:1,regularProcessingDaysMax:3,customProcessingDaysMin:7,customProcessingDaysMax:14});
 const day = 86400000;
 const money = value => Math.floor((value + Number.EPSILON) * 100) / 100;
 
@@ -61,14 +63,14 @@ async function calculation(db,refund) {
     (SELECT COALESCE(SUM(COALESCE(refunded_amount,approved_amount,amount_requested)),0) FROM refund_requests
       WHERE order_id=$1 AND refund_request_id<>$2 AND deleted_at IS NULL AND status NOT IN ('rejected','withdrawn')) AS reserved`,[refund.order_id,refund.refund_request_id])).rows[0];
   const remaining=Math.max(0,Number(totals.paid)-Number(totals.reserved));
-  const policy=refund.review_data?.policy?.settings || settings;
   if(custom) {
     const financial=refund.review_data?.financial;
     const verified=financial?.verified && financial.materialValue!=null && financial.incurredLabor!=null && financial.evidence?.trim();
     const maximum=verified ? money(Math.min(Number(refund.amount_requested),Number(financial.materialValue),Math.max(0,remaining-Number(financial.incurredLabor)))) : null;
     return {custom,remainingPayment:remaining,requiresVerifiedCosts:!verified,maximum,suggestedAmount:maximum};
   }
-  const suggested=['no_longer_needed','better_price'].includes(refund.reason) ? money(Math.min(remaining,Number(refund.amount_requested))*policy.changeOfMindPercent/100) : null;
+  // Default only: an existing approved amount is never rewritten by this calculation.
+  const suggested=money(Math.min(remaining,Number(refund.amount_requested))*settings.regularRefundPercent/100);
   return {custom,remainingPayment:remaining,requiresVerifiedCosts:false,maximum:Math.min(remaining,Number(refund.amount_requested)),suggestedAmount:suggested};
 }
 function timeline(refund) {

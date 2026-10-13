@@ -17,10 +17,12 @@ export function OrderStatusModal({
   showToast,
   fetchOrders,
   adminApi,
+  onOrderUpdated,
   ORDER_STATUS_LIFECYCLE,
   ORDER_STATUS_TRANSITIONS,
 }) {
   const handleUpdateStatus = async () => {
+    if (isSaving) return
     if (!form.order_status) return
     if(form.order_status==='shipped' && !form.dispatchReady){showToast('Upload pre-shipping photos for every item before dispatch.','error');return}
     if (form.order_status === 'shipped' && !isValidShippingFee(form.additional_shipping_fee)) {
@@ -53,10 +55,10 @@ export function OrderStatusModal({
         updateData.rider_name = form.rider_name.trim()
         updateData.rider_contact = normalizeRiderContact(form.rider_contact)
       }
-      await adminApi.updateOrder(modal.data.order_id, updateData)
+      const response = await adminApi.updateOrder(modal.data.order_id, updateData)
+      onOrderUpdated(modal.data.order_id, { ...updateData, ...response.data })
       showToast(`Order status updated to ${form.order_status}!`)
       fetchOrders()
-      closeModal()
     } catch (e) {
       showToast(e.message, 'error')
     } finally {
@@ -110,7 +112,7 @@ export function OrderStatusModal({
                       if (!isAllowed) return
                       setForm((f) => ({ ...f, order_status: status.value }))
                     }}
-                    disabled={!isAllowed}
+                    disabled={isSaving || !isAllowed}
                     className={`p-3 rounded-xl border text-left transition-all ${
                       isActive
                         ? `${status.bgColor} ${status.textColor} ${status.borderColor}`

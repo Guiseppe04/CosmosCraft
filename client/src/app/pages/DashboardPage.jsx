@@ -6008,7 +6008,7 @@ export function DashboardPage() {
                 <p>Original payment method: <strong className="text-white">{formatPaymentMethod(refundTarget.payment_method)}</strong></p>
                 <p className="mt-2">Your refund will use the original payment channel. Physical items must be returned and inspected before repayment. Wait for return instructions before shipping.</p>
                 <p className="mt-2">Submit within 14 days of receipt for regular products or three calendar months for customized guitars. Missing or disputed receipt confirmation requires admin review. A timely request does not expire while being reviewed.</p>
-                <p className="mt-2">Eligible regular-product change-of-mind refunds have a suggested 50% amount, subject to admin approval. Customized guitar refunds use verified material/base value and remaining payment minus incurred labor. Request regular and customized items separately.</p>
+                <p className="mt-2">All regular-product refund requests default to 50%, regardless of reason; admins may adjust the amount after review. Customized guitar refunds use verified material/base value and remaining payment minus incurred labor. Request regular and customized items separately.</p>
                 <p className="mt-2">After required evidence, return receipt and inspection are complete, estimated payment completion is 1–3 calendar days for regular products or 1–2 calendar weeks for customized guitars.</p>
               </div>
               <div>

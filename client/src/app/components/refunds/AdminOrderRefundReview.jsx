@@ -187,7 +187,7 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
       </>}
       {((review && noReturnRecorded) || inspect) && <label className="block text-sm text-[var(--text-light)]">Approved refund amount (PHP) <Required />
         <input type="number" min="0.01" max={refund.amount_requested} step="0.01" value={amount} ref={node=>{fields.current.approvedAmount=node}} onChange={e=>{setAmount(e.target.value);setErrors(previous=>({...previous,approvedAmount:undefined}))}} className={fieldClass} />
-        {refund.review_context?.calculation?.suggestedAmount!=null && <p className="mt-2 text-sm">{refund.review_context.calculation.custom?'Verified cost-based amount':'Suggested 50% change-of-mind refund (editable; subject to approval)'}: {formatCurrency(refund.review_context.calculation.suggestedAmount)}. <button type="button" onClick={()=>setAmount(refund.review_context.calculation.suggestedAmount)} className="underline">Use suggested amount</button></p>}
+        {refund.review_context?.calculation?.suggestedAmount!=null && <p className="mt-2 text-sm">{refund.review_context.calculation.custom?'Verified cost-based amount':'Default 50% regular-product refund (editable; subject to approval)'}: {formatCurrency(refund.review_context.calculation.suggestedAmount)}. <button type="button" onClick={()=>setAmount(refund.review_context.calculation.suggestedAmount)} className="underline">Use suggested amount</button></p>}
       </label>}
       {refund.status === 'processing' && <>
         <p className="text-sm text-[var(--text-muted)]">Process the repayment through {formatPaymentMethod(refund.original_payment_method)} using the original transaction. Record the actual payment evidence below.</p>

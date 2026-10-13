@@ -1733,13 +1733,24 @@ export function AdminPage() {
     }
   }
 
+  const updateOpenOrder = (orderId, updates) => {
+    setModal(previous => previous.data?.order_id === orderId && ['order-details', 'order-status'].includes(previous.type)
+      ? { ...previous, data: { ...previous.data, ...updates } } : previous)
+    setForm(previous => previous.order_id === orderId ? {
+      ...previous,
+      ...(updates.status ? { order_status: updates.status, itemPhotos: [], dispatchReady: false } : {}),
+      ...(updates.payment_status ? { payment_status: updates.payment_status } : {}),
+    } : previous)
+  }
+
   const updateOrderAndPaymentStatus = async () => {
+    if (paymentStatusUpdate.loading) return
     if (!modal.data?.order_id) return
     
     const currentOrder = orders.find(o => o.order_id === modal.data.order_id)
-    const currentOrderStatus = currentOrder?.status || modal.data.status || 'pending'
+    const currentOrderStatus = modal.data.status || currentOrder?.status || 'pending'
     const currentPaymentStatus = normalizePaymentStatus(
-      currentOrder?.payment_status || modal.data.payment_status || modal.data?.payment?.status
+      modal.data.payment_status || modal.data?.payment?.status || currentOrder?.payment_status
     )
     
     const newOrderStatus = form.order_status || currentOrderStatus
@@ -1778,18 +1789,20 @@ export function AdminPage() {
     try {
       if (paymentStatusChanged) {
         await adminApi.updatePaymentStatus(modal.data.order_id, newPaymentStatus)
+        updateOpenOrder(modal.data.order_id, { payment_status: newPaymentStatus })
       }
       
       if (orderStatusChanged) {
-        await adminApi.updateOrder(modal.data.order_id, {
+        const updateData = {
           status: newOrderStatus,
           ...(newOrderStatus === 'shipped' ? { additional_shipping_fee: Number(form.additional_shipping_fee), tracking_number: form.tracking_info.trim(),itemPhotos:form.itemPhotos } : {}),
-        })
+        }
+        const response = await adminApi.updateOrder(modal.data.order_id, updateData)
+        updateOpenOrder(modal.data.order_id, { ...updateData, ...response.data })
       }
       
       showToast('Order statuses updated!')
       fetchOrders()
-      closeModal()
     } catch (e) { showToast(e.message, 'error') }
     finally {
       setPaymentStatusUpdate({ loading: false, orderId: null })
@@ -3350,6 +3363,7 @@ export function AdminPage() {
             showToast={showToast}
             fetchOrders={fetchOrders}
             adminApi={adminApi}
+            onOrderUpdated={updateOpenOrder}
             ORDER_STATUS_LIFECYCLE={ORDER_STATUS_LIFECYCLE}
             ORDER_STATUS_TRANSITIONS={ORDER_STATUS_TRANSITIONS}
           />
