@@ -23,6 +23,7 @@ import { ShippingFeeNotice } from '../components/ShippingFeeNotice.jsx'
 import { getFulfillmentProgress, getOrderDisplayTotal } from '../utils/orderDisplay.js'
 import CustomerRefundImages from '../components/refunds/CustomerRefundImages'
 import CustomerRefundTracking from '../components/refunds/CustomerRefundTracking'
+import DispatchPhotoGallery from '../components/DispatchPhotoGallery'
 import CustomerRefundReviewLoader from '../components/refunds/CustomerRefundReviewLoader'
 import CustomerProjectTracker from '../components/projects/CustomerProjectTracker.jsx'
 import { AddressForm } from '../components/AddressForm.jsx'
@@ -555,6 +556,7 @@ export function DashboardPage() {
   const [activeBuildTab, setActiveBuildTab] = useState('build-projects')
 
   const [myOrders, setMyOrders] = useState(() => dashboardCache.orders || [])
+  const [dispatchPhotoOrderId, setDispatchPhotoOrderId] = useState(null)
   const [activePurchaseTab, setActivePurchaseTab] = useState('All')
   const [purchaseSort, setPurchaseSort] = useState('created_latest')
   const [purchaseSearch, setPurchaseSearch] = useState('')
@@ -2262,6 +2264,15 @@ export function DashboardPage() {
                         )}
                       </div>
                     )}
+
+                    {(order.shipped_at || ['shipped','out_for_delivery','delivered','received','completed'].includes(order.status)) && <div className="mt-4 space-y-3">
+                      <button type="button" aria-expanded={dispatchPhotoOrderId===order.order_id}
+                        onClick={()=>setDispatchPhotoOrderId(previous=>previous===order.order_id?null:order.order_id)}
+                        className="text-sm font-semibold text-[var(--gold-primary)] underline">
+                        {dispatchPhotoOrderId===order.order_id?'Hide pre-shipping photos':'View pre-shipping photos'}
+                      </button>
+                      {dispatchPhotoOrderId===order.order_id && <DispatchPhotoGallery orderId={order.order_id} customerView />}
+                    </div>}
 
                     {orderItems.length > 0 && (
                       <div className="mt-4">

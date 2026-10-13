@@ -27,8 +27,8 @@ const {
 router.get('/my-orders', authenticateToken, orderController.getUserOrders)
 
 // --- REFUND ROUTES ---
-router.get('/dispatch-photos/:photoId', authenticateToken, authorize('staff','admin','super_admin'), validateParams(namedUuidParamSchema('photoId')), orderController.getDispatchPhoto)
-router.get('/:orderId/dispatch-photos', authenticateToken, authorize('staff','admin','super_admin'), validateParams(orderIdParamSchema), orderController.getDispatchPhotos)
+router.get('/dispatch-photos/:photoId', authenticateToken, validateParams(namedUuidParamSchema('photoId')), orderController.getDispatchPhoto)
+router.get('/:orderId/dispatch-photos', authenticateToken, validateParams(orderIdParamSchema), orderController.getDispatchPhotos)
 router.post('/:orderId/dispatch-photos', authenticateToken, authorize('staff','admin','super_admin'), validateParams(orderIdParamSchema), validate(require('../utils/dispatchPhotoValidation').appendSchema), orderController.appendDispatchPhotos)
 router.patch('/refund-requests/:refundId/review', authenticateToken, authorize('admin','super_admin'), validateParams(namedUuidParamSchema('refundId')), validate(require('../utils/refundReviewValidation').reviewSchema), orderController.updateRefundReview)
 router.post('/refund-requests/:refundId/repair-offer', authenticateToken, authorize('admin','super_admin'), validateParams(namedUuidParamSchema('refundId')), validate(require('../utils/refundReviewValidation').offerSchema), orderController.offerRefundRepair)

@@ -9,7 +9,7 @@ export const sharedTerms = [
       SHIPPING_FEE_NOTE,
       'The admin enters the additional shipping fee before marking your order as shipped. The amount is displayed in your order details so you can see how much to pay separately. It is not included in the order payment or customization balance shown at checkout.',
       'Provide a complete delivery address and an active contact number. Delivery estimates depend on the destination and courier and may change. Check the tracking information in your account when available. Report missing, damaged, or incorrect deliveries to CosmosCraft so we can help resolve the issue with the courier.',
-      'Before shipping regular products or customized guitars, the shop records photos for each dispatched item so authorized personnel can compare its condition with evidence supplied for a return. These dispatch photos are internal records and are not published as customer reviews. The pre-shipping photo requirement does not apply to pickup handovers.',
+      'Before shipping regular products or customized guitars, the shop records photos for each dispatched item so its condition can be compared with evidence supplied for a return. Once your order is marked Shipped, you can view and enlarge its original pre-shipping photos in your account; they remain available through delivery. Photos are private to the owning customer and authorized shop personnel and are not published as reviews. Later supplemental evidence remains restricted to authorized personnel. The pre-shipping photo requirement does not apply to pickup handovers.',
     ],
   },
   {
