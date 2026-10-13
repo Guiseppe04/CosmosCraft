@@ -1,6 +1,6 @@
 const productService = require('../services/productService');
 const { AppError } = require('../middleware/errorHandler');
-const auditService = require('../services/auditService');
+
 const socketService = require('../services/socketService');
 
 // ─── CATEGORIES ──────────────────────────────────────────────────────────────
@@ -54,41 +54,19 @@ exports.getProduct = async (req, res, next) => {
 exports.createProduct = async (req, res, next) => {
   try {
     const data = req.validatedData || req.body;
-    
+
     // Basic validation for image URL if provided
-    if (data.image_url && !/\.(jpg|jpeg|png|webp|gif|svg)$/i.test(data.image_url.split('?')[0])) {
-      // We still allow it but maybe it's a Cloudinary URL without extension? 
-      // Cloudinary URLs usually have extensions or are clean. 
-      // To be safe and meet user req, let's just ensure it looks like an image if it's a direct upload.
-    }
 
     const product = await productService.createProduct(data);
-    
+
     if (data.image_url) {
-      await productService.addProductImage(product.product_id, { 
-        image_url: data.image_url, 
+      await productService.addProductImage(product.product_id, {
+        image_url: data.image_url,
         is_primary: true,
         alt_text: data.name
       });
       product.primary_image = data.image_url;
     }
-
-    await auditService.logProductEvent({
-      userId: req.user?.user_id || null,
-      action: 'INSERT',
-      entityId: product.product_id,
-      status: product.is_active ? 'active' : null,
-      details: product,
-      context: {
-        productId: product.product_id,
-        name: product.name,
-        sku: product.sku,
-        price: product.price,
-        stock: product.stock,
-        category: product.category_name || product.category_id,
-      },
-      ipAddress: req.ip,
-    });
 
     socketService.emitBroadcast('product:created', {
       productId: product.product_id,
@@ -103,7 +81,7 @@ exports.createProduct = async (req, res, next) => {
 exports.updateProduct = async (req, res, next) => {
   try {
     const data = req.validatedData || req.body;
-    
+
     // Get existing product to check current image
     const existing = await productService.getProductById(req.params.id);
     if (!existing) throw new AppError('Product not found', 404);
@@ -112,8 +90,8 @@ exports.updateProduct = async (req, res, next) => {
 
     // Only add new image if it's provided AND different from the current primary image
     if (data.image_url && data.image_url !== (existing.primary_image || '')) {
-      await productService.addProductImage(product.product_id, { 
-        image_url: data.image_url, 
+      await productService.addProductImage(product.product_id, {
+        image_url: data.image_url,
         is_primary: true,
         alt_text: data.name || existing.name
       });
@@ -121,23 +99,6 @@ exports.updateProduct = async (req, res, next) => {
     } else {
       product.primary_image = existing.primary_image;
     }
-
-    await auditService.logProductEvent({
-      userId: req.user?.user_id || null,
-      action: 'UPDATE',
-      entityId: product.product_id,
-      details: { old: existing, new: product },
-      context: {
-        productId: product.product_id,
-        name: product.name,
-        sku: product.sku,
-        price: product.price,
-        stock: product.stock,
-        category: product.category_name || product.category_id,
-      },
-      changes: auditService.auditContext.buildChanges(existing, product),
-      ipAddress: req.ip,
-    });
 
     socketService.emitBroadcast('product:updated', {
       productId: product.product_id,
@@ -162,21 +123,6 @@ exports.deleteProduct = async (req, res, next) => {
 
     const product = await productService.deleteProduct(req.params.id);
     if (!product) throw new AppError('Product not found', 404);
-
-    await auditService.logProductEvent({
-      userId: req.user?.user_id || null,
-      action: 'DELETE',
-      entityId: product.product_id,
-      details: existing,
-      context: {
-        productId: product.product_id,
-        name: existing.name,
-        sku: existing.sku,
-        price: existing.price,
-        stock: existing.stock,
-      },
-      ipAddress: req.ip,
-    });
 
     socketService.emitBroadcast('product:deleted', {
       productId: req.params.id,

@@ -322,16 +322,7 @@ exports.assignWalkInCustomization = async (adminId, payload) => {
       customization = await exports.createMyCustomization(customer_id,
         { ...design, config_json: config, is_saved: true }, client, customization_id);
       const recipient = customer.rows[0];
-      const customerName = [recipient.first_name, recipient.last_name].filter(Boolean).join(' ') || recipient.email || customer_id;
-      await require('./auditService').createAuditLog({
-        user_id: adminId,
-        action: 'BUILD_SENT_TO_CUSTOMER',
-        entity_type: 'customizations',
-        entity_id: customization_id,
-        context: { customerId: customer_id, customerName, buildId: customization_id, buildName: customization.name || design.name },
-        details: { description: `Admin sent ${customization.name || design.name || 'Custom Build'} (${customization_id}) to ${customerName}.` },
-        executor: client,
-      });
+
     }
     await client.query('COMMIT');
     return { customization, alreadyAssigned };
@@ -401,7 +392,6 @@ exports.updateMyCustomization = async (customizationId, userId, payload) => {
 
   return res.rows[0] || null;
 };
-
 
 exports.deleteMyCustomization = async (customizationId, userId) => {
   await ensureCustomizationColumns();

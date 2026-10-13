@@ -43,13 +43,13 @@ const buildRestockUpdates = (returnRecords) => {
 const generateSaleNumber = async () => {
   const date = new Date();
   const dateStr = date.toISOString().split('T')[0].replace(/-/g, '');
-  
+
   // Get counter for today
   const countRes = await pool.query(
-    `SELECT COUNT(*) as count FROM pos_sales 
+    `SELECT COUNT(*) as count FROM pos_sales
      WHERE DATE(created_at) = CURRENT_DATE`
   );
-  
+
   const counter = String(parseInt(countRes.rows[0].count, 10) + 1).padStart(4, '0');
   return `POS-${dateStr}-${counter}`;
 };
@@ -131,7 +131,7 @@ exports.createSale = async (
         subtotal, discount_amount, tax_amount, total_amount,
         payment_method, payment_status, status, reference_number, completed_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-      RETURNING 
+      RETURNING
         sale_id, sale_number, staff_id, customer_name, customer_phone,
         subtotal, discount_amount, tax_amount, total_amount,
         payment_method, payment_status, status, reference_number, created_at, completed_at`,
@@ -174,16 +174,16 @@ exports.createSale = async (
 
         if (item.product_id) {
           const itemQuantity = Math.max(1, Number(item.quantity || 1));
-          
+
           const invRes = await client.query(
             'SELECT stock FROM inventory WHERE product_id = $1 FOR UPDATE',
             [item.product_id]
           );
-          
+
           if (!invRes.rows[0]) {
             throw new AppError(`Product inventory not found for ${item.name || item.item_name}`, 404);
           }
-          
+
           const currentStock = invRes.rows[0].stock;
           if (currentStock < itemQuantity) {
             throw new AppError(`Insufficient stock for ${item.name || item.item_name}. Available: ${currentStock}, Requested: ${itemQuantity}`, 400);
@@ -211,23 +211,7 @@ exports.createSale = async (
           );
 
           // The audit trail needs the same deduction with its before/after
-          // quantities, otherwise a POS sale leaves stock unexplained.
-          await require('./auditService').logStockMovement({
-            userId: staffId,
-            entityId: item.product_id,
-            previousQuantity: currentStock,
-            newQuantity: remainingStock,
-            delta: -itemQuantity,
-            movement: 'pos_deduction',
-            source: 'pos_sale',
-            reason: `POS Sale ${sale.sale_number}`,
-            context: {
-              productName: item.name || item.item_name || 'Item',
-              sourceId: sale.sale_id,
-              saleNumber: sale.sale_number,
-            },
-            executor: client,
-          });
+
         }
       }
 
@@ -247,35 +231,6 @@ exports.createSale = async (
     }
 
     // A completed walk-in sale is the one POS event an administrator is most
-    // likely to look for ("who rang up this guitar and how was it paid?").
-    await require('./auditService').logPosEvent({
-      userId: staffId,
-      action: 'SALE_RECORDED',
-      entityId: sale.sale_id,
-      status: sale.status,
-      previousStatus: null,
-      details: {
-        sale_number: sale.sale_number,
-        customer_name: customerName || null,
-        subtotal: sale.subtotal,
-        discount_amount: sale.discount_amount,
-        tax_amount: sale.tax_amount,
-        total_amount: sale.total_amount,
-        payment_method: normalizedPaymentMethod,
-        payment_status: paymentStatus,
-        reference_number: normalizedReferenceNumber,
-        item_count: Array.isArray(items) ? items.length : 0,
-      },
-      context: {
-        saleId: sale.sale_id,
-        saleNumber: sale.sale_number,
-        amount: sale.total_amount,
-        paymentMethod: normalizedPaymentMethod,
-        paymentStatus,
-        itemCount: Array.isArray(items) ? items.length : 0,
-      },
-      executor: client,
-    });
 
     await client.query('COMMIT');
     return { ...sale, stockUpdates };
@@ -292,7 +247,7 @@ exports.createSale = async (
  */
 exports.getSaleById = async (saleId) => {
   const saleRes = await pool.query(
-    `SELECT 
+    `SELECT
       ps.sale_id, ps.sale_number, ps.staff_id, u.first_name, u.last_name,
       ps.customer_name, ps.customer_phone,
       ps.subtotal, ps.discount_amount, ps.tax_amount, ps.total_amount,
@@ -311,7 +266,7 @@ exports.getSaleById = async (saleId) => {
 
   // Get items
   const itemsRes = await pool.query(
-    `SELECT 
+    `SELECT
       psi.item_id, psi.product_id,
       psi.service_id, s.name AS service_name,
       psi.item_name, psi.quantity, psi.unit_price,
@@ -383,7 +338,7 @@ exports.listSales = async ({
   const condition = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
   const res = await pool.query(
-    `SELECT 
+    `SELECT
       ps.sale_id, ps.sale_number, ps.staff_id, u.first_name, u.last_name,
       ps.customer_name, ps.total_amount, ps.payment_method,
       ps.payment_status, ps.status,
@@ -662,8 +617,8 @@ exports.updateSaleInfo = async (saleId, { paymentMethod, customerName, customerP
   values.push(saleId);
 
   const res = await pool.query(
-    `UPDATE pos_sales SET ${updates.join(', ')} 
-     WHERE sale_id = $${idx} 
+    `UPDATE pos_sales SET ${updates.join(', ')}
+     WHERE sale_id = $${idx}
      RETURNING sale_id, payment_method, customer_name, customer_phone`,
     values
   );
@@ -698,7 +653,7 @@ exports.checkoutSale = async (
 
     // Get sale with items
     const saleRes = await client.query(
-      `SELECT 
+      `SELECT
         ps.sale_id, ps.subtotal, ps.discount_amount, ps.tax_amount, ps.total_amount,
         ps.status, ps.payment_status
        FROM pos_sales ps
@@ -718,7 +673,7 @@ exports.checkoutSale = async (
 
     // Get items
     const itemsRes = await client.query(
-      `SELECT product_id, quantity FROM pos_sale_items 
+      `SELECT product_id, quantity FROM pos_sale_items
        WHERE sale_id = $1 AND product_id IS NOT NULL`,
       [saleId]
     );
@@ -764,7 +719,7 @@ exports.checkoutSale = async (
 
     // Update sale status
     const updateRes = await client.query(
-      `UPDATE pos_sales SET 
+      `UPDATE pos_sales SET
         status = $1, payment_status = $2, payment_method = $3,
         reference_number = $4, completed_at = now(), updated_at = now()
        WHERE sale_id = $5
@@ -820,7 +775,7 @@ exports.cancelSale = async (saleId, cancelledBy, reason = null) => {
     }
 
     const sale = saleRes.rows[0];
-    
+
     // Can only cancel pending sales (completed sales require refund)
     if (sale.status !== 'pending') {
       throw new AppError('Only pending sales can be cancelled. Use refund for completed sales.', 400);
@@ -828,7 +783,7 @@ exports.cancelSale = async (saleId, cancelledBy, reason = null) => {
 
     // Cancel sale
     const updateRes = await client.query(
-      `UPDATE pos_sales SET 
+      `UPDATE pos_sales SET
         status = $1, cancelled_at = now(), cancelled_by = $2, notes = $3,
         updated_at = now()
        WHERE sale_id = $4
@@ -939,31 +894,6 @@ exports.voidSale = async (saleId, voidedBy, reason = null) => {
        RETURNING sale_id, sale_number, status, voided_at, voided_by, void_reason, refund_amount`,
       [voidedBy, reason, saleId]
     );
-
-    // Create audit log
-    await require('./auditService').logPosEvent({
-      userId: voidedBy,
-      action: 'VOID',
-      entityId: saleId,
-      status: 'voided',
-      previousStatus: 'completed',
-      details: {
-        sale_number: sale.sale_number,
-        reason,
-        total_amount: sale.total_amount,
-        refund_amount: sale.total_amount,
-        items: items.map((i) => ({ item_name: i.item_name, quantity: i.quantity, restocked: true })),
-      },
-      context: {
-        saleId,
-        saleNumber: sale.sale_number,
-        amount: sale.total_amount,
-        refundAmount: sale.total_amount,
-        voidReason: reason,
-        itemCount: items.length,
-      },
-      executor: client,
-    });
 
     await client.query('COMMIT');
 
@@ -1128,36 +1058,6 @@ exports.returnSale = async (saleId, returnedBy, { reason = null, items = [] } = 
       [returnedBy, reason, totalRefund, saleId]
     );
 
-    // Create audit log
-    await require('./auditService').logPosEvent({
-      userId: returnedBy,
-      action: 'RETURN',
-      entityId: saleId,
-      status: 'returned',
-      previousStatus: 'completed',
-      details: {
-        sale_number: sale.sale_number,
-        reason,
-        refund_amount: totalRefund,
-        items: returnRecords.map((r) => ({
-          item_name: saleItemsById.get(String(r.item_id))?.item_name || 'Item',
-          quantity: r.quantity,
-          item_condition: r.item_condition,
-          restocked: r.restocked,
-          inventory_before: r.inventory_before,
-          inventory_after: r.inventory_after,
-        })),
-      },
-      context: {
-        saleId,
-        saleNumber: sale.sale_number,
-        refundAmount: totalRefund,
-        returnReason: reason,
-        returnedItemCount: returnRecords.length,
-      },
-      executor: client,
-    });
-
     await client.query('COMMIT');
 
     return {
@@ -1192,12 +1092,12 @@ const recalculateSaleTotals = async (client, saleId) => {
 
   const subtotal = parseFloat(itemsRes.rows[0]?.subtotal || 0);
   const discountAmount = parseFloat(itemsRes.rows[0]?.total_discount || 0);
-  
+
   const taxAmount = 0;
   const totalAmount = subtotal;
 
   await client.query(
-    `UPDATE pos_sales SET 
+    `UPDATE pos_sales SET
       subtotal = $1, discount_amount = $2, tax_amount = $3, total_amount = $4,
       updated_at = now()
      WHERE sale_id = $5`,
@@ -1214,7 +1114,7 @@ exports.getDailySalesSummary = async (date = new Date()) => {
   const dateStr = date.toISOString().split('T')[0];
 
   const res = await pool.query(
-    `SELECT 
+    `SELECT
       DATE(created_at) as date,
       COUNT(DISTINCT sale_id) as total_transactions,
       SUM(total_amount) as total_sales,
@@ -1266,7 +1166,7 @@ exports.getStaffSummary = async ({ staffId = null, startDate = null, endDate = n
   const condition = where.join(' AND ');
 
   const res = await pool.query(
-    `SELECT 
+    `SELECT
       ps.staff_id, u.first_name, u.last_name,
       COUNT(DISTINCT ps.sale_id) as total_sales,
       SUM(ps.total_amount) as total_amount,

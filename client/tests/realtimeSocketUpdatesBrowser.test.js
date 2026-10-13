@@ -207,6 +207,7 @@ async function buildFixture() {
           contents: `export const API = window.location.origin;
             export const getAuthToken = () => 'staff-token';
             export const getAuthHeaders = headers => headers;
+            export const setAuthToken = () => {};
             export function resolveImageUrl(url) { return url || ''; }`,
         }))
       },

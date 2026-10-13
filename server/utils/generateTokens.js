@@ -2,22 +2,30 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { pool } = require('../config/database');
 const rbacService = require('../services/rbacService');
+const { AppError } = require('../middleware/errorHandler');
+
+const generateAccessToken = async (userId, userRole = null) => {
+  const roleSummary = userRole
+    ? { role: userRole, roles: [userRole], permissions: [] }
+    : await rbacService.getUserRoleSummary(userId, false);
+  const permissions = roleSummary.permissions?.length
+    ? roleSummary.permissions
+    : await rbacService.getUserPermissions(userId, false);
+  const resolvedRole = roleSummary.role || 'customer';
+
+  const accessToken = jwt.sign(
+    { id: userId, role: resolvedRole, roles: roleSummary.roles || [resolvedRole], permissions },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRE || '15m' }
+  );
+
+  return accessToken;
+};
 
 const generateTokens = async (userId, userRole = null) => {
   try {
-    const roleSummary = userRole
-      ? { role: userRole, roles: [userRole], permissions: [] }
-      : await rbacService.getUserRoleSummary(userId, false);
-    const permissions = roleSummary.permissions?.length
-      ? roleSummary.permissions
-      : await rbacService.getUserPermissions(userId, false);
-    const resolvedRole = roleSummary.role || 'customer';
-
-    const accessToken = jwt.sign(
-      { id: userId, role: resolvedRole, roles: roleSummary.roles || [resolvedRole], permissions },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRE || '30d' }
-    );
+    const accessToken = await generateAccessToken(userId, userRole);
+    const resolvedRole = jwt.decode(accessToken).role;
 
     // Add a random jti/nonce so tokens are unique even when issued within the same second
     const jti = crypto.randomBytes(16).toString('hex');
@@ -27,9 +35,6 @@ const generateTokens = async (userId, userRole = null) => {
       { expiresIn: process.env.JWT_REFRESH_EXPIRY || '7d' }
     );
 
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
-
     // Save refreshToken string as token_hash. If a duplicate is encountered (very rare), retry a few times.
     const maxRetries = 3;
     let attempt = 0;
@@ -37,7 +42,7 @@ const generateTokens = async (userId, userRole = null) => {
       try {
         await pool.query(
           `INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
-          [userId, refreshToken, expiresAt]
+          [userId, refreshToken, new Date(jwt.decode(refreshToken).exp * 1000)]
         );
         break;
       } catch (err) {
@@ -63,24 +68,25 @@ const generateTokens = async (userId, userRole = null) => {
 };
 
 const verifyRefreshToken = async (token) => {
+  let decoded;
   try {
-    const res = await pool.query('SELECT * FROM refresh_tokens WHERE token_hash = $1', [token]);
-    const storedToken = res.rows[0];
-
-    if (!storedToken || storedToken.is_revoked) {
-      throw new Error('Token is revoked or not found');
-    }
-    if (new Date(storedToken.expires_at) < new Date()) {
-      throw new Error('Token has expired');
-    }
-    return jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+    decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
   } catch (error) {
-    throw new Error(`Token verification failed: ${error.message}`);
+    if (!['JsonWebTokenError', 'TokenExpiredError', 'NotBeforeError'].includes(error.name)) throw error;
+    throw new AppError('Refresh session is invalid or expired. Please sign in again.', 401, [], 'SESSION_EXPIRED');
   }
+  // Database failures must remain server errors, not masquerade as expired sessions.
+  const res = await pool.query('SELECT * FROM refresh_tokens WHERE token_hash = $1', [token]);
+  const storedToken = res.rows[0];
+  if (!storedToken || storedToken.is_revoked || String(storedToken.user_id) !== String(decoded.id) ||
+      new Date(storedToken.expires_at).getTime() <= Date.now()) {
+    throw new AppError('Refresh session is invalid or expired. Please sign in again.', 401, [], 'SESSION_EXPIRED');
+  }
+  return decoded;
 };
 
 const revokeRefreshToken = async (token) => {
   await pool.query('UPDATE refresh_tokens SET is_revoked = true WHERE token_hash = $1', [token]);
 };
 
-module.exports = { generateTokens, verifyRefreshToken, revokeRefreshToken };
+module.exports = { generateAccessToken, generateTokens, verifyRefreshToken, revokeRefreshToken };

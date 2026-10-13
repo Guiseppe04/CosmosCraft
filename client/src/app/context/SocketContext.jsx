@@ -15,6 +15,7 @@ const SocketContext = createContext(null)
 
 export function SocketProvider({ children }) {
   const { user, isAuthenticated } = useAuth()
+  const userId = user?.id ?? user?.user_id ?? user?._id
 
   const socketRef = useRef(null)
 
@@ -40,7 +41,7 @@ export function SocketProvider({ children }) {
      * unauthenticated handshake and joins such a socket to no rooms, so a guest
      * only ever receives public broadcasts — never user, order or admin events.
      *
-     * `user?.id` and `isAuthenticated` stay in the dependency list on purpose:
+     * The user ID and `isAuthenticated` stay in the dependency list on purpose:
      * the room set is fixed at connect time, so signing in or out must tear the
      * socket down and reconnect it rather than reuse the anonymous connection.
      *
@@ -67,11 +68,6 @@ export function SocketProvider({ children }) {
     }
 
     /**
-     * Get the current authentication token.
-     */
-    const token = isAuthenticated ? getAuthToken() : null
-
-    /**
      * Create Socket.IO connection.
      */
     const socketInstance = io(socketUrl, {
@@ -80,9 +76,11 @@ export function SocketProvider({ children }) {
        *
        * The backend also supports the accessToken
        * HTTP-only cookie as a fallback.
+       * Read the current token on every handshake, including reconnections.
        */
-      auth: {
-        token: token || undefined,
+      auth: (callback) => {
+        const token = isAuthenticated ? getAuthToken() : null
+        callback({ token: token || undefined })
       },
 
       /**
@@ -249,7 +247,7 @@ export function SocketProvider({ children }) {
       setSocket(null)
       setIsConnected(false)
     }
-  }, [user?.id, isAuthenticated])
+  }, [userId, isAuthenticated])
 
   return (
     <SocketContext.Provider

@@ -129,11 +129,7 @@ async function ensureProjectForCustomBuildOrder(client, orderId) {
             );
           }
         }
-        await client.query(
-          `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [null, 'UPDATE', 'project', createdProject.project_id, JSON.stringify({ message: 'Default workflow applied to project (auto-created from payment)' })]
-        );
+
       }
     } catch (err) {
       console.warn('Failed to apply default workflow to auto-created project:', err.message || err);
@@ -218,66 +214,6 @@ async function getPaymentById(paymentId) {
   return result.rows[0];
 }
 
-/**
- * Records a payment event in the audit trail.
- *
- * A payment without its order, amount and customer is the single most common
- * source of confusion in the audit screen, so the context is captured here at
- * event time instead of being looked up later.
- */
-async function logPaymentAuditEvent({
-  client,
-  actorId,
-  action,
-  payment,
-  status,
-  previousStatus,
-  reason,
-  notes,
-  extraContext = {},
-}) {
-  const auditService = require('./auditService');
-
-  await auditService.logPaymentEvent({
-    userId: actorId || null,
-    action,
-    entityId: payment.payment_id || payment.order_id,
-    status,
-    previousStatus,
-    details: {
-      amount: payment.amount,
-      currency: payment.currency,
-      method: payment.method,
-      reference_number: payment.reference_number,
-      reason: reason || null,
-      notes: notes || null,
-      proof_provided: Boolean(payment.proof_url),
-    },
-    context: {
-      paymentId: payment.payment_id,
-      amount: payment.amount,
-      currency: payment.currency,
-      method: payment.method,
-      referenceNumber: payment.reference_number,
-      rejectionReason: reason || null,
-      paymentStatus: status,
-      proofProvided: Boolean(payment.proof_url),
-      orderId: payment.order_id,
-      orderNumber: payment.order_number,
-      orderType: payment.order_type,
-      orderStatus: payment.order_status,
-      totalAmount: payment.order_total,
-      customerName: payment.customer_name,
-      customerEmail: payment.customer_email,
-      projectId: payment.project_id,
-      projectNumber: payment.custom_build_id,
-      projectTitle: payment.project_title,
-      ...extraContext,
-    },
-    executor: client || null,
-  });
-}
-
 async function getPaymentByOrderId(orderId) {
   const result = await pool.query(
     `SELECT p.*, o.order_number
@@ -296,7 +232,7 @@ function normalizeAmount(value) {
 
 async function createPayment({ order_id, user_id, method, amount, currency = 'PHP', reference_number, proof_url }) {
   const client = await pool.connect();
-  
+
   try {
     await client.query('BEGIN');
 
@@ -306,7 +242,7 @@ async function createPayment({ order_id, user_id, method, amount, currency = 'PH
     }
 
     const existingPayments = await client.query(
-      `SELECT p.* FROM payments p 
+      `SELECT p.* FROM payments p
        WHERE p.order_id = $1`,
       [order_id]
     );
@@ -370,23 +306,6 @@ async function createPayment({ order_id, user_id, method, amount, currency = 'PH
 
     const created = result.rows[0];
 
-    await logPaymentAuditEvent({
-      client,
-      actorId: user_id,
-      action: 'PAYMENT_RECORDED',
-      payment: {
-        ...created,
-        order_number: order.rows[0].order_number,
-        order_type: order.rows[0].order_type,
-        order_status: order.rows[0].status,
-        order_total: order.rows[0].total_amount,
-        project_id: null,
-        custom_build_id: null,
-      },
-      status: created.status,
-      previousStatus: null,
-    });
-
     await client.query('COMMIT');
     return result.rows[0];
   } catch (err) {
@@ -399,7 +318,7 @@ async function createPayment({ order_id, user_id, method, amount, currency = 'PH
 
 async function uploadProofOfPayment(paymentId, { reference_number, proof_url }) {
   const payment = await getPaymentById(paymentId);
-  
+
   if (!payment) {
     throw new AppError('Payment not found', 404);
   }
@@ -409,7 +328,7 @@ async function uploadProofOfPayment(paymentId, { reference_number, proof_url }) 
   }
 
   const client = await pool.connect();
-  
+
   try {
     await client.query('BEGIN');
 
@@ -440,16 +359,6 @@ async function uploadProofOfPayment(paymentId, { reference_number, proof_url }) 
       updateValues
     );
 
-    await logPaymentAuditEvent({
-      client,
-      actorId: payment.user_id,
-      action: 'PAYMENT_PROOF_SUBMITTED',
-      payment: { ...result.rows[0], ...payment },
-      status: result.rows[0].status,
-      previousStatus: payment.status,
-      extraContext: { proofProvided: Boolean(result.rows[0].proof_url) },
-    });
-
     await client.query('COMMIT');
     return result.rows[0];
   } catch (err) {
@@ -462,7 +371,7 @@ async function uploadProofOfPayment(paymentId, { reference_number, proof_url }) 
 
 async function verifyPayment(paymentId, verifiedByUserId, notes) {
   const payment = await getPaymentById(paymentId);
-  
+
   if (!payment) {
     throw new AppError('Payment not found', 404);
   }
@@ -474,12 +383,12 @@ async function verifyPayment(paymentId, verifiedByUserId, notes) {
 
   const client = await pool.connect();
   let verifiedInstallment = null;
-  
+
   try {
     await client.query('BEGIN');
 
     const result = await client.query(
-      `UPDATE payments 
+      `UPDATE payments
        SET status = $1, verified_by = $2, verified_at = $3, metadata = COALESCE(metadata, '{}'::jsonb) || $4, updated_at = $3
        WHERE payment_id = $5
        RETURNING *`,
@@ -512,16 +421,6 @@ async function verifyPayment(paymentId, verifiedByUserId, notes) {
     await ensureProjectForCustomBuildOrder(client, payment.order_id);
 
     await projectRefundService.transitionRefundStatusesForPayment(client, payment.order_id, 'verified');
-
-    await logPaymentAuditEvent({
-      client,
-      actorId: verifiedByUserId,
-      action: 'PAYMENT_VERIFIED',
-      payment: { ...result.rows[0], ...payment },
-      status: result.rows[0].status,
-      previousStatus: payment.status,
-      notes,
-    });
 
     await client.query('COMMIT');
 
@@ -557,7 +456,7 @@ async function verifyPayment(paymentId, verifiedByUserId, notes) {
 
 async function rejectPayment(paymentId, rejectedByUserId, reason, notes) {
   const payment = await getPaymentById(paymentId);
-  
+
   if (!payment) {
     throw new AppError('Payment not found', 404);
   }
@@ -569,12 +468,12 @@ async function rejectPayment(paymentId, rejectedByUserId, reason, notes) {
 
   const client = await pool.connect();
   let rejectedInstallment = null;
-  
+
   try {
     await client.query('BEGIN');
 
     const result = await client.query(
-      `UPDATE payments 
+      `UPDATE payments
        SET status = $1, verified_by = $2, verified_at = $3, rejection_reason = $4, metadata = COALESCE(metadata, '{}'::jsonb) || $5, updated_at = $3
        WHERE payment_id = $6
        RETURNING *`,
@@ -608,17 +507,6 @@ async function rejectPayment(paymentId, rejectedByUserId, reason, notes) {
 
     await projectRefundService.transitionRefundStatusesForPayment(client, payment.order_id, 'rejected');
 
-    await logPaymentAuditEvent({
-      client,
-      actorId: rejectedByUserId,
-      action: 'PAYMENT_REJECTED',
-      payment: { ...result.rows[0], ...payment },
-      status: result.rows[0].status,
-      previousStatus: payment.status,
-      reason,
-      notes,
-    });
-
     await client.query('COMMIT');
 
     if (rejectedInstallment) {
@@ -650,7 +538,7 @@ async function rejectPayment(paymentId, rejectedByUserId, reason, notes) {
 
 async function cancelPayment(paymentId, cancelledByUserId) {
   const payment = await getPaymentById(paymentId);
-  
+
   if (!payment) {
     throw new AppError('Payment not found', 404);
   }
@@ -661,7 +549,7 @@ async function cancelPayment(paymentId, cancelledByUserId) {
   }
 
   const result = await pool.query(
-    `UPDATE payments 
+    `UPDATE payments
      SET status = $1, metadata = COALESCE(metadata, '{}'::jsonb) || $2, updated_at = $3
      WHERE payment_id = $4
      RETURNING *`,
@@ -673,20 +561,12 @@ async function cancelPayment(paymentId, cancelledByUserId) {
     ]
   );
 
-  await logPaymentAuditEvent({
-    actorId: cancelledByUserId,
-    action: 'PAYMENT_CANCELLED',
-    payment: { ...result.rows[0], ...payment },
-    status: result.rows[0].status,
-    previousStatus: payment.status,
-  });
-
   return result.rows[0];
 }
 
 async function listPayments(filters = {}) {
   const { status, method, order_id, user_id, start_date, end_date, limit = 20, offset = 0 } = filters;
-  
+
   const conditions = [];
   const values = [];
   let paramIndex = 1;
@@ -724,7 +604,7 @@ async function listPayments(filters = {}) {
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const result = await pool.query(
-    `SELECT p.*, o.order_number, u.email as user_email, 
+    `SELECT p.*, o.order_number, u.email as user_email,
             CONCAT(u.first_name, ' ', COALESCE(u.middle_name, ''), ' ', u.last_name) as user_name
      FROM payments p
      JOIN orders o ON p.order_id = o.order_id
@@ -740,7 +620,7 @@ async function listPayments(filters = {}) {
 
 async function getPaymentsCount(filters = {}) {
   const { status, method, order_id, user_id, start_date, end_date } = filters;
-  
+
   const conditions = [];
   const values = [];
   let paramIndex = 1;
@@ -787,7 +667,7 @@ async function getPaymentsCount(filters = {}) {
 
 async function getPaymentInstructions(method) {
   const config = await getPaymentConfig(method);
-  
+
   if (!config) {
     throw new AppError('Payment method not found or is inactive', 404);
   }
@@ -811,7 +691,7 @@ async function getAllPaymentMethods() {
 
 async function getPaymentStats(filters = {}) {
   const { start_date, end_date, user_id } = filters;
-  
+
   const conditions = [];
   const values = [];
   let paramIndex = 1;
@@ -834,7 +714,7 @@ async function getPaymentStats(filters = {}) {
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const result = await pool.query(
-    `SELECT 
+    `SELECT
        COUNT(*) as total_payments,
        SUM(CASE WHEN p.status = 'verified' THEN 1 ELSE 0 END) as verified_count,
        SUM(CASE WHEN p.status = 'pending' THEN 1 ELSE 0 END) as pending_count,
@@ -852,7 +732,7 @@ async function getPaymentStats(filters = {}) {
 
 async function refundPayment(paymentId, refundedByUserId, reason) {
   const payment = await getPaymentById(paymentId);
-  
+
   if (!payment) {
     throw new AppError('Payment not found', 404);
   }
@@ -862,12 +742,12 @@ async function refundPayment(paymentId, refundedByUserId, reason) {
   }
 
   const client = await pool.connect();
-  
+
   try {
     await client.query('BEGIN');
 
     const result = await client.query(
-      `UPDATE payments 
+      `UPDATE payments
        SET status = $1, metadata = COALESCE(metadata, '{}'::jsonb) || $2, updated_at = $3
        WHERE payment_id = $4
        RETURNING *`,
@@ -884,16 +764,6 @@ async function refundPayment(paymentId, refundedByUserId, reason) {
       [ORDER_PAYMENT_STATUS.PENDING, new Date(), payment.order_id]
     );
 
-    await logPaymentAuditEvent({
-      client,
-      actorId: refundedByUserId,
-      action: 'PAYMENT_REFUNDED',
-      payment: { ...result.rows[0], ...payment },
-      status: result.rows[0].status,
-      previousStatus: payment.status,
-      reason,
-    });
-
     await client.query('COMMIT');
     return result.rows[0];
   } catch (err) {
@@ -906,7 +776,7 @@ async function refundPayment(paymentId, refundedByUserId, reason) {
 
 async function getPaymentsByUser(userId, filters = {}) {
   const { status, method, limit = 20, offset = 0, start_date, end_date } = filters;
-  
+
   const conditions = ['p.user_id = $1'];
   const values = [userId];
   let paramIndex = 2;
@@ -948,7 +818,7 @@ async function getPaymentsByUser(userId, filters = {}) {
 
 async function getPaymentsByUserCount(userId, filters = {}) {
   const { status, method, start_date, end_date } = filters;
-  
+
   const conditions = ['p.user_id = $1'];
   const values = [userId];
   let paramIndex = 2;
@@ -985,10 +855,10 @@ async function getPaymentsByUserCount(userId, filters = {}) {
 
 async function checkIdempotency(orderId, method, amount) {
   const existingPayment = await pool.query(
-    `SELECT * FROM payments 
-     WHERE order_id = $1 AND method = $2 AND amount = $3 
-     AND status NOT IN ('rejected', 'cancelled') 
-     ORDER BY created_at DESC 
+    `SELECT * FROM payments
+     WHERE order_id = $1 AND method = $2 AND amount = $3
+     AND status NOT IN ('rejected', 'cancelled')
+     ORDER BY created_at DESC
      LIMIT 1`,
     [orderId, method, amount]
   );

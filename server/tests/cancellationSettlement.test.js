@@ -164,10 +164,10 @@ async function runTests() {
               }],
             };
           }
-          if (sql.includes('FROM audit_logs') && sql.includes('project_part_received')) {
+          if (sql.includes('FROM project_part_receipts')) {
             return {
               rows: [
-                { details: JSON.stringify({ part_key: 'configuration-body-alder-cust-1-none-body_wood', received_quantity: 1, supplier: 'ToneWoods PH', received_at: new Date() }) },
+                { part_key: 'configuration-body-alder-cust-1-none-body_wood', received_quantity: 1, stock_deducted_quantity: 0, supplier: 'ToneWoods PH', received_at: new Date() },
               ],
             };
           }

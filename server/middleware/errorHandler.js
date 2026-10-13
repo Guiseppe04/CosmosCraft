@@ -2,7 +2,16 @@
  * Global error handling middleware
  */
 const errorHandler = (err, req, res, next) => {
-  console.error('Error:', err);
+  // Parser/driver errors can carry submitted JSON or sensitive connection details.
+  console.error('Request error:', {
+    name: err.name,
+    code: err.code || err.type,
+    statusCode: err.statusCode || 500,
+  });
+
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ status: 'error', message: 'Request body must contain valid JSON.' });
+  }
 
   // Handle PostgreSQL duplicate key errors (e.g., unique email)
   if (err.code === '23505') {
@@ -91,7 +100,6 @@ const errorHandler = (err, req, res, next) => {
     message: statusCode >= 500
       ? 'Something went wrong. Please try again later.'
       : friendlyMessage || 'Something went wrong. Please try again later.',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 };
 

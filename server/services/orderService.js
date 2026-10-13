@@ -11,72 +11,6 @@ const validateShippingFee = (value) => {
   return Number(value);
 };
 
-/**
- * Reads the customer for an order so an order event names a person, not just an
- * order number. One extra read per event, only when the caller did not already
- * have the customer loaded.
- */
-const readOrderCustomer = async (orderId, knownUserId = null) => {
-  const userId = knownUserId || null;
-  if (!userId) return {};
-  try {
-    const { rows } = await pool.query(
-      `SELECT TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))) AS customer_name,
-              email AS customer_email
-       FROM users WHERE user_id = $1`,
-      [userId]
-    );
-    return rows[0] || {};
-  } catch (err) {
-    console.warn('Could not resolve order customer:', err.message);
-    return {};
-  }
-}
-
-/**
- * Records an order status change in the audit trail.
- *
- * Order status transitions used to be invisible in the audit screen, so a
- * reviewer could see a payment verification with no explanation of why the order
- * itself moved forward. The order number, type and customer are captured here at
- * event time.
- */
-const logOrderStatusEvent = async ({
-  orderId,
-  previousStatus,
-  order,
-  actorId = null,
-  action = 'ORDER_STATUS_CHANGED',
-  details = {},
-  extraContext = {},
-  client = null,
-}) => {
-  const auditService = require('./auditService');
-  const customer = await readOrderCustomer(orderId, order?.user_id || extraContext.customerId || null);
-
-  await auditService.logOrderEvent({
-    userId: actorId,
-    action,
-    entityId: orderId,
-    status: order?.status ?? null,
-    previousStatus: previousStatus ?? null,
-    details,
-    context: {
-      orderId,
-      orderNumber: order?.order_number ?? extraContext.orderNumber ?? null,
-      orderType: order?.order_type ?? extraContext.orderType ?? null,
-      orderStatus: order?.status ?? null,
-      previousStatus: previousStatus ?? null,
-      paymentStatus: order?.payment_status ?? extraContext.paymentStatus ?? null,
-      totalAmount: order?.total_amount ?? extraContext.totalAmount ?? null,
-      customerName: customer.customer_name || extraContext.customerName || null,
-      customerEmail: customer.customer_email || extraContext.customerEmail || null,
-      ...extraContext,
-    },
-    executor: client,
-  });
-}
-
 const syncStockToBuilderParts = async (productId, delta) => {
   if (!productId || delta === 0) return;
   await pool.query(
@@ -509,7 +443,6 @@ const upsertCustomizationForOrder = async (client, userId, customization, fallba
   return customizationId
 }
 
-
 const validateAndDeductInventory = async (client, reservations, orderId) => {
   const productIds = Array.from(reservations.keys()).sort()
 
@@ -628,14 +561,14 @@ const STATUS_FIELD_REQUIREMENTS = {
 
 exports.createOrder = async (orderData) => {
   const { userId, notes, shippingMethod, paymentMethod, billingAddress, termsAccepted, paymentPlan, initialPaymentPercentage, installmentTenureMonths } = orderData
-  
+
   // Ensure database columns exist
   await ensureOrderItemsColumns()
   await ensureInstallmentColumns()
   await ensureCustomizationBuildColumns()
-  
+
   const client = await pool.connect()
-  
+
   try {
     await client.query('BEGIN')
 
@@ -704,13 +637,13 @@ exports.createOrder = async (orderData) => {
     // Determine payment plan and initial order status
     const resolvedPaymentPlan = paymentPlan || 'full_payment';
     const isInstallment = resolvedPaymentPlan === 'installment';
-    
+
     // Calculate installment amounts if applicable
     let initialPaymentAmount = null;
     let monthlyInstallmentAmount = null;
     const resolvedInitialPaymentPercentage = isInstallment ? (Number(initialPaymentPercentage) || 0.50) : null;
     const resolvedTenureMonths = isInstallment ? (Number(installmentTenureMonths) || 6) : null;
-    
+
     if (isInstallment && isCustomBuild) {
       const financedAmount = total * (1 - resolvedInitialPaymentPercentage);
       initialPaymentAmount = Math.round(total * resolvedInitialPaymentPercentage * 100) / 100;
@@ -748,7 +681,7 @@ exports.createOrder = async (orderData) => {
       const matchedAddress = existingAddr.rows.find(
         (address) => getAddressSignature(address) === getAddressSignature(billingAddress)
       )
-      
+
       if (matchedAddress) {
         shippingAddressId = matchedAddress.address_id
       } else {
@@ -796,7 +729,7 @@ exports.createOrder = async (orderData) => {
         monthlyInstallmentAmount,
       ]
     )
-    
+
     const order = orderRes.rows[0]
     await require('./termsService').attachCheckout(client, userId, orderData.checkoutAcknowledgmentId, items, order.order_id)
     const inventoryReservations = collectInventoryReservations(items)
@@ -826,12 +759,12 @@ exports.createOrder = async (orderData) => {
 
       // Check if product_id is a valid UUID
       const productId = customizationId ? null : resolveProductId(item.productId, item.id)
-      
+
       // For mock products (non-UUID IDs like "prod-001"), store in product_sku
       const productSku = !customizationId && !productId ? item.productId : null
       // Always store product name if provided
       const productName = item.name || null
-      
+
       await client.query(
         `INSERT INTO order_items (order_id, product_id, customization_id, product_sku, product_name, quantity, unit_price)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -1017,8 +950,8 @@ exports.getOrderById = async (orderId, userId = null) => {
   }
 
   const res = await pool.query(
-    `SELECT o.*, 
-      a.line1 as shipping_line1, a.line2 as shipping_line2, a.city as shipping_city, 
+    `SELECT o.*,
+      a.line1 as shipping_line1, a.line2 as shipping_line2, a.city as shipping_city,
       a.province as shipping_province, a.postal_code as shipping_postal_code, a.country as shipping_country,
       u.first_name, u.middle_name, u.last_name, u.email, u.phone as contact_phone
       FROM orders o
@@ -1027,7 +960,7 @@ exports.getOrderById = async (orderId, userId = null) => {
       ${whereClause}`,
     queryParams
   )
-  
+
   if (res.rows.length === 0) {
     throw new Error('Order not found')
   }
@@ -1307,31 +1240,31 @@ exports.updateOrder = async (orderId, updateData, actorId = null, executor = poo
     updateData = { ...updateData, rider_contact: normalized };
   }
   const { status, payment_status, notes, tracking_number, courier_name, shipped_at, out_for_delivery_at, delivered_at, received_at, rider_name, rider_contact } = updateData;
-  
+
   if (status) {
     const currentRes = await executor.query(
       `SELECT status, tracking_number, rider_name, rider_contact FROM orders WHERE order_id = $1`,
       [orderId]
     );
-    
+
     if (currentRes.rows.length === 0) {
       return null;
     }
-    
+
     const currentStatus = currentRes.rows[0].status;
     const order = currentRes.rows[0];
-    
+
     if (status === currentStatus) {
       throw createValidationError(`Order is already ${currentStatus.replace(/_/g, ' ')}. Please select a valid next status.`);
     }
     // Keep the existing workflow and required-field rules for next statuses.
     if (status !== currentStatus) {
       const allowedTransitions = VALID_STATUS_TRANSITIONS[currentStatus] || [];
-      
+
       if (!allowedTransitions.includes(status)) {
         throw createValidationError(`Invalid status transition from '${currentStatus}' to '${status}'`);
       }
-      
+
       if (STATUS_FIELD_REQUIREMENTS[status]) {
         // Check for required fields - accept either in updateData or existing order
         const missingFields = STATUS_FIELD_REQUIREMENTS[status].filter(field =>
@@ -1343,7 +1276,7 @@ exports.updateOrder = async (orderId, updateData, actorId = null, executor = poo
       }
     }
   }
-  
+
   if (status === 'shipped' || updateData.additional_shipping_fee !== undefined) {
     updateData = { ...updateData, additional_shipping_fee: validateShippingFee(updateData.additional_shipping_fee) };
   }
@@ -1360,7 +1293,9 @@ exports.updateOrder = async (orderId, updateData, actorId = null, executor = poo
     updateData.received_at = updateData.received_at || new Date();
   }
 
-  if(status==='shipped' && !require('./dispatchPhotoService').isPickup(lockedOrder || {}))await require('./dispatchPhotoService').save(executor,orderId,'order',updateData.itemPhotos,actorId);
+  if (status === 'shipped' && !require('./dispatchPhotoService').isPickup(lockedOrder || {})) {
+    await require('./dispatchPhotoService').save(executor, orderId, 'order', updateData.itemPhotos, actorId);
+  }
   const res = await executor.query(
     `UPDATE orders 
      SET status = COALESCE($1, status),
@@ -1384,13 +1319,13 @@ exports.updateOrder = async (orderId, updateData, actorId = null, executor = poo
 }
 
 exports.updatePaymentStatus = async (orderId, status, options = {}) => {
-  const { 
-    reference_number, 
-    admin_name, 
-    admin_email, 
-    rejection_reason, 
+  const {
+    reference_number,
+    admin_name,
+    admin_email,
+    rejection_reason,
     admin_notes,
-    admin_user_id 
+    admin_user_id
   } = options
 
   const client = await pool.connect()
@@ -1434,12 +1369,12 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
        WHERE o.order_id = $1`,
       [orderId]
     )
-    
+
     if (orderRes.rows.length === 0) {
       await client.query('ROLLBACK')
       return null
     }
-    
+
     const auditSource = orderRes.rows[0]
     const currentStatus = auditSource.payment_status
     const resolvedPaymentMethod = resolveOrderPaymentMethod(
@@ -1451,7 +1386,7 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
       await client.query('ROLLBACK')
       throw createValidationError('COD orders do not support manual payment verification updates')
     }
-    
+
     // Validate status transition
     if (!isValidPaymentStatusTransition(currentStatus, status)) {
       await client.query('ROLLBACK')
@@ -1561,73 +1496,9 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
 
     await client.query('COMMIT')
 
-    // Log to consolidated audit_logs table
-    try {
-      const auditService = require('./auditService');
-      await auditService.logPaymentEvent({
-        userId: admin_user_id,
-        action: status === 'approved' ? 'VERIFY' : status === 'rejected' ? 'REJECT' : 'UPDATE',
-        entityId: latestPaymentId || orderId,
-        status,
-        previousStatus: currentStatus,
-        details: {
-          reference_number,
-          rejection_reason,
-          admin_notes,
-          admin_name,
-          admin_email,
-        },
-        context: {
-          paymentId: latestPaymentId,
-          amount: auditSource.payment_amount ?? auditSource.total_amount,
-          method: resolvedPaymentMethod || auditSource.latest_payment_method,
-          referenceNumber: reference_number || auditSource.payment_reference_number,
-          rejectionReason: rejection_reason,
-          paymentStatus: newPaymentStatus,
-          orderId,
-          orderNumber: auditSource.order_number,
-          orderType: auditSource.order_type,
-          customerName: auditSource.customer_name,
-          customerEmail: auditSource.customer_email,
-        },
-      });
-    } catch (auditErr) {
-      console.warn('Audit log not available:', auditErr.message);
-    }
-
     // An approved payment can also advance the order itself from pending to
     // processing. That transition is its own event, otherwise the order looks
     // like it changed status without explanation.
-    if (order.status !== auditSource.status) {
-      try {
-        const auditService = require('./auditService');
-        await auditService.logOrderEvent({
-          userId: admin_user_id || null,
-          action: 'ORDER_STATUS_CHANGED',
-          entityId: orderId,
-          status: order.status,
-          previousStatus: auditSource.status,
-          details: {
-            triggered_by: `payment_${status}`,
-            payment_status: status,
-            admin_notes: admin_notes || null,
-          },
-          context: {
-            orderId,
-            orderNumber: auditSource.order_number,
-            orderType: auditSource.order_type,
-            orderStatus: order.status,
-            previousStatus: auditSource.status,
-            paymentStatus: order.payment_status,
-            totalAmount: order.total_amount,
-            customerName: auditSource.customer_name,
-            customerEmail: auditSource.customer_email,
-          },
-        });
-      } catch (auditErr) {
-        console.warn('Audit log not available:', auditErr.message);
-      }
-    }
 
     return order
   } catch (error) {
@@ -1665,14 +1536,14 @@ exports.approvePayment = async (orderId, options = {}) => {
        WHERE o.order_id = $1`,
       [orderId]
     )
-    
+
     if (currentRes.rows.length === 0) {
       await client.query('ROLLBACK')
       return null
     }
-    
+
     const currentStatus = currentRes.rows[0].payment_status
-    
+
     // Validate transition to approved
     if (!isValidPaymentStatusTransition(currentStatus, 'approved')) {
       await client.query('ROLLBACK')
@@ -1682,19 +1553,19 @@ exports.approvePayment = async (orderId, options = {}) => {
     // A successful payment advances the order into 'processing'.
     const nextOrderStatus =
       currentRes.rows[0].status === 'pending' ? 'processing' : currentRes.rows[0].status
-    
+
     const res = await client.query(
-      `UPDATE orders SET 
-        payment_status = 'approved', 
+      `UPDATE orders SET
+        payment_status = 'approved',
         status = $3,
-        reviewed_by = $1, 
+        reviewed_by = $1,
         reviewed_at = CURRENT_TIMESTAMP,
         rejection_reason = NULL,
-        updated_at = CURRENT_TIMESTAMP 
+        updated_at = CURRENT_TIMESTAMP
       WHERE order_id = $2 RETURNING *`,
       [admin_user_id || null, orderId, nextOrderStatus]
     )
-    
+
     const order = res.rows[0]
 
     // Sync the latest payment record to verified
@@ -1718,34 +1589,6 @@ exports.approvePayment = async (orderId, options = {}) => {
 
     await client.query('COMMIT')
 
-    // Log to consolidated audit_logs table
-    try {
-      const auditService = require('./auditService');
-      const auditSource = currentRes.rows[0];
-      await auditService.logPaymentEvent({
-        userId: admin_user_id || null,
-        action: 'VERIFY',
-        entityId: latestPaymentId || orderId,
-        status: 'approved',
-        previousStatus: currentStatus,
-        details: { admin_name, admin_email },
-        context: {
-          paymentId: latestPaymentId,
-          amount: auditSource.payment_amount ?? auditSource.total_amount,
-          method: auditSource.latest_payment_method,
-          referenceNumber: auditSource.payment_reference_number,
-          paymentStatus: 'verified',
-          orderId,
-          orderNumber: auditSource.order_number,
-          orderType: auditSource.order_type,
-          customerName: auditSource.customer_name,
-          customerEmail: auditSource.customer_email,
-        },
-      });
-    } catch (auditErr) {
-      console.warn('Audit log not available:', auditErr.message);
-    }
-    
     return order
   } catch (error) {
     await client.query('ROLLBACK')
@@ -1764,27 +1607,29 @@ exports.updateShipment = async (orderId, shipmentData, actorId = null, executor 
     `SELECT status, payment_status FROM orders WHERE order_id = $1`,
     [orderId]
   );
-  
+
   if (orderRes.rows.length === 0) {
     throw new Error('Order not found');
   }
-  
+
   const order = orderRes.rows[0];
-  
+
   if (order.payment_status !== exports.PAYMENT_STATUS.APPROVED) {
     throw new Error('Cannot ship order - payment not completed');
   }
-  
+
   const validShipStatuses = ['processing'];
   if (!validShipStatuses.includes(order.status)) {
     throw new Error(`Cannot ship order - current status is '${order.status}'. Order must be in 'processing' status to be shipped.`);
   }
-  
+
   if (!tracking_number || !courier_name) {
     throw new Error('Tracking number and courier name are required for shipment');
   }
   
-  if(!require('./dispatchPhotoService').isPickup(lockedOrder || {}))await require('./dispatchPhotoService').save(executor,orderId,'order',shipmentData.itemPhotos,actorId);
+  if (!require('./dispatchPhotoService').isPickup(lockedOrder || {})) {
+    await require('./dispatchPhotoService').save(executor, orderId, 'order', shipmentData.itemPhotos, actorId);
+  }
   const res = await executor.query(
     `UPDATE orders 
      SET status = 'shipped',
@@ -1799,22 +1644,6 @@ exports.updateShipment = async (orderId, shipmentData, actorId = null, executor 
     [tracking_number, courier_name, rider_name || null, rider_contact || null, orderId, additionalShippingFee]
   );
 
-  // Trigger-managed deployments already recorded the status on this transaction.
-  if(!await require('./dispatchPhotoService').hasManagedAudit(executor,'orders'))await logOrderStatusEvent({
-    orderId,
-    previousStatus: order.status,
-    order: res.rows[0],
-    actorId,
-    action: 'ORDER_SHIPPED',
-    details: {
-      tracking_number,
-      courier_name,
-      additional_shipping_fee: additionalShippingFee,
-      rider_name: rider_name || null,
-    },
-    extraContext: { courierName: courier_name, trackingNumber: tracking_number },
-  });
-
   return res.rows[0];
 }
 
@@ -1822,28 +1651,28 @@ exports.updateOutForDelivery = async (orderId, riderData, actorId = null) => {
   const { rider_name } = riderData;
   const rider_contact = require('../utils/riderContact').normalizeRiderContact(riderData.rider_contact);
   if (!rider_contact) throw createValidationError('Please enter a valid mobile number.');
-  
+
   const orderRes = await pool.query(
     `SELECT status FROM orders WHERE order_id = $1`,
     [orderId]
   );
-  
+
   if (orderRes.rows.length === 0) {
     throw new Error('Order not found');
   }
-  
+
   const order = orderRes.rows[0];
-  
+
   if (order.status !== 'shipped') {
     throw new Error(`Cannot mark as out for delivery - current status is '${order.status}'. Order must be in 'shipped' status.`);
   }
-  
+
   if (!rider_name || !rider_contact) {
     throw new Error('Rider name and contact are required for out for delivery status');
   }
-  
+
   const res = await pool.query(
-    `UPDATE orders 
+    `UPDATE orders
      SET status = 'out_for_delivery',
          rider_name = $1,
          rider_contact = $2,
@@ -1853,15 +1682,6 @@ exports.updateOutForDelivery = async (orderId, riderData, actorId = null) => {
     [rider_name, rider_contact, orderId]
   );
 
-  await logOrderStatusEvent({
-    orderId,
-    previousStatus: order.status,
-    order: res.rows[0],
-    actorId,
-    action: 'ORDER_OUT_FOR_DELIVERY',
-    details: { rider_name, out_for_delivery_at: res.rows[0].out_for_delivery_at },
-  });
-
   return res.rows[0];
 }
 
@@ -1870,34 +1690,25 @@ exports.markDelivered = async (orderId, actorId = null) => {
     `SELECT status FROM orders WHERE order_id = $1`,
     [orderId]
   );
-  
+
   if (orderRes.rows.length === 0) {
     throw new Error('Order not found');
   }
-  
+
   const order = orderRes.rows[0];
-  
+
   if (order.status !== 'out_for_delivery') {
     throw new Error(`Cannot mark as delivered - current status is '${order.status}'. Order must be in 'out_for_delivery' status.`);
   }
-  
+
   const res = await pool.query(
-    `UPDATE orders 
+    `UPDATE orders
      SET status = 'delivered',
          delivered_at = CURRENT_TIMESTAMP,
          updated_at = CURRENT_TIMESTAMP
      WHERE order_id = $1 RETURNING *`,
     [orderId]
   );
-
-  await logOrderStatusEvent({
-    orderId,
-    previousStatus: order.status,
-    order: res.rows[0],
-    actorId,
-    action: 'ORDER_MARKED_DELIVERED',
-    details: { delivered_at: res.rows[0].delivered_at },
-  });
 
   return res.rows[0];
 }
@@ -1916,15 +1727,6 @@ exports.cancelOrder = async (orderId, actorId = null) => {
   );
   if (res.rows.length === 0) return null;
 
-  await logOrderStatusEvent({
-    orderId,
-    previousStatus: current.status,
-    order: res.rows[0],
-    actorId,
-    action: 'ORDER_CANCELLED',
-    extraContext: { customerId: current.user_id },
-  });
-
   return res.rows[0];
 }
 
@@ -1932,7 +1734,7 @@ const refundService = require('./refundService');
 
 exports.cancelMyOrder = async (orderId, userId, reason) => {
   const client = await pool.connect();
-  
+
   try {
     await client.query('BEGIN');
 
@@ -2017,41 +1819,11 @@ exports.cancelMyOrder = async (orderId, userId, reason) => {
             ]
           );
 
-          await client.query(
-            `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [
-              userId,
-              'refund_requested',
-              'order',
-              orderId,
-              JSON.stringify({
-                refund_request_reason: 'Automatic refund request from order cancellation',
-                amount_requested: amountRequested,
-                refund_status: refundStatus,
-                payment_status_at_cancel: latestPayment.status,
-              }),
-            ]
-          );
         }
       }
     }
 
     // Recorded inside the transaction so the cancellation and its audit entry can
-    // never disagree.
-    await logOrderStatusEvent({
-      orderId,
-      previousStatus: status,
-      order: res.rows[0],
-      actorId: userId,
-      action: 'ORDER_CANCELLED',
-      details: {
-        reason,
-        cancelled_by: 'customer',
-        refund_request_created: Boolean(latestPayment),
-      },
-      client,
-    });
 
     await client.query('COMMIT');
 
@@ -2084,15 +1856,6 @@ exports.markAsReceived = async (orderId, userId) => {
     `UPDATE orders SET status = 'received', received_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE order_id = $1 RETURNING *`,
     [orderId]
   );
-
-  await logOrderStatusEvent({
-    orderId,
-    previousStatus: order.status,
-    order: res.rows[0],
-    actorId: userId,
-    action: 'ORDER_MARKED_RECEIVED',
-    details: { received_at: res.rows[0].received_at },
-  });
 
   return res.rows[0];
 }

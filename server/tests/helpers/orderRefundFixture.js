@@ -3,6 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const { pool } = require('../../config/database');
+const { wrapAuditClient } = require('../../config/auditDatabaseContext');
+const { auditRequestContext } = require('../../services/auditRequestContext');
 
 const ids = {
   customer: '10000000-0000-4000-8000-000000000001', admin: '10000000-0000-4000-8000-000000000002',
@@ -27,7 +29,7 @@ async function createFixture() {
     CREATE TABLE product_images(product_id UUID,image_url TEXT,is_primary BOOLEAN);
     CREATE TABLE product_reviews(order_id UUID,order_item_id BIGINT,deleted_at TIMESTAMPTZ);
     CREATE TABLE customization_feedback(order_id UUID,deleted_at TIMESTAMPTZ);
-    CREATE TABLE projects(project_id UUID,order_id UUID,title TEXT,status TEXT,fulfillment_status TEXT,deleted_at TIMESTAMPTZ);
+    CREATE TABLE projects(project_id UUID PRIMARY KEY,order_id UUID,title TEXT,status TEXT,fulfillment_status TEXT,deleted_at TIMESTAMPTZ);
     CREATE TABLE refund_requests(refund_request_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),order_id UUID,user_id UUID,
       status VARCHAR(30) DEFAULT 'pending',reason TEXT,customer_notes TEXT,request_number TEXT,deleted_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ DEFAULT now(),updated_at TIMESTAMPTZ,reviewed_by UUID,reviewed_at TIMESTAMPTZ,refunded_at TIMESTAMPTZ,
@@ -38,8 +40,9 @@ async function createFixture() {
       unit_price NUMERIC,refund_amount NUMERIC,deleted_at TIMESTAMPTZ);
     CREATE TABLE refund_request_images(refund_request_id UUID,image_url TEXT,sort_order INT,deleted_at TIMESTAMPTZ);
     CREATE TABLE refund_request_counters(prefix TEXT PRIMARY KEY,date DATE,last_number INT,updated_at TIMESTAMPTZ);
-    CREATE TABLE audit_logs(user_id UUID,action TEXT,entity_type TEXT,entity_id UUID,previous_status TEXT,new_status TEXT,
-      details JSONB,context JSONB,changes JSONB,ip_address TEXT,user_agent TEXT,search_text TEXT,created_at TIMESTAMPTZ DEFAULT now());
+    CREATE TABLE audit_logs(audit_id BIGSERIAL PRIMARY KEY,user_id UUID,action TEXT,entity_type TEXT,entity_id UUID,previous_status TEXT,new_status TEXT,
+      details JSONB DEFAULT '{}',context JSONB NOT NULL DEFAULT '{}',changes JSONB NOT NULL DEFAULT '{}',
+      ip_address INET,user_agent TEXT,search_text TEXT,created_at TIMESTAMPTZ DEFAULT now());
   `);
   await db.exec(fs.readFileSync(path.join(__dirname, '../../migrations/42_order_refund_workflow.sql'), 'utf8'));
   await db.exec(`ALTER TABLE refund_requests ADD COLUMN return_status TEXT, ADD COLUMN return_method TEXT, ADD COLUMN return_reference TEXT, ADD COLUMN return_confirmed_at TIMESTAMPTZ;`);
@@ -60,11 +63,16 @@ async function createFixture() {
   await db.query("INSERT INTO orders(order_id,user_id,order_number,status,payment_status,total_amount) VALUES($1,$2,'TEST-ORDER','received','approved',1000)", [ids.order,ids.customer]);
   await db.query("INSERT INTO payments(order_id,amount,status,payment_method) VALUES($1,1000,'verified','e_wallet')", [ids.order]);
   await db.query("INSERT INTO order_items(order_id,product_id,product_name,unit_price,quantity) VALUES($1,$2,'Test Guitar',500,2)", [ids.order,ids.product]);
+  await db.exec(fs.readFileSync(path.join(__dirname, '../../migrations/36_audit_logs_context.sql'), 'utf8'));
+  await db.exec(fs.readFileSync(path.join(__dirname, '../../migrations/46_database_audit_triggers.sql'), 'utf8'));
 
   const originalQuery = pool.query, originalConnect = pool.connect;
-  const query = async (sql, params = []) => db.query(sql, params);
-  pool.query = query;
-  pool.connect = async () => ({ query, release() {} });
+  const makeClient = () => wrapAuditClient({ query: (sql, params = []) => db.query(sql, params), release() {} });
+  pool.query = async (...args) => {
+    const client = makeClient();
+    try { return await client.query(...args); } finally { client.release(); }
+  };
+  pool.connect = async () => makeClient();
   const auth = require('../../middleware/auth');
   const originalAuthenticate = auth.authenticateToken;
   // Test identity provider only; routes retain their real authorization and validators.
@@ -78,6 +86,7 @@ async function createFixture() {
   const router = require('../../routes/orderRoutes');
   auth.authenticateToken = originalAuthenticate;
   const app = express();
+  app.use(auditRequestContext);
   app.use(express.json({ limit: '10mb' }));
   app.use('/api/orders', router);
   app.use((err,req,res,next) => res.status(err.statusCode || 400).json({ message: err.message }));

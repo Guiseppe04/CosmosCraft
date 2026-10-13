@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const contactRoutes = require('./routes/contactRoutes.js');
 
 const http = require('http');
@@ -39,6 +39,9 @@ const { errorHandler, notFound } = require('./middleware/errorHandler.js');
 const { createRateLimiter } = require('./middleware/rateLimitMiddleware.js');
 
 const app = express();
+app.disable('x-powered-by');
+app.use(require('./middleware/securityHeaders').securityHeaders);
+app.use(require('./services/auditRequestContext').auditRequestContext);
 
 // Configure `trust proxy` when running behind a reverse proxy (e.g. Render, Heroku).
 // If `TRUST_PROXY` is set it will be used verbatim, otherwise enable in production.
@@ -72,7 +75,7 @@ const authLimiter = createRateLimiter({
 
 app.use(generalLimiter);
 const allowedOrigins = [
-  process.env.FRONTEND_URL, 
+  process.env.FRONTEND_URL,
   process.env.FRONTEND_URL_PROD
 ].filter(Boolean);
 
@@ -182,7 +185,6 @@ async function startServer() {
   noShowTimer.unref();
   server.on('close', () => clearInterval(noShowTimer));
   void sweepNoShows();
-
 
   server.listen(PORT, async () => {
     console.log(`Backend Running`);

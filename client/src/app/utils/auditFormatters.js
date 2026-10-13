@@ -1236,9 +1236,9 @@ export function formatAuditEntry(log = {}) {
   return {
     ...result,
     // Fallbacks so the modal always has a headline and a sentence.
-    title: result.title || formatActionLabel(log.action),
-    description: result.description || `${formatEntityNoun(log.entity_type)} activity was recorded.`,
-    moduleLabel: formatEntityType(log.entity_type),
+    title: log.context?.source_table && log.display?.title || result.title || formatActionLabel(log.action),
+    description: log.context?.source_table && log.display?.description || result.description || `${formatEntityNoun(log.entity_type)} activity was recorded.`,
+    moduleLabel: log.display?.module || formatEntityType(log.entity_type),
   }
 }
 

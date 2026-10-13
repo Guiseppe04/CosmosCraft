@@ -114,7 +114,7 @@ exports.submitFulfillmentRequest = async (projectId, userId, userRole, data = {}
       if (deliveryAddressId) {
         const addrRes = await client.query(
           `SELECT address_id, label, line1, line2, barangay, city, province, postal_code, country
-           FROM addresses 
+           FROM addresses
            WHERE address_id = $1 AND (user_id = $2 OR $3 = true)`,
           [deliveryAddressId, project.customer_id, isPrivileged]
         );
@@ -126,7 +126,7 @@ exports.submitFulfillmentRequest = async (projectId, userId, userRole, data = {}
       if (!deliveryAddressSnapshot && project.order_shipping_address_id) {
         const addrRes = await client.query(
           `SELECT address_id, label, line1, line2, barangay, city, province, postal_code, country
-           FROM addresses 
+           FROM addresses
            WHERE address_id = $1`,
           [project.order_shipping_address_id]
         );
@@ -166,7 +166,7 @@ exports.submitFulfillmentRequest = async (projectId, userId, userRole, data = {}
 
     // 6. Check existing fulfillment request for this order (atomic check)
     const existingReqRes = await client.query(
-      `SELECT * FROM fulfillment_requests 
+      `SELECT * FROM fulfillment_requests
        WHERE order_id = $1 AND status NOT IN ('cancelled')
        FOR UPDATE`,
       [project.order_id]
@@ -450,7 +450,7 @@ exports.listFulfillmentRequests = async (filters = {}) => {
     JOIN projects p ON p.project_id = fr.project_id
     JOIN users u ON u.user_id = fr.user_id
     ${whereClause}
-    ORDER BY 
+    ORDER BY
       CASE fr.status
         WHEN 'requested' THEN 1
         WHEN 'processing' THEN 2
@@ -637,9 +637,9 @@ exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actor
       await client.query(
         `UPDATE orders
          SET customization_status = 'fulfilled',
-             status = CASE 
-               WHEN order_type = 'customization' AND status NOT IN ('delivered', 'received', 'cancelled') THEN 'delivered' 
-               ELSE status 
+             status = CASE
+               WHEN order_type = 'customization' AND status NOT IN ('delivered', 'received', 'cancelled') THEN 'delivered'
+               ELSE status
              END,
              delivered_at = COALESCE(delivered_at, $2, now()),
              delivered_by_user_id = COALESCE(delivered_by_user_id, $3),
@@ -819,34 +819,6 @@ exports.confirmDelivery = async (identifier, actorId, actorRole) => {
       [actorId, confirmationMethod, currentReq.order_id]
     );
 
-    // 10. Audit log
-    await require('./auditService').logFulfillmentEvent({
-      userId: actorId,
-      action: 'CONFIRM_DELIVERY',
-      entityId: currentReq.id,
-      entityType: 'fulfillment',
-      status: 'completed',
-      previousStatus: currentReq.status,
-      details: {
-        project_id: currentReq.project_id,
-        order_id: currentReq.order_id,
-        previous_status: currentReq.status,
-        new_status: 'completed',
-        confirmation_method: confirmationMethod,
-        confirmed_by: actorId,
-        role: actorRole,
-      },
-      context: {
-        requestId: currentReq.id,
-        method: currentReq.method,
-        confirmationMethod,
-        orderId: currentReq.order_id,
-        orderNumber: currentReq.order_number,
-        trackingNumber: currentReq.tracking_number,
-      },
-      executor: client,
-    });
-
     await client.query('COMMIT');
 
     const updatedRow = updateRes.rows[0];
@@ -854,8 +826,8 @@ exports.confirmDelivery = async (identifier, actorId, actorRole) => {
     // 11. Notifications with deduplication check
     try {
       const existingNotifs = await pool.query(
-        `SELECT 1 FROM notifications 
-         WHERE related_entity_id = $1 
+        `SELECT 1 FROM notifications
+         WHERE related_entity_id = $1
            AND title IN ('Custom Guitar Delivered', 'Delivery Confirmed')
          LIMIT 1`,
         [currentReq.order_id]

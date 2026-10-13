@@ -1,22 +1,18 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env'), quiet: true });
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const { pool } = require('../config/database');
 
 (async () => {
-  let client;
+  const client = await pool.connect();
   try {
-    client = await pool.connect();
     await client.query('BEGIN');
-    await client.query(fs.readFileSync(path.join(__dirname, '47_admin_refund_returns.sql'), 'utf8'));
+    await client.query(fs.readFileSync(path.join(__dirname, '47_audit_filter_indexes.sql'), 'utf8'));
     await client.query('COMMIT');
-    console.log('Migration 47 applied: admin return inspection and original-channel repayment workflow.');
+    console.log('Migration 47 applied: audit filter pagination indexes.');
   } catch (error) {
-    if (client) await client.query('ROLLBACK');
-    console.error('Migration 47 failed:', error.message);
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Migration 47 failed:', error.code || error.name, error.message);
     process.exitCode = 1;
-  } finally {
-    if (client) client.release();
-    await pool.end();
-  }
-})().catch(error => { console.error(error.message); process.exitCode = 1; });
+  } finally { client.release(); await pool.end(); }
+})();

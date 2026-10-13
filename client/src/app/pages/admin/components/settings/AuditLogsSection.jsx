@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
-  History, Search, Filter, ChevronDown, ChevronLeft, ChevronRight, Eye,
+  History, Eye,
   X, ArrowRight, Briefcase, ShoppingBag, CreditCard, Truck, Wallet,
   Package, Layers, Wrench, Shield, CalendarOff,
 } from 'lucide-react'
@@ -32,6 +32,11 @@ const MODULE_OPTIONS = [
   { value: 'appointment_schedule', label: 'Booking Schedule', icon: CalendarOff },
   { value: 'services', label: 'Services', icon: Wrench },
   { value: 'users', label: 'Users', icon: Shield },
+  { value: 'rbac', label: 'Roles & Permissions', icon: Shield },
+  { value: 'settings', label: 'Settings', icon: Wrench },
+  { value: 'cart', label: 'Cart', icon: ShoppingBag },
+  { value: 'customizations', label: 'Customizations', icon: Layers },
+  { value: 'notifications', label: 'Notifications', icon: History },
 ]
 
 const MODULE_ICONS = {
@@ -48,17 +53,12 @@ const MODULE_ICONS = {
   appointment_schedule: CalendarOff,
   services: Wrench,
   users: Shield,
+  rbac: Shield,
+  settings: Wrench,
+  cart: ShoppingBag,
+  customizations: Layers,
+  notifications: History,
 }
-
-const DATE_PRESETS = [
-  { value: 'all', label: 'All Time' },
-  { value: 'today', label: 'Today' },
-  { value: '7days', label: 'Last 7 Days' },
-  { value: '30days', label: 'Last 30 Days' },
-  { value: 'custom', label: 'Custom Range' },
-]
-
-const PAGE_SIZE_VALUES = [10, 25, 50, 100]
 
 const PILL_BASE = 'inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold'
 const PILL_TONES = {
@@ -224,657 +224,146 @@ function AuditDetailBody({ log }) {
 }
 
 export function AuditLogsSection({ showToast }) {
+  const empty = { entity_type: 'all', action: 'all', search: '', start_date: '', end_date: '' }
+  const [draft, setDraft] = useState(empty)
+  const [applied, setApplied] = useState(null)
   const [logs, setLogs] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [actions, setActions] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(25)
-
-  // Filter inputs (uncommitted) vs applied filters. The applied set is what the
-  // request uses, so typing never triggers a request on every keystroke.
-  const [searchInput, setSearchInput] = useState('')
-  const [appliedSearch, setAppliedSearch] = useState('')
-  const [selectedModule, setSelectedModule] = useState('all')
-  const [selectedAction, setSelectedAction] = useState('all')
-  const [dateRangePreset, setDateRangePreset] = useState('all')
-  const [customStartDate, setCustomStartDate] = useState('')
-  const [customEndDate, setCustomEndDate] = useState('')
-  const [actionOptions, setActionOptions] = useState([])
-  const [filterMenuOpen, setFilterMenuOpen] = useState(false)
-
+  const [size, setSize] = useState(25)
   const [selectedLog, setSelectedLog] = useState(null)
-
-  const filterDropdownRef = useRef(null)
-  // Monotonic request id: a slow earlier response can never overwrite a newer one.
-  const requestIdRef = useRef(0)
-
-  const isSearching = appliedSearch.length > 0
-
-  /* ── Date range (local-time safe) ────────────────────────────────────── */
-
-  /**
-   * Calendar dates are interpreted in the browser's timezone on purpose: a
-   * "Today" filter must match the admin's own day, not UTC's. Only the custom
-   * end date is pushed to the last millisecond of that local day.
-   */
-  const { startDate, endDate } = useMemo(() => {
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState('')
+  const request = useRef(null)
+  const detailRequest = useRef(null)
+  const actionsRequest = useRef(null)
+  const update = (field, value) => setDraft(prev => ({ ...prev, [field]: value }))
+  const datePreset = days => {
     const now = new Date()
-
-    if (dateRangePreset === 'today') {
-      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      return { startDate: start.toISOString(), endDate: now.toISOString() }
-    }
-
-    if (dateRangePreset === '7days' || dateRangePreset === '30days') {
-      const days = dateRangePreset === '7days' ? 7 : 30
-      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1))
-      return { startDate: start.toISOString(), endDate: now.toISOString() }
-    }
-
-    if (dateRangePreset === 'custom') {
-      const start = customStartDate ? new Date(`${customStartDate}T00:00:00`) : null
-      const end = customEndDate ? new Date(`${customEndDate}T23:59:59.999`) : null
-      return {
-        startDate: start && !Number.isNaN(start.getTime()) ? start.toISOString() : undefined,
-        endDate: end && !Number.isNaN(end.getTime()) ? end.toISOString() : undefined,
-      }
-    }
-
-    return { startDate: undefined, endDate: undefined }
-  }, [dateRangePreset, customStartDate, customEndDate])
-
-  /* ── Data loading ────────────────────────────────────────────────────── */
-
-  const fetchLogs = useCallback(async () => {
-    const requestId = requestIdRef.current + 1
-    requestIdRef.current = requestId
-    setLoading(true)
-
-    try {
-      const params = {
-        limit: pageSize,
-        offset: (page - 1) * pageSize,
-      }
-
-      if (selectedModule !== 'all') params.entity_type = selectedModule
-      if (selectedAction !== 'all') params.action = selectedAction
-      if (startDate) params.start_date = startDate
-      if (endDate) params.end_date = endDate
-      if (appliedSearch) params.search = appliedSearch
-
-      const res = await adminApi.getAuditLogs(params)
-
-      // Ignore a response that a newer request has already superseded.
-      if (requestId !== requestIdRef.current) return
-
-      if (res?.data) {
-        setLogs(res.data)
-        setTotal(res.pagination?.total ?? res.data.length)
-      }
-    } catch (err) {
-      if (requestId !== requestIdRef.current) return
-      console.error('Failed to load audit logs:', err)
-      showToast?.(err.message || 'Failed to load audit logs', 'error')
-    } finally {
-      if (requestId === requestIdRef.current) setLoading(false)
-    }
-  }, [appliedSearch, endDate, page, pageSize, selectedAction, selectedModule, startDate, showToast])
-
+    const calendarDate = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    setDraft(prev => ({ ...prev,
+      start_date: days ? calendarDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - days + 1)) : '',
+      end_date: days ? calendarDate(now) : '',
+    }))
+  }
   useEffect(() => {
-    fetchLogs()
-  }, [fetchLogs])
-
-  // Action filter values come from the server so the list only offers actions
-  // that can actually return results.
-  useEffect(() => {
-    let cancelled = false
-    adminApi
-      .getAuditActions()
-      .then((res) => {
-        if (!cancelled) setActionOptions(Array.isArray(res?.data) ? res.data : [])
-      })
-      .catch(() => {
-        if (!cancelled) setActionOptions([])
-      })
-    return () => {
-      cancelled = true
-    }
+    let active = true
+    actionsRequest.current ||= adminApi.getAuditActions()
+    actionsRequest.current.then(res => { if (active) setActions(res.data || []) }).catch(() => {})
+    return () => { active = false }
   }, [])
-
-  // Debounce the search box; every application of a filter returns to page 1.
+  useEffect(() => () => { request.current?.abort(); detailRequest.current?.abort() }, [])
+  const closeDetails = () => { detailRequest.current?.abort(); setSelectedLog(null) }
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      setAppliedSearch(searchInput.trim())
-      setPage(1)
-    }, 350)
-    return () => clearTimeout(timeout)
-  }, [searchInput])
-
-  const totalPages = Math.max(1, Math.ceil(total / pageSize))
-  const currentPage = Math.min(page, totalPages)
-
-  // Never keep a page the server cannot serve (filters can shrink the result set).
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages)
-  }, [page, totalPages])
-
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target)) {
-        setFilterMenuOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  useEffect(() => {
-    if (!selectedLog) return undefined
-    const onKeyDown = (event) => {
-      if (event.key === 'Escape') setSelectedLog(null)
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
+    if (!selectedLog) return
+    const listener = event => { if (event.key === 'Escape') closeDetails() }
+    document.addEventListener('keydown', listener)
+    return () => document.removeEventListener('keydown', listener)
   }, [selectedLog])
-
-  /* ── Filter handlers (no state setters run during render) ─────────────── */
-
-  const applyModule = (value) => {
-    setSelectedModule(value)
-    setPage(1)
+  const load = async (filters, nextPage = 1, nextSize = size) => {
+    request.current?.abort()
+    const controller = new AbortController()
+    request.current = controller
+    setLoading(true); setError(''); setLogs([]); setPage(nextPage); setSize(nextSize)
+    try {
+      const res = await adminApi.getAuditLogs({ ...filters, limit: nextSize, offset: (nextPage - 1) * nextSize }, { signal: controller.signal })
+      if (controller.signal.aborted) return
+      setLogs(res.data || []); setTotal(res.pagination?.total || 0)
+    } catch (err) {
+      if (controller.signal.aborted) return
+      setError(err.message || 'Failed to load audit logs'); setTotal(0)
+      showToast?.(err.message || 'Failed to load audit logs', 'error')
+    } finally { if (!controller.signal.aborted) setLoading(false) }
   }
-
-  const applyAction = (value) => {
-    setSelectedAction(value)
-    setPage(1)
-  }
-
-  const applyDatePreset = (value) => {
-    setDateRangePreset(value)
-    setPage(1)
-  }
-
-  const applyStartDate = (value) => {
-    setCustomStartDate(value)
-    setPage(1)
-  }
-
-  const applyEndDate = (value) => {
-    setCustomEndDate(value)
-    setPage(1)
-  }
-
-  const applyPageSize = (value) => {
-    setPageSize(value)
-    setPage(1)
-  }
-
-  const resetFilters = () => {
-    setSearchInput('')
-    setAppliedSearch('')
-    setSelectedModule('all')
-    setSelectedAction('all')
-    setDateRangePreset('all')
-    setCustomStartDate('')
-    setCustomEndDate('')
-    setPage(1)
-  }
-
-  const hasActiveFilters =
-    !!searchInput.trim() ||
-    selectedModule !== 'all' ||
-    selectedAction !== 'all' ||
-    dateRangePreset !== 'all' ||
-    !!customStartDate ||
-    !!customEndDate
-
-  const activeFilterList = useMemo(() => {
-    const list = []
-
-    if (searchInput.trim()) {
-      list.push({
-        key: 'search',
-        label: `Search: ${searchInput.trim()}`,
-        onRemove: () => {
-          setSearchInput('')
-          setAppliedSearch('')
-          setPage(1)
-        },
-      })
+  const submit = event => {
+    event.preventDefault()
+    if (loading) return
+    if (draft.start_date && draft.end_date && draft.start_date > draft.end_date) {
+      setError('Start date must be on or before end date.'); return
     }
-    if (selectedModule !== 'all') {
-      const moduleLabel = MODULE_OPTIONS.find((option) => option.value === selectedModule)?.label || formatEntityType(selectedModule)
-      list.push({ key: 'module', label: `Module: ${moduleLabel}`, onRemove: () => applyModule('all') })
-    }
-    if (selectedAction !== 'all') {
-      list.push({ key: 'action', label: `Action: ${formatAction(selectedAction)}`, onRemove: () => applyAction('all') })
-    }
-    if (dateRangePreset !== 'all') {
-      const presetLabel = DATE_PRESETS.find((preset) => preset.value === dateRangePreset)?.label || 'Custom Range'
-      const rangeLabel = dateRangePreset === 'custom'
-        ? `${customStartDate || 'Any'} → ${customEndDate || 'Any'}`
-        : presetLabel
-      list.push({
-        key: 'date',
-        label: `Date: ${rangeLabel}`,
-        onRemove: () => {
-          setDateRangePreset('all')
-          setCustomStartDate('')
-          setCustomEndDate('')
-          setPage(1)
-        },
-      })
-    }
-
-    return list
-    // applyModule/applyAction are stable wrappers over setState; including them
-    // would only rebuild this list on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchInput, selectedModule, selectedAction, dateRangePreset, customStartDate, customEndDate])
-
-  const buttonClass = 'inline-flex h-9 sm:h-10 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-sm font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed'
-  const selectClass = 'mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-2.5 py-2 text-sm text-[var(--text-light)] focus:outline-none focus:border-[var(--gold-primary)]'
-
-  const showTable = !(loading && logs.length === 0)
-
-  return (
-    <div className="space-y-6">
-      {/* ── Page Header ──────────────────────────────────────────────────── */}
-      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl shadow-sm p-4">
-        <h2 className="text-base font-bold text-[var(--text-light)]">Audit Logs</h2>
-        <p className="text-xs text-[var(--text-muted)] mt-0.5 max-w-2xl">
-          A read-only record of who did what, to which order, project or appointment, and when.
-          Entries are written by the system and can never be edited or removed.
-        </p>
-      </div>
-
-      {/* ── Filter Toolbar + Table ────────────────────────────────────────── */}
-      <div className={`relative bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl shadow-sm ${filterMenuOpen ? 'z-30 overflow-visible' : 'overflow-hidden'}`}>
-        <div className="p-4 border-b border-[var(--border)] flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          <span className="text-sm font-bold text-[var(--text-light)] uppercase tracking-wider">Activity Records</span>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-              <input
-                type="search"
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="Search order, payment, customer, product, or ID..."
-                aria-label="Search audit history"
-                className="bg-[var(--surface-elevated)] border border-[var(--border)] rounded-lg pl-9 pr-9 py-2 text-sm text-[var(--text-light)] placeholder:text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none w-48 sm:w-72 shadow-sm"
-              />
-              {searchInput && (
-                <button
-                  type="button"
-                  onClick={() => setSearchInput('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors"
-                  title="Clear search"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            <div className="relative" ref={filterDropdownRef}>
-              <button
-                type="button"
-                onClick={() => setFilterMenuOpen((open) => !open)}
-                aria-expanded={filterMenuOpen}
-                aria-haspopup="true"
-                className={buttonClass}
-              >
-                <Filter className="w-4 h-4" />
-                <span>Filters</span>
-                {activeFilterList.length > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full text-xs font-bold bg-[var(--gold-primary)] text-[var(--text-dark)]">
-                    {activeFilterList.length}
-                  </span>
-                )}
-                <ChevronDown className="w-4 h-4" />
-              </button>
-
-              {filterMenuOpen && (
-                <div className="absolute right-0 top-full z-50 mt-2 w-[min(92vw,22rem)] overflow-y-auto max-h-[75vh] rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] shadow-2xl p-4 text-[var(--text-light)]">
-                  <div className="space-y-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-light)]">Filters</p>
-
-                    <label className="block text-xs font-semibold text-[var(--text-light)]">
-                      Module
-                      <select value={selectedModule} onChange={(event) => applyModule(event.target.value)} className={selectClass}>
-                        {MODULE_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value} className="text-[var(--text-light)] bg-[var(--surface-dark)]">
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="block text-xs font-semibold text-[var(--text-light)]">
-                      Action
-                      <select value={selectedAction} onChange={(event) => applyAction(event.target.value)} className={selectClass}>
-                        <option value="all" className="text-[var(--text-light)] bg-[var(--surface-dark)]">All Actions</option>
-                        {actionOptions.map((action) => (
-                          <option key={action} value={action} className="text-[var(--text-light)] bg-[var(--surface-dark)]">
-                            {formatAction(action)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="block text-xs font-semibold text-[var(--text-light)]">
-                      Date Range
-                      <select value={dateRangePreset} onChange={(event) => applyDatePreset(event.target.value)} className={selectClass}>
-                        {DATE_PRESETS.map((preset) => (
-                          <option key={preset.value} value={preset.value} className="text-[var(--text-light)] bg-[var(--surface-dark)]">
-                            {preset.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    {dateRangePreset === 'custom' && (
-                      <div className="grid grid-cols-2 gap-2">
-                        <label className="block text-xs font-semibold text-[var(--text-light)]">
-                          From
-                          <input
-                            type="date"
-                            value={customStartDate}
-                            onChange={(event) => applyStartDate(event.target.value)}
-                            className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-2.5 py-2 text-sm text-[var(--text-light)] focus:outline-none focus:border-[var(--gold-primary)] [color-scheme:dark]"
-                          />
-                        </label>
-                        <label className="block text-xs font-semibold text-[var(--text-light)]">
-                          To
-                          <input
-                            type="date"
-                            value={customEndDate}
-                            onChange={(event) => applyEndDate(event.target.value)}
-                            className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-2.5 py-2 text-sm text-[var(--text-light)] focus:outline-none focus:border-[var(--gold-primary)] [color-scheme:dark]"
-                          />
-                        </label>
-                      </div>
-                    )}
-
-                    <div className="pt-2 border-t border-[var(--border)]">
-                      <button
-                        type="button"
-                        onClick={resetFilters}
-                        disabled={!hasActiveFilters}
-                        className="w-full py-2 px-3 text-xs font-bold text-[var(--text-light)] bg-[var(--surface-dark)] hover:bg-[var(--bg-primary)] rounded-lg transition-colors border border-[var(--border)] disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        Reset All Filters
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {activeFilterList.length > 0 && (
-          <div className="px-5 py-2.5 border-b border-[var(--border)] flex flex-wrap items-center gap-2">
-            <span className="text-[11px] text-[var(--text-muted)] font-semibold uppercase tracking-wider">Active:</span>
-            {activeFilterList.map((item) => (
-              <span
-                key={item.key}
-                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-[var(--gold-primary)]/15 text-[var(--text-light)] border border-[var(--gold-primary)]/40"
-              >
-                <span>{item.label}</span>
-                <button
-                  type="button"
-                  onClick={item.onRemove}
-                  className="text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors"
-                  title="Remove filter"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="text-xs text-[var(--text-muted)] hover:text-[var(--text-light)] underline ml-2 transition-colors"
-            >
-              Clear all
-            </button>
-          </div>
-        )}
-
-        {showTable ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-[var(--bg-primary)] text-[var(--text-muted)] uppercase tracking-wider font-bold border-b border-[var(--border)]">
-                <tr>
-                  <th className="py-3 px-4 whitespace-nowrap">Date &amp; Time</th>
-                  <th className="py-3 px-4">User</th>
-                  <th className="py-3 px-4">Activity</th>
-                  <th className="py-3 px-4 hidden xl:table-cell">Module</th>
-                  <th className="py-3 px-4 text-right">View</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border)]/50">
-                {logs.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="py-12 text-center px-4">
-                      <History className="w-10 h-10 mx-auto mb-3 text-[var(--text-muted)]" />
-                      <p className="text-sm font-semibold text-[var(--text-light)]">
-                        {isSearching ? 'No matching activity' : 'No activity found'}
-                      </p>
-                      <p className="text-xs text-[var(--text-muted)] mt-1 max-w-sm mx-auto">
-                        {isSearching
-                          ? `Nothing in the audit history matches "${appliedSearch}". Try a shorter term or a different date range.`
-                          : hasActiveFilters
-                            ? 'No audit activity matches your current filters.'
-                            : 'No audit records have been generated yet.'}
-                      </p>
-                      {hasActiveFilters && (
-                        <button
-                          type="button"
-                          onClick={resetFilters}
-                          className="mt-4 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] hover:border-[var(--gold-primary)] transition-colors"
-                        >
-                          Clear Filters
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ) : (
-                  logs.map((log) => {
-                    const timestamp = formatAuditTimestamp(log.created_at)
-                    const actor = getAuditActor(log)
-                    const entry = formatAuditEntry(log)
-                    const ModuleIcon = getModuleIcon(log.entity_type)
-
-                    return (
-                      <tr
-                        key={log.audit_id}
-                        onClick={() => setSelectedLog(log)}
-                        className="hover:bg-[var(--bg-primary)]/40 transition-colors cursor-pointer"
-                      >
-                        <td className="py-3 px-4 whitespace-nowrap align-top">
-                          <p className="text-[var(--text-light)] font-semibold">{timestamp.date}</p>
-                          <p className="text-[11px] text-[var(--text-muted)]">{timestamp.time}</p>
-                          {timestamp.relative && (
-                            <p className="text-[10px] text-[var(--text-muted)]/70">{timestamp.relative}</p>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-4 align-top">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-7 h-7 rounded-full bg-[var(--gold-primary)]/15 border border-[var(--gold-primary)]/30 flex items-center justify-center text-[10px] font-bold text-[var(--gold-primary)] shrink-0">
-                              {actor.initials}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-[var(--text-light)] font-semibold truncate max-w-[130px]">{actor.name}</p>
-                              <p className="text-[11px] text-[var(--text-muted)] truncate max-w-[130px]">{actor.subtitle}</p>
-                            </div>
-                          </div>
-                        </td>
-
-                        <td className="py-3 px-4 align-top">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[var(--text-light)] font-semibold">{entry.title}</span>
-                            {entry.tone !== 'neutral' && (
-                              <span className={`${PILL_BASE} ${STATUS_PILL_TONES[entry.tone] || PILL_TONES.neutral}`}>
-                                {entry.entity ? entry.entity.value : entry.moduleLabel}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[var(--text-muted)] mt-0.5 max-w-[520px] leading-relaxed">{entry.description}</p>
-                          {entry.secondary && (
-                            <p className="text-[11px] text-[var(--text-muted)]/80 mt-0.5 truncate max-w-[520px]">
-                              {entry.secondary}
-                            </p>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-4 hidden xl:table-cell align-top whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <span className="p-1.5 rounded-lg bg-[var(--surface-elevated)] border border-[var(--border)] text-[var(--text-muted)]">
-                              <ModuleIcon className="w-3.5 h-3.5" />
-                            </span>
-                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--gold-primary)]/20 text-[var(--text-light)] border border-[var(--gold-primary)]/40">
-                              {formatEntityType(log.entity_type)}
-                            </span>
-                          </div>
-                        </td>
-
-                        <td className="py-3 px-4 text-right align-top whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              setSelectedLog(log)
-                            }}
-                            className="p-1.5 rounded-lg border border-transparent hover:border-[var(--border)] hover:bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-[var(--text-light)] transition"
-                            title="View details"
-                            aria-label="View activity details"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <SectionLoader label="Loading audit logs..." className="py-20" />
-        )}
-
-        {/* Pagination */}
-        <div className="p-4 border-t border-[var(--border)] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-3">
-            <span className="text-[var(--text-muted)]">
-              Showing page <strong className="text-[var(--text-light)]">{currentPage}</strong> of{' '}
-              <strong className="text-[var(--text-light)]">{totalPages}</strong> ({total}{' '}
-              {isSearching ? `matching "${appliedSearch}"` : 'total records'})
-            </span>
-            <div className="flex items-center gap-1.5 ml-2">
-              <span className="text-[var(--text-muted)]">Per page:</span>
-              <select
-                value={pageSize}
-                onChange={(event) => applyPageSize(event.target.value)}
-                aria-label="Records per page"
-                className="bg-[var(--surface-elevated)] text-[var(--text-light)] border border-[var(--border)] rounded px-2 py-0.5 text-xs font-semibold focus:outline-none"
-              >
-                {PAGE_SIZE_VALUES.map((size) => (
-                  <option key={size} value={size} className="text-[var(--text-light)] bg-[var(--surface-elevated)]">
-                    {size}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPage(Math.max(1, currentPage - 1))}
-              disabled={currentPage <= 1 || loading}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-light)] hover:border-[var(--gold-primary)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-              <span>Previous</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
-              disabled={currentPage >= totalPages || loading}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-light)] hover:border-[var(--gold-primary)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            >
-              <span>Next</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Details Modal (structured, no raw payload) ────────────────────── */}
-      <AnimatePresence>
-        {selectedLog && (
-          <motion.div
-            key="audit-detail-modal"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto"
-            onClick={(event) => {
-              if (event.target === event.currentTarget) setSelectedLog(null)
-            }}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 16 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 16 }}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Activity details"
-              className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden my-8"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="flex items-center justify-between p-6 border-b border-[var(--border)]">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-2xl bg-[var(--gold-primary)]/15 border border-[var(--gold-primary)]/30 flex items-center justify-center text-[var(--gold-primary)] shrink-0">
-                    <History className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="text-lg font-bold text-[var(--text-light)]">Activity Details</h3>
-                    <p className="text-xs text-[var(--text-muted)] truncate">{formatAuditEntry(selectedLog).moduleLabel}</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedLog(null)}
-                  className="p-2 text-[var(--text-muted)] hover:text-[var(--text-light)] rounded-xl hover:bg-[var(--bg-primary)] transition-colors shrink-0"
-                  aria-label="Close details"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <AuditDetailBody log={selectedLog} />
-
-              <div className="p-4 border-t border-[var(--border)] flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setSelectedLog(null)}
-                  className="px-4 py-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] text-sm font-semibold hover:border-[var(--gold-primary)] transition-colors"
-                >
-                  Close
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+    const filters = {}
+    if (draft.entity_type !== 'all') filters.entity_type = draft.entity_type
+    if (draft.action !== 'all') filters.action = draft.action
+    if (draft.search.trim()) filters.search = draft.search.trim()
+    if (draft.start_date) filters.start_date = new Date(draft.start_date + 'T00:00:00').toISOString()
+    if (draft.end_date) filters.end_date = new Date(draft.end_date + 'T23:59:59.999').toISOString()
+    closeDetails(); setApplied(filters); load(filters)
+  }
+  const reset = () => {
+    request.current?.abort(); closeDetails(); setDraft(empty); setApplied(null)
+    setLogs([]); setTotal(0); setPage(1); setLoading(false); setError('')
+  }
+  const openDetails = async log => {
+    detailRequest.current?.abort()
+    const controller = new AbortController()
+    detailRequest.current = controller
+    setSelectedLog(log); setDetailLoading(true); setDetailError('')
+    try {
+      const res = await adminApi.getAuditLog(log.audit_id, { signal: controller.signal })
+      if (!controller.signal.aborted) setSelectedLog(res.data)
+    } catch (err) { if (!controller.signal.aborted) setDetailError(err.message || 'Failed to load details') }
+    finally { if (!controller.signal.aborted) setDetailLoading(false) }
+  }
+  const control = 'mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-2.5 py-2 text-sm text-[var(--text-light)] focus:outline-none focus:border-[var(--gold-primary)]'
+  const button = 'rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-light)] hover:border-[var(--gold-primary)] disabled:opacity-40'
+  const pages = Math.max(1, Math.ceil(total / size))
+  return <div className="space-y-6">
+    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-4">
+      <h2 className="text-base font-bold text-[var(--text-light)]">Audit Logs</h2>
+      <p className="text-xs text-[var(--text-muted)] mt-1">A read-only record of who changed each record and when.</p>
     </div>
-  )
+    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
+      <form onSubmit={submit} className="p-4 space-y-4 border-b border-[var(--border)]">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="text-xs text-[var(--text-light)]">Module<select aria-label="Module" className={control} value={draft.entity_type} onChange={e => update('entity_type', e.target.value)}>{MODULE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+          <label className="text-xs text-[var(--text-light)]">Action<select aria-label="Action" className={control} value={draft.action} onChange={e => update('action', e.target.value)}><option value="all">All Actions</option>{actions.map(action => <option key={action} value={action}>{formatAction(action)}</option>)}</select></label>
+          <label className="text-xs text-[var(--text-light)]">Search<input type="search" aria-label="Search audit history" className={control} maxLength={200} value={draft.search} onChange={e => update('search', e.target.value)} placeholder="Details, reference, entity or actor" /></label>
+          <label className="text-xs text-[var(--text-light)]">Start date<input type="date" className={control} value={draft.start_date} onChange={e => update('start_date', e.target.value)} /></label>
+          <label className="text-xs text-[var(--text-light)]">End date<input type="date" className={control} value={draft.end_date} onChange={e => update('end_date', e.target.value)} /></label>
+        </div>
+        <div className="flex flex-wrap gap-2">{[['All Time', 0], ['Today', 1], ['Last 7 Days', 7], ['Last 30 Days', 30]].map(([label, days]) => <button key={label} type="button" className={button} onClick={() => datePreset(days)}>{label}</button>)}</div>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="submit" className={button} disabled={loading}>Apply Filters</button>
+          <button type="button" className={button} onClick={reset}>Reset Filters</button>
+          <span className="text-xs text-[var(--text-muted)]">Edit filters, then apply to update results. Dates use your local time.</span>
+        </div>
+      </form>
+      {error && <div role="alert" className="p-4 text-sm text-red-400">{error}</div>}
+      {!applied ? <p className="p-12 text-center text-sm text-[var(--text-muted)]">Select your filters to view audit records.</p> : loading ? <SectionLoader label="Loading audit logs..." className="py-20" /> : !error && <>
+        {logs.length === 0 ? <p className="p-12 text-center text-sm text-[var(--text-muted)]">No audit records match the applied filters.</p> : <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs text-[var(--text-light)]">
+            <thead className="bg-[var(--bg-primary)] text-[var(--text-muted)]"><tr>{['Date & Time', 'Actor', 'Module', 'Action', 'Activity / Reference', 'Changes', 'Details'].map(label => <th key={label} className="p-4">{label}</th>)}</tr></thead>
+            <tbody>{logs.map(log => {
+              const entry = formatAuditEntry(log)
+              const actor = getAuditActor(log)
+              const changes = getChangeList(log)
+              return <tr key={log.audit_id} className="border-t border-[var(--border)]">
+                <td className="p-4 whitespace-nowrap">{formatAuditTimestamp(log.created_at).full}</td>
+                <td className="p-4">{actor.name}<span className="block text-[var(--text-muted)]">{actor.subtitle}</span></td>
+                <td className="p-4">{entry.moduleLabel}</td><td className="p-4">{formatAction(log.action)}</td>
+                <td className="p-4 min-w-[240px]"><p className="font-semibold">{entry.title}</p><p>{entry.description}</p>{entry.entity && <p>{entry.entity.label}: {entry.entity.value}</p>}{log.entity_id && <p className="font-mono text-[var(--text-muted)]">{formatEntityId(log.entity_id)}</p>}</td>
+                <td className="p-4">{changes.slice(0, 3).map((change, index) => <div key={index}><ChangeLine change={change} /></div>)}{log.previous_status && log.new_status && <p>{formatStatus(log.previous_status)} <ArrowRight className="inline w-3 h-3" /> {formatStatus(log.new_status)}</p>}</td>
+                <td className="p-4"><button type="button" className={button} aria-label="View activity details" onClick={() => openDetails(log)}><Eye className="w-4 h-4" /></button></td>
+              </tr>
+            })}</tbody>
+          </table>
+        </div>}
+        <div className="p-4 border-t border-[var(--border)] flex flex-wrap items-center justify-between gap-3 text-xs text-[var(--text-muted)]">
+          <span>Page {page} of {pages} ({total} matching records)</span>
+          <label>Per page: <select aria-label="Records per page" className={control} value={size} onChange={e => load(applied, 1, Number(e.target.value))}>{[25, 50].map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+          <div className="flex gap-2"><button type="button" className={button} disabled={page <= 1} onClick={() => load(applied, page - 1)}>Previous</button><button type="button" className={button} disabled={page >= pages} onClick={() => load(applied, page + 1)}>Next</button></div>
+        </div>
+      </>}
+    </div>
+    <AnimatePresence>{selectedLog && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4" onClick={e => { if (e.target === e.currentTarget) closeDetails() }}>
+      <div role="dialog" aria-modal="true" aria-label="Activity details" className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl w-full max-w-2xl overflow-hidden">
+        <div className="p-6 flex justify-between border-b border-[var(--border)]"><h3 className="text-lg font-bold text-[var(--text-light)]">Activity Details</h3><button type="button" onClick={closeDetails} aria-label="Close details" className={button}><X className="w-4 h-4" /></button></div>
+        {detailLoading ? <SectionLoader label="Loading details..." /> : detailError ? <div role="alert" className="p-6 text-red-400">{detailError}</div> : <AuditDetailBody log={selectedLog} />}
+      </div>
+    </motion.div>}</AnimatePresence>
+  </div>
 }
-
 export default AuditLogsSection

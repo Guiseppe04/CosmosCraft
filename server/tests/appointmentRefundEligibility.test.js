@@ -45,7 +45,6 @@ test('refund controller forwards QR destinations without requiring hidden accoun
 test('QR refunds persist the image without account details and reject missing or invalid destinations', async (t) => {
   let saved;
   let rolledBack = false;
-  t.mock.method(service, 'recordEvent', async () => {});
   t.mock.method(service, 'notify', async () => {});
   t.mock.method(pool, 'connect', async () => ({ async query(sql, params) {
     if (sql.startsWith('SELECT * FROM appointments')) return { rows: [{ appointment_id: 'a', user_id: 'u', status: 'cancelled', payment_method: 'e_wallet', payment_status: 'approved', approved_payment_amount: 500 }] };
@@ -97,11 +96,10 @@ test('refund creation rejects cash payments, unapproved payments, wrong owners, 
   } finally { pool.connect = original; }
 });
 test('cancelled appointments reuse the refund flow and prevent duplicate requests', async () => {
-  const original = { connect: pool.connect, recordEvent: service.recordEvent, notify: service.notify };
+  const original = { connect: pool.connect, notify: service.notify };
   let existing = false;
   const statements = [];
   try {
-    service.recordEvent = async () => {};
     service.notify = async () => {};
     pool.connect = async () => ({ query: async (sql, params) => {
       statements.push(sql);
@@ -122,13 +120,11 @@ test('cancelled appointments reuse the refund flow and prevent duplicate request
     assert.ok(statements.includes('ROLLBACK'));
   } finally {
     pool.connect = original.connect;
-    service.recordEvent = original.recordEvent;
     service.notify = original.notify;
   }
 });
 
 test('approved e-wallet and bank payments can request refunds for cancelled and no-show appointments', async (t) => {
-  t.mock.method(service, 'recordEvent', async () => {});
   t.mock.method(service, 'notify', async () => {});
   for (const status of ['cancelled', 'no_show']) {
     for (const payment_method of ['e_wallet', 'e_bank', 'gcash', 'bank_transfer']) {
@@ -169,7 +165,6 @@ test('refund status updates persist details and broadcast appointment identifier
   const broadcasts = [];
   let committed = false;
   let saved;
-  t.mock.method(service, 'recordEvent', async () => {});
   t.mock.method(service, 'notify', async () => {});
   t.mock.method(sockets, 'emitToUserAndStaff', (userId, event, payload) => {
     assert.equal(committed, true, 'Broadcast must follow commit');
@@ -202,14 +197,12 @@ test('refund status updates persist details and broadcast appointment identifier
 
 test('customer rescheduling preserves the original schedule and creates one successor', async () => {
   const appointments = require('../services/appointmentService');
-  const audit = require('../services/auditService');
-  const original = { connect:pool.connect, get:appointments.getAppointmentById, log:audit.logAppointmentEvent, notify:service.notify };
+  const original = { connect:pool.connect, get:appointments.getAppointmentById, notify:service.notify };
   const id = '12345678-1234-4234-8234-123456789012';
   const successor = '22345678-1234-4234-8234-123456789012';
   const queries = [];
   const row = {appointment_id:id,user_id:'customer',status:'confirmed',payment_status:'approved',scheduled_at:'2026-10-03T07:00:00Z'};
   try {
-    audit.logAppointmentEvent = async () => {};
     service.notify = async () => {};
     appointments.getAppointmentById = async target => ({appointment_id:target});
     pool.connect = async () => ({query:async (sql,params) => {
@@ -230,5 +223,5 @@ test('customer rescheduling preserves the original schedule and creates one succ
     const newUpdate = queries.find(([sql])=>sql.startsWith('UPDATE appointments SET scheduled_at'));
     assert.equal(newUpdate[1].at(-1),successor);
     assert.ok(queries.some(([sql])=>sql==='COMMIT'));
-  } finally { pool.connect=original.connect; appointments.getAppointmentById=original.get; audit.logAppointmentEvent=original.log; service.notify=original.notify; }
+  } finally { pool.connect=original.connect; appointments.getAppointmentById=original.get; service.notify=original.notify; }
 });

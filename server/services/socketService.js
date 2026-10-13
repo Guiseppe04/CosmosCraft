@@ -122,6 +122,9 @@ function init(httpServer, allowedOrigins = []) {
     transports: ['polling', 'websocket'],
   });
 
+  // Engine.IO handles polling/upgrade requests before Express's middleware stack.
+  io.engine.use(require('../middleware/securityHeaders').securityHeaders);
+
   /**
    * Socket authentication middleware.
    */

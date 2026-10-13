@@ -1,4 +1,5 @@
 const { Pool } = require('pg');
+const { installAuditDatabaseContext } = require('./auditDatabaseContext');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -7,11 +8,13 @@ const pool = new Pool({
   connectionTimeoutMillis: 10000,
 });
 
+installAuditDatabaseContext(pool);
+
 pool.on('error', (err) => {
   console.error('Unexpected error on idle client:', err.message);
 });
 
-const connectDB = async (retries = 5, delay = 2000) => {
+async function connectDB(retries = 5, delay = 2000) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     let client;
     try {
@@ -21,14 +24,14 @@ const connectDB = async (retries = 5, delay = 2000) => {
     } catch (error) {
       console.error(`PostgreSQL connection attempt ${attempt}/${retries} failed: ${error.message}`);
       if (attempt === retries) {
-        console.error('Exhausted PostgreSQL connection attempts. Exiting...');
-        process.exit(1);
+        throw error;
       }
-      await new Promise((resolve) => setTimeout(resolve, delay));
     } finally {
-      if (client) client.release();
+      client?.release();
     }
-  }
-};
 
-module.exports = { pool, connectDB };
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+}
+
+module.exports = { pool, connectDB };

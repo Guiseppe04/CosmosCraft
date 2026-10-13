@@ -4,8 +4,8 @@
 const isProd = typeof import.meta !== 'undefined' && import.meta.env?.PROD;
 const getResolvedApiUrl = () => {
   const rawApiUrl = isProd
-    ? (import.meta.env.VITE_API_URL_PROD || import.meta.env.VITE_API_URL || '')
-    : (import.meta.env.VITE_API_URL || '');
+    ? (import.meta.env?.VITE_API_URL_PROD || import.meta.env?.VITE_API_URL || '')
+    : (import.meta.env?.VITE_API_URL || '');
 
   if (!rawApiUrl) {
     return typeof window !== 'undefined' ? window.location.origin : '';

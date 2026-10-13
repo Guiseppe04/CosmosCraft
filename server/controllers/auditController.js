@@ -3,26 +3,7 @@ const { AppError } = require('../middleware/errorHandler');
 
 exports.getAuditLogs = async (req, res, next) => {
   try {
-    const {
-      entity_type,
-      user_id,
-      action,
-      start_date,
-      end_date,
-      search,
-      limit = 50,
-      offset = 0,
-    } = req.query;
-    const result = await auditService.getAuditLogs({
-      entity_type,
-      user_id,
-      action,
-      start_date,
-      end_date,
-      search,
-      limit,
-      offset,
-    });
+    const result = await auditService.getAuditLogs(req.query);
     res.json({
       status: 'success',
       data: result.logs,
@@ -55,7 +36,7 @@ exports.getAuditLog = async (req, res, next) => {
 
 exports.getAuditLogsByModule = async (req, res, next) => {
   try {
-    const { entityType } = req.params;
+    const { module: entityType } = req.params;
     const { limit = 50, offset = 0, start_date, end_date } = req.query;
     const logs = await auditService.getAuditLogsByModule(entityType, { limit, offset, start_date, end_date });
     res.json({ status: 'success', data: logs });
@@ -74,7 +55,7 @@ exports.getAuditLogsByUser = async (req, res, next) => {
 exports.getAuditLogsByEntity = async (req, res, next) => {
   try {
     const { entityType, entityId } = req.params;
-    const logs = await auditService.getAuditLogsByEntity(entityType, entityId);
+    const logs = await auditService.getAuditLogsByEntity(entityType, entityId, req.query);
     res.json({ status: 'success', data: logs });
   } catch (err) { next(err); }
 };
