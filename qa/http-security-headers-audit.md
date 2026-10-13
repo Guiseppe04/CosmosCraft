@@ -17,7 +17,7 @@ Scope: application code only; no infrastructure or database configuration was mo
 | `server/index.js` | Disable X-Powered-By; register security middleware before audit context, rate limiting, CORS, parsing, routes and errors. |
 | `server/services/socketService.js` | Register the same header middleware with Engine.IO, which handles polling/upgrades ahead of Express. Authentication and CORS logic are unchanged. |
 | `server/middleware/errorHandler.js` | Stop returning stack traces; sanitize malformed-JSON responses; log error classification rather than full objects or submitted content. |
-| `shared/securityPolicy.cjs` | Shared frontend document baseline, report-only candidate and browser-origin construction. |
+| `client/securityPolicy.cjs`, `shared/securityPolicy.cjs` | Frontend document baseline, report-only candidate and browser-origin construction; the shared API entry point re-exports the client-local policy so isolated frontend deployments can build. |
 | `client/securityHeadersPlugin.js` | Application headers on Vite development/preview responses; CSP baseline and referrer metadata in transformed/built HTML. |
 | `client/vite.config.js` | Register the plugin; distinguish development serving from production preview using command/isPreview. Existing proxy behavior is unchanged. |
 | `server/tests/securityHeaders.test.js` | API/error/media/CORS/header/HSTS/origin/error-disclosure regressions. |

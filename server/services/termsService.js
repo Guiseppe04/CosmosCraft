@@ -1,6 +1,6 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
-const versions = require('../../shared/termsVersions.json');
+const versions = require('../../client/termsVersions.json');
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function validateAgreement(agreement, types) {
