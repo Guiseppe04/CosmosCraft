@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 import { chromium } from '@playwright/test'
 
-test('homepage header waits for session restoration before showing profile or Login', async () => {
+test('customer header is immediately usable while management accounts still wait for verification', async () => {
   const bundle = await build({
     stdin: { contents: `
       import React from 'react';
@@ -31,10 +31,20 @@ test('homepage header waits for session restoration before showing profile or Lo
   try {
     browser = await chromium.launch({ headless: true })
     const origin = `http://127.0.0.1:${server.address().port}`
-    for (const authenticated of [true, false]) {
+    for (const scenario of ['customer', 'guest', 'admin', 'super_admin', 'staff', 'outage', 'expired']) {
+      const authenticated = scenario !== 'guest' && scenario !== 'expired'
+      const management = ['admin', 'super_admin', 'staff'].includes(scenario)
       const context = await browser.newContext()
       const pendingChecks = []
-      const user = { id: 'user-1', role: 'customer', email: 'test@example.com' }
+      const user = { id: 'user-1', role: management ? scenario : 'customer', email: 'test@example.com' }
+      if (scenario !== 'guest') {
+        await context.addInitScript(user => {
+          if (!localStorage.getItem('seeded')) {
+            localStorage.setItem('cosmoscraft_auth', JSON.stringify(user))
+            localStorage.setItem('seeded', 'true')
+          }
+        }, user)
+      }
       await context.route('**/auth/check', route => { pendingChecks.push(route) })
       await context.route('**/auth/terms/status', route => route.fulfill({ json: { data: { required: false } } }))
       await context.route('**/api/users/profile', route => route.fulfill({ json: { data: { user } } }))
@@ -44,16 +54,27 @@ test('homepage header waits for session restoration before showing profile or Lo
       for (let visit = 0; visit < 2; visit++) {
         pendingChecks.length = 0
         if (visit) await page.reload(); else await page.goto(origin)
-        await page.getByRole('status', { name: 'Checking session' }).first().waitFor({ state: 'attached' })
+        if (management) await page.getByRole('status', { name: 'Checking session' }).first().waitFor({ state: 'attached' })
+        else {
+          const cached = scenario !== 'guest' && !(scenario === 'expired' && visit)
+          await page.getByRole('button', { name: cached ? 'Open profile menu' : 'Login', exact: true }).first().waitFor()
+          assert.equal(await page.getByRole('status', { name: 'Checking session' }).count(), 0)
+        }
         await page.waitForTimeout(300)
-        assert.equal(await page.getByRole('button', { name: 'Login', exact: true }).count(), 0)
-        assert.equal(await page.getByRole('button', { name: 'Open profile menu', exact: true }).count(), 0)
+        if (management) {
+          assert.equal(await page.getByRole('button', { name: 'Login', exact: true }).count(), 0)
+          assert.equal(await page.getByRole('button', { name: 'Open profile menu', exact: true }).count(), 0)
+        }
         assert.equal(pendingChecks.length, 2)
-        for (const route of pendingChecks) await route.fulfill({ json: { data: { isAuthenticated: authenticated, user: authenticated ? user : null } } })
+        for (const route of pendingChecks) await route.fulfill({ status: scenario === 'outage' ? 503 : 200, json: { data: { isAuthenticated: authenticated, user: authenticated ? user : null } } })
         const expected = authenticated ? 'Open profile menu' : 'Login'
         await page.getByRole('button', { name: expected, exact: true }).first().waitFor()
         assert.equal(await page.getByRole('status', { name: 'Checking session' }).count(), 0)
         if (authenticated) assert.equal(await page.getByRole('button', { name: 'Login', exact: true }).count(), 0)
+        if (scenario === 'outage') {
+          await page.waitForTimeout(5200)
+          assert.equal(pendingChecks.length, 2, 'customer restoration must not poll after a temporary failure')
+        }
       }
       assert.deepEqual(errors, [])
       await context.close()

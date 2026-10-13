@@ -17,7 +17,7 @@ Scope: application code only; no infrastructure or database configuration was mo
 | `server/index.js` | Disable X-Powered-By; register security middleware before audit context, rate limiting, CORS, parsing, routes and errors. |
 | `server/services/socketService.js` | Register the same header middleware with Engine.IO, which handles polling/upgrades ahead of Express. Authentication and CORS logic are unchanged. |
 | `server/middleware/errorHandler.js` | Stop returning stack traces; sanitize malformed-JSON responses; log error classification rather than full objects or submitted content. |
-| `shared/securityPolicy.cjs` | Shared frontend document baseline, report-only candidate and browser-origin construction. |
+| `client/securityPolicy.cjs`, `shared/securityPolicy.cjs` | Frontend document baseline, report-only candidate and browser-origin construction; the shared API entry point re-exports the client-local policy so isolated frontend deployments can build. |
 | `client/securityHeadersPlugin.js` | Application headers on Vite development/preview responses; CSP baseline and referrer metadata in transformed/built HTML. |
 | `client/vite.config.js` | Register the plugin; distinguish development serving from production preview using command/isPreview. Existing proxy behavior is unchanged. |
 | `server/tests/securityHeaders.test.js` | API/error/media/CORS/header/HSTS/origin/error-disclosure regressions. |
@@ -35,7 +35,7 @@ Scope: application code only; no infrastructure or database configuration was mo
 | X-Content-Type-Options | `nosniff`. JSON and PNG MIME types were verified; built HTML/modules/styles retain their actual MIME types. |
 | X-Frame-Options | `DENY`, consistent with enforced frame-ancestors none. The application is not intended to be embedded. Existing same-origin print children/popups remain usable. |
 | Referrer-Policy | `strict-origin-when-cross-origin`. Built HTML also includes equivalent referrer metadata. |
-| Permissions-Policy | `camera=(), microphone=(), geolocation=()`. No current feature uses these capabilities. Clipboard writing used by the RGB picker is untouched. |
+| Permissions-Policy | `geolocation=()`. Camera and microphone restrictions removed on October 13, 2026. Clipboard writing used by the RGB picker is untouched. |
 | Cross-Origin-Resource-Policy | `same-origin` generally; `cross-origin` only for public `/uploads` resources embedded by the separate frontend origin. Credentialed CORS API fetches continue to work. |
 | Cross-Origin-Opener-Policy | `same-origin-allow-popups`, preserving print popup access without requiring cross-origin isolation. |
 | Cross-Origin-Embedder-Policy | Intentionally omitted; no cross-origin-isolation requirement was found. Enforcing it could block third-party media. |
@@ -94,7 +94,7 @@ Cloudinary display URLs occur in guitar/bass builder asset utilities; direct uns
 - Cloudinary display/canvas-export and upload URL flow against intercepted fixtures; legacy API-hosted uploads load across origins with CORP cross-origin.
 - Appointment print popup remains accessible and its inline onload handler is installed. Physical printer output was not tested.
 - No enforced CSP violations during the legitimate controlled integration flow. Expected inline-script report-only violations were observed; no other candidate violations occurred in that fixture.
-- The enforced baseline rejects an external base element and unauthorized framing. Browser feature-policy checks deny camera/microphone/geolocation.
+- The enforced baseline rejects an external base element and unauthorized framing. Browser feature-policy checks deny geolocation; camera and microphone use their default policies.
 
 After final origin/logging adjustments, the three header tests and the browser CSP integration test were rerun and passed.
 

@@ -1,4 +1,4 @@
-import policy from '../shared/securityPolicy.cjs'
+import policy from './securityPolicy.cjs'
 
 export function securityHeadersPlugin(env, development) {
   const configure = server => {

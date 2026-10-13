@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 import { chromium } from '@playwright/test'
 
-test('email and OAuth login leave the login page for each role, despite a stale login return path', async () => {
+test('email and delayed OAuth login reach the correct destination without a false failure or stale redirect', async () => {
   const bundle = await build({
     stdin: { contents: `
       import React from 'react';
@@ -38,12 +38,26 @@ test('email and OAuth login leave the login page for each role, despite a stale 
     browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}) })
     const origin = `http://127.0.0.1:${server.address().port}`
     for (const [role, destination] of [['customer', 'dashboard'], ['staff', 'staff'], ['admin', 'admin'], ['super_admin', 'admin']]) {
-      for (const social of [false, true]) {
+      for (const social of [false, 'token', 'accessToken', 'cookie']) {
         const context = await browser.newContext()
-        let signedIn = social
+        let signedIn = Boolean(social)
+        const pendingChecks = []
+        let termsChecks = 0
         const user = { id: 'user-1', role, email: 'test@example.com' }
         await context.addInitScript(() => sessionStorage.setItem('cosmoscraft.auth.returnTo', '/login'))
-        await context.route('**/auth/check', route => route.fulfill({ json: { data: { isAuthenticated: signedIn, user: signedIn ? user : null } } }))
+        if (social) await context.addInitScript(() => localStorage.setItem('cosmoscraft_auth', JSON.stringify({ id: 'previous-user', role: 'customer' })))
+        await context.route('**/auth/check', route => {
+          if (social) {
+            if (social !== 'cookie') assert.equal(route.request().headers().authorization, 'Bearer test-token')
+            pendingChecks.push(route)
+            return
+          }
+          return route.fulfill({ json: { data: { isAuthenticated: signedIn, user: signedIn ? user : null } } })
+        })
+        await context.route('**/auth/terms/status', route => {
+          termsChecks++
+          return route.fulfill({ json: { data: { required: false } } })
+        })
         await context.route('**/api/users/profile', route => route.fulfill({ json: { data: { user } } }))
         await context.route('**/auth/email-login', route => {
           signedIn = true
@@ -52,13 +66,28 @@ test('email and OAuth login leave the login page for each role, despite a stale 
         const page = await context.newPage()
         const errors = []
         page.on('pageerror', error => errors.push(error.message))
-        await page.goto(origin + (social ? '/auth/success?token=test-token' : '/login'))
+        const callback = social === 'cookie' ? 'userId=user-1' : `${social}=test-token`
+        await page.goto(origin + (social ? '/auth/success?' + callback : '/login'))
+        if (social) {
+          await page.getByRole('heading', { name: 'Signing In', exact: true }).waitFor()
+          await page.waitForTimeout(1200)
+          assert.equal(new URL(page.url()).pathname, '/auth/success')
+          assert.equal(await page.getByText(/Failed to load user data|Unable to complete sign-in|Redirecting to login/).count(), 0)
+          assert.equal(pendingChecks.length, 2, 'only StrictMode provider mount checks should run')
+          await pendingChecks[1].fulfill({ json: { data: { isAuthenticated: true, user } } })
+        }
         if (!social) {
           await page.getByPlaceholder('name@example.com').fill('test@example.com')
           await page.locator('input[type="password"]').fill('test-password')
           await page.locator('button[type="submit"]').click()
         }
         await page.getByRole('heading', { name: destination, exact: true }).waitFor()
+        if (social) {
+          await pendingChecks[0].fulfill({ json: { data: { isAuthenticated: false } } })
+          await page.waitForTimeout(900)
+          assert.equal(termsChecks, 1, 'the callback must not log in again or repeat the agreement check')
+          assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('cosmoscraft_auth')).id), user.id)
+        }
         assert.equal(new URL(page.url()).pathname, '/' + destination)
         assert.deepEqual(errors, [])
         await context.close()

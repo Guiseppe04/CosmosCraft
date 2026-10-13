@@ -40,7 +40,7 @@ function formatStockLimitMessage(stock) {
 }
 
 export function CartProvider({ children }) {
-  const { isAuthenticated, isLoadingUser } = useAuth()
+  const { isAuthenticated, isRestoringSession: isLoadingUser } = useAuth()
   const [globalToast, setGlobalToast] = useState(null)
 
   const [cart, setCart] = useState([])

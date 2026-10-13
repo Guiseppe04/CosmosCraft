@@ -1,4 +1,4 @@
-import versions from '../../../../shared/termsVersions.json'
+import versions from '../../../termsVersions.json'
 import { API, getAuthHeaders } from './apiConfig'
 
 export { versions as TERMS_VERSIONS }
