@@ -19,13 +19,3 @@ exports.reviewSchema = Joi.object({
 exports.offerSchema = Joi.object({version:Joi.number().integer().min(0).required(),type:Joi.string().valid('repair','rework').required(),
   description:Joi.string().trim().min(10).max(2000).required()}).unknown(false);
 exports.responseSchema = Joi.object({offerId:Joi.string().uuid().required(),response:Joi.string().valid('accepted','declined').required()}).unknown(false);
-const count = Joi.number().integer().min(1).max(3650).allow(null).default(null);
-exports.policySchema = Joi.object({
-  version:Joi.number().integer().min(0).required(),customWarrantyMonths:count,
-  changeOfMindPercent:Joi.number().min(0).max(100).allow(null).default(null),
-  regularProcessingDaysMin:count,regularProcessingDaysMax:count,customProcessingDaysMin:count,customProcessingDaysMax:count,
-  timelineStartsAt:Joi.string().valid('unconfirmed','requirements_complete','approval','processing').default('unconfirmed'),
-  timelineEndsAt:Joi.string().valid('unconfirmed','decision','payment_recorded','payment_completed').default('unconfirmed'),
-  shippingDefault:Joi.string().valid('unconfirmed','case_by_case','seller_attributable').default('unconfirmed'),
-  notes:optionalText(2000),
-}).unknown(false);

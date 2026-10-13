@@ -97,13 +97,4 @@ async function respond(id,user,data) {
       action:`refund_repair_${value.response}`,notification:`repair_${value.response}`};
   },{customer:true});
 }
-async function getPolicy(user) {requireAdmin(user);const row=(await pool.query('SELECT draft,updated_at FROM refund_policy_settings WHERE id=1')).rows[0];return {draft:row?.draft || {},updatedAt:row?.updated_at,active:false};}
-async function savePolicy(user,data) {
-  requireAdmin(user);const value=validate(schemas.policySchema,data);
-  for(const prefix of ['regular','custom'])if(value[prefix+'ProcessingDaysMin']!=null && value[prefix+'ProcessingDaysMax']!=null && value[prefix+'ProcessingDaysMin']>value[prefix+'ProcessingDaysMax'])fail('The minimum processing estimate cannot exceed the maximum');
-  const result=await pool.query(`UPDATE refund_policy_settings SET draft=$1::jsonb,updated_by=$2,updated_at=now() WHERE id=1
-    AND COALESCE((draft->>'version')::int,0)=$3 RETURNING draft,updated_at`,[JSON.stringify({...value,version:value.version+1}),actor(user),value.version]);
-  if(!result.rows.length)fail('Draft settings changed. Reload them before saving.',409);
-  return {draft:result.rows[0].draft,updatedAt:result.rows[0].updated_at,active:false};
-}
-module.exports={getContext,customerReview,update,offer,respond,getPolicy,savePolicy};
+module.exports={getContext,customerReview,update,offer,respond};

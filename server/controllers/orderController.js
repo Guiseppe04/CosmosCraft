@@ -407,12 +407,6 @@ exports.respondRefundRepair = asyncHandler(async (req,res) => {
   socketService.emitRefundChanged(refund);
   res.json({status:'success',data:refund});
 });
-exports.getRefundPolicyDraft = asyncHandler(async (req,res) => {
-  res.json({status:'success',data:await require('../services/refundReviewService').getPolicy(req.user)});
-});
-exports.saveRefundPolicyDraft = asyncHandler(async (req,res) => {
-  res.json({status:'success',data:await require('../services/refundReviewService').savePolicy(req.user,req.validatedData || req.body)});
-});
 exports.getCustomerRefundEvidence = asyncHandler(async (req,res) => {
   const file = await require('../services/customerRefundService').getEvidence(req.params.refundId,req.params.kind,req.user.id);
   res.set('Cache-Control','private, no-store'); res.set('X-Content-Type-Options','nosniff');
