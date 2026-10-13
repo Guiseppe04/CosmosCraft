@@ -70,7 +70,7 @@ exports.getFulfillmentRequestById = asyncHandler(async (req, res) => {
 // Admin / Staff: Transition fulfillment status
 exports.updateFulfillmentStatus = asyncHandler(async (req, res) => {
   const requestId = req.params.id || req.params.requestId;
-  const { status, admin_notes, pickup_id_verified, itemPhotos } = req.validatedData || req.body;
+  const { status, admin_notes, pickup_id_verified, itemPhotos, additional_shipping_fee, tracking_number, rider_name, rider_contact } = req.validatedData || req.body;
 
   if (!status) {
     throw new AppError('Status is required', 400);
@@ -83,7 +83,8 @@ exports.updateFulfillmentStatus = asyncHandler(async (req, res) => {
     req.user.id,
     req.user.role,
     pickup_id_verified,
-    itemPhotos
+    itemPhotos,
+    { additional_shipping_fee, tracking_number, rider_name, rider_contact }
   );
 
   notifyFulfillmentChange(result);

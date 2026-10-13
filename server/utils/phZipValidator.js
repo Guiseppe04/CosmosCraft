@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { getMunicipalityByCode, getProvinceByCode, getPostalCodesByMunicipality } = require('@aivangogh/ph-address');
+const { getMunicipalityByCode, getProvinceByCode, getPostalCodesByMunicipality, getAllPostalCodes } = require('@aivangogh/ph-address');
 
 let _dataset = null;
 let _loadError = null;
@@ -38,31 +38,36 @@ function getMeta() {
 /**
  * Normalize a zip code string for comparison.
  * - Trims whitespace
- * - Strips spaces/hyphens
- * - Removes leading zeros only if the result is still a valid 4-digit code
- *   (PH zip codes are always 4 digits; we pad to 4 digits with leading zeros
- *   so "22" becomes "0022" — however in practice we keep what we receive
- *   and normalize to a 4-digit string)
+ * Internal spaces, hyphens and missing digits remain invalid.
  */
 function normalizeZipCode(zipCode) {
   if (zipCode == null) return '';
-  const cleaned = String(zipCode).trim().replace(/[\s-]/g, '');
-  if (cleaned.length === 0) return '';
-  // Pad to 4 digits (PH standard) if shorter
-  if (cleaned.length < 4 && /^\d+$/.test(cleaned)) {
-    return cleaned.padStart(4, '0');
-  }
-  return cleaned;
+  return String(zipCode).trim();
 }
 
 /**
  * Validate that a zip code string matches the expected Philippine format.
- * Accepts 3-6 digit strings (covers standard 4-digit PH codes and
- * some edge cases like 5-digit or 6-digit old formats).
+ * Requires exactly four digits.
  */
 function isValidFormat(zipCode) {
   const normalized = normalizeZipCode(zipCode);
-  return /^\d{3,6}$/.test(normalized);
+  return /^\d{4}$/.test(normalized);
+}
+
+// These district records exist in the postal supplement but have no city code.
+// Map only their documented district/code groups; never accept arbitrary digits.
+function supplementalZips(cityCode) {
+  const districtGroups = {
+    '1380600000': ['Capital District', '10'],
+    '1381300000': ['Eastern Manila District', '11'],
+    '1381400000': ['Eastern Manila District', '150'],
+  };
+  const group = districtGroups[String(cityCode)];
+  return [...new Set([
+    ...getPostalCodesByMunicipality(String(cityCode)).map(p => p.postalCode),
+    ...(group ? getAllPostalCodes().filter(p => !p.municipalityCode && p.regionName === 'Metro Manila'
+      && p.provinceName === group[0] && p.postalCode.startsWith(group[1])).map(p => p.postalCode) : []),
+  ])];
 }
 
 /**
@@ -72,8 +77,7 @@ function isValidFormat(zipCode) {
  */
 function getValidZipCodes(cityCode) {
   if (!cityCode) return null;
-  const cities = getCities();
-  const city = cities.find(c => c.code === String(cityCode));
+  const city = getCityByCode(cityCode);
   if (!city) return null;
   return city.zips.length > 0 ? [...city.zips] : null;
 }
@@ -94,8 +98,7 @@ function getCityByCode(cityCode) {
       code: location.psgcCode, city: location.name,
       province: getProvinceByCode(location.provinceCode)?.name || '',
       provinceCode: location.provinceCode,
-      zips: [...new Set(getPostalCodesByMunicipality(location.psgcCode).map(p => p.postalCode))],
-      zipCoverage: 'partial',
+      zips: supplementalZips(location.psgcCode),
     };
   }
   return {
@@ -145,7 +148,7 @@ function validateZipCode(cityCode, zipCode) {
   if (!isValidFormat(normalized)) {
     return {
       valid: false,
-      message: 'Zip code must be 3-6 digits.',
+      message: 'Philippine ZIP code must contain exactly four digits.',
     };
   }
 
@@ -154,13 +157,6 @@ function validateZipCode(cityCode, zipCode) {
     return { valid: false, message: 'Selected city is not recognized.' };
   }
 
-  // The PSGC postal supplement only contains base delivery codes, not every
-  // district ZIP (for example Quezon City 1126). Do not reject valid addresses
-  // based on that incomplete coverage; keep exact checks for the existing dataset.
-  if (city.zipCoverage === 'partial') {
-    const valid = /^\d{4}$/.test(normalized);
-    return { valid, message: valid ? 'ZIP code format is valid. Please confirm the postal code for your delivery address.' : 'Philippine ZIP code must contain four digits.', city: { code: city.code, city: city.city, province: city.province }, zips: city.zips, zipCoverage: 'partial' };
-  }
   if (city.zips.length === 0) {
     return {
       valid: false,
@@ -194,11 +190,11 @@ function validateZipCodeGeneral(zipCode) {
   }
 
   if (!isValidFormat(normalized)) {
-    return { valid: false, exists: false, message: 'Zip code must be 3-6 digits.' };
+    return { valid: false, exists: false, message: 'Philippine ZIP code must contain exactly four digits.' };
   }
 
   const byZip = getByZip();
-  const exists = Boolean(byZip[normalized]);
+  const exists = Boolean(byZip[normalized]) || getAllPostalCodes().some(p => p.postalCode === normalized);
 
   return {
     valid: exists,

@@ -256,6 +256,12 @@ exports.applyTransition = async (refundId, newStatus, actorId, actorRole, data =
     if (!canTransition(from, newStatus)) {
       throw new AppError(`Invalid refund status transition from '${from}' to '${newStatus}'`, 400);
     }
+    if (newStatus === 'rejected') {
+      const reason = String(data.rejectionReason || data.adminNotes || '').trim();
+      const reasonError = require('../utils/refundValidation').refundTextError(reason, 'Rejection reason');
+      if (reasonError) throw new AppError(reasonError, 400);
+      data = { ...data, rejectionReason: reason };
+    }
 
     // Amount adjustment validation — only on approval and never above verified total.
     if (newStatus === 'approved') {
@@ -351,9 +357,6 @@ exports.applyTransition = async (refundId, newStatus, actorId, actorRole, data =
       }
     }
 
-    if (newStatus === 'rejected' && !data.rejectionReason) {
-      push('rejection_reason', 'Rejected by admin');
-    }
 
     updateValues.push(refundId);
     const res = await client.query(

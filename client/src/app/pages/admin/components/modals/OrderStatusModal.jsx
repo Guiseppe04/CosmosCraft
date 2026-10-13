@@ -1,7 +1,7 @@
 import { motion } from 'motion/react'
 import { X, Save, Loader2 } from 'lucide-react'
 import { normalizeRiderContact } from '../../../../utils/phone'
-import PhoneInput from '../../../../components/PhoneInput'
+import RiderContactInput from '../../../../components/RiderContactInput'
 import { ShippingFeeInput } from '../../../../components/ShippingFeeNotice'
 import { isValidShippingFee } from '../../../../utils/shippingFee'
 import DispatchPhotoInput from '../../../../components/DispatchPhotoInput'
@@ -152,7 +152,7 @@ export function OrderStatusModal({
                 <input type="text" value={form.rider_name || ''} onChange={(e) => setForm((f) => ({ ...f, rider_name: e.target.value }))} className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white" />
               </label>
               <label className="block text-sm text-[var(--text-muted)]">Rider Contact
-                <PhoneInput value={form.rider_contact || ''} onChange={(e) => setForm((f) => ({ ...f, rider_contact: e.target.value }))} className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white" />
+                <RiderContactInput value={form.rider_contact || ''} onChange={(e) => setForm((f) => ({ ...f, rider_contact: e.target.value }))} className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white" />
               </label>
             </div>
           )}

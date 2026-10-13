@@ -1,6 +1,7 @@
 const { normalizeTaskProgress, taskAverageProgress } = require('../utils/projectTaskProgress');
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+const { validateAddressPostalCode } = require('../utils/phAddress');
 const defaultWorkflowService = require('./defaultWorkflowService');
 const inventoryService = require('./inventoryService');
 const builderPartsService = require('./builderPartsService');
@@ -2751,6 +2752,12 @@ exports.submitFulfillmentChoice = async (projectId, userId, userRole, data = {})
       }
       fulfillmentAddressId = project.order_shipping_address_id || null;
       fulfillmentAddressSnapshot = checkoutAddress;
+    }
+
+    if (['shop_delivery', 'external_delivery'].includes(method)) {
+      try {
+        validateAddressPostalCode(typeof fulfillmentAddressSnapshot === 'string' ? JSON.parse(fulfillmentAddressSnapshot) : fulfillmentAddressSnapshot);
+      } catch (error) { throw new AppError(error.message, 400); }
     }
 
     if (['courier_arranged', 'out_for_delivery', 'ready_for_pickup', 'picked_up', 'delivered', 'received'].includes(project.fulfillment_status)) {

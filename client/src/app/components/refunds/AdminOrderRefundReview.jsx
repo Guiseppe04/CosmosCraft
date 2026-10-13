@@ -27,6 +27,7 @@ const Required = () => <span style={{ color: '#ef4444' }} className="text-red-40
 export default function AdminOrderRefundReview({ refund, onUpdated }) {
   const [notes,setNotes] = useState(''), [instructions,setInstructions] = useState(refund.return_instructions || '')
   const [customNotes,setCustomNotes] = useState('')
+  const [customInstructions,setCustomInstructions] = useState(refund.return_instructions || '')
   const [exception,setException] = useState(''), [inspection,setInspection] = useState(refund.inspection_notes || '')
   const [suitable,setSuitable] = useState(''), [amount,setAmount] = useState(refund.approved_amount ?? refund.review_context?.calculation?.suggestedAmount ?? refund.amount_requested)
   const [claim,setClaim] = useState('')
@@ -39,6 +40,7 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
   const [showOriginalProof,setShowOriginalProof] = useState(false)
   const branches = useBranchSettings()
   const review = ['pending','under_review'].includes(refund.status)
+  const refundApproved = refund.approved_amount != null || ['approved','processing','refund_sent','completed','refunded'].includes(refund.status)
   const inspect = refund.status === 'under_inspection'
   const noReturnRecorded = refund.return_status === 'not_required' && Boolean(refund.no_return_reason)
   const next = review ? noReturnRecorded ? ['approved','rejected'] : [mode === 'no_return' ? 'mark_no_return' : mode === 'reject' ? 'rejected' : 'return_required']
@@ -57,11 +59,10 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
     if (status === 'approved' && inspect && claim==='no') result.claimVerified='The customer claim must be verified before approving the refund.'
     if (status === 'approved') {
       const calculation=refund.review_context?.calculation;
-      if(calculation?.custom && calculation.requiresVerifiedCosts) result.approvedAmount='Save verified material/base value, labor costs and supporting evidence in review details first.'
+      if(calculation?.custom && calculation.requiresVerifiedCosts) result.approvedAmount='Verified material/base value, incurred labor and supporting evidence are required before approving this customized guitar refund.'
       else if(calculation?.custom && Number(amount)>calculation.maximum) result.approvedAmount=`The verified customized guitar refund limit is ${formatCurrency(calculation.maximum)}.`
       if (!Number.isFinite(Number(amount)) || Number(amount)<=0 || Number(amount)>Number(refund.amount_requested)) result.approvedAmount='Enter a positive amount up to the requested refund.'
       if (inspect && !suitable) result.resaleSuitable='Select whether the item is suitable for resale.'
-      if (Number(amount)!==Number(refund.amount_requested)) {const error=adminRefundTextError(notes,'Adjustment explanation');if(error) result.adminNotes=error}
       if (!inspect && !noReturnRecorded) result.noReturnReason='Record Return Not Required before approving this refund.'
     }
     if (status === 'refund_sent' && !proof) result.proofImage='Upload refund payment proof before recording payment.'
@@ -73,22 +74,24 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
   }
   function textField(key,label,value,setter,{required=false,max=1000,options=[]}={}) {
     const choices=key==='returnInstructions' && branches.isLoaded ? [...options,...branches.branches.map(branch=>`Please securely pack the item and return it to ${branch.name}, ${branch.address}.`)] : options
-    const remarks=key==='adminNotes', showText=!remarks || presets[key]==='other'
+    const remarks=key==='adminNotes', instructionsField=key==='returnInstructions'
+    const dropdownOnly=remarks || instructionsField, showText=!dropdownOnly || presets[key]==='other'
     return <div className="space-y-2">
       <label htmlFor={`refund-${key}${showText?'':'-choice'}`} className="block text-sm text-[var(--text-light)]">{label} {required && <Required />}</label>
       {choices.length>0 && <select id={`refund-${key}-choice`} aria-label={`Suggested ${label}`} value={presets[key] || ''} className={fieldClass}
         ref={node=>{if(!showText) fields.current[key]=node}}
-        aria-invalid={remarks && !showText ? Boolean(errors[key]) : undefined} aria-describedby={remarks && errors[key]?`error-${key}`:undefined}
+        aria-invalid={!showText ? Boolean(errors[key]) : undefined} aria-describedby={errors[key]?`error-${key}`:undefined}
         onChange={event=>{const choice=event.target.value;setPresets(previous=>({...previous,[key]:choice}));
           if(remarks){const updated=choice==='other'?customNotes:choice?choices[Number(choice)-1]:'';setter(updated);clearError(key,updated);return}
+          if(instructionsField){const updated=choice==='other'?customInstructions:choice?choices[Number(choice)-1]:'';setter(updated);clearError(key,updated);return}
           if(choice && choice!=='other'){const suggestion=choices[Number(choice)-1];const updated=value.includes(suggestion)?value:value.trim()?`${value}\n${suggestion}`:suggestion;setter(updated);clearError(key,updated)}
           fields.current[key]?.focus()
         }}><option value="">Choose a suggested message</option>{choices.map((choice,index)=><option key={choice} value={index+1}>{choice}</option>)}<option value="other">Other (Please specify)</option></select>}
       {showText && <textarea id={`refund-${key}`} aria-label={label} ref={node=>{fields.current[key]=node}} value={value} maxLength={max} rows={3} autoFocus={remarks}
         aria-invalid={Boolean(errors[key])} aria-describedby={errors[key]?`error-${key}`:undefined}
-        onChange={event=>{setter(event.target.value);if(remarks)setCustomNotes(event.target.value);clearError(key,event.target.value)}} className={`${fieldClass} ${errors[key]?'border-red-500 ring-1 ring-red-500':''}`} />}
+        onChange={event=>{setter(event.target.value);if(remarks)setCustomNotes(event.target.value);if(instructionsField)setCustomInstructions(event.target.value);clearError(key,event.target.value)}} className={`${fieldClass} ${errors[key]?'border-red-500 ring-1 ring-red-500':''}`} />}
       {errors[key] && <p id={`error-${key}`} role="alert" style={{ color: '#ef4444' }} className="text-sm text-red-400">{errors[key]}</p>}
-      {choices.length>0 && <p className="text-xs text-[var(--text-muted)]" style={{ color: '#f59e0b' }}>{remarks?'Select a message, or choose Other to enter your own remarks.':'Suggestions are editable and added to your existing text. Couriers are suggestions only.'}</p>}    </div>
+      {choices.length>0 && <p className="text-xs text-[var(--text-muted)]" style={{ color: '#f59e0b' }}>{dropdownOnly?'Select a message, or choose Other to enter your own text.':'Suggestions are editable and added to your existing text. Couriers are suggestions only.'}</p>}    </div>
   }
   async function update(status) {
     if (lock.current || reading) return
@@ -135,7 +138,7 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
         <PrivateRefundFile key={kind} refundId={refund.refund_request_id} kind={kind} label={`${kind.startsWith('return') ? 'Return evidence' : 'Supporting evidence'} ${Number(kind.match(/[0-4]$/)[0]) + 1}`} />)}</div>
     </details>}
     <div className="space-y-2 text-sm text-[var(--text-muted)]">
-      {refund.admin_notes && <p className="whitespace-pre-wrap break-words">Admin remarks: {refund.admin_notes}</p>}
+      {!refundApproved && refund.admin_notes && <p className="whitespace-pre-wrap break-words">Admin remarks: {refund.admin_notes}</p>}
       {refund.return_instructions && <p className="whitespace-pre-wrap break-words">Return instructions: {refund.return_instructions}</p>}
       {refund.return_reference && <p className="break-all">Return reference: {refund.return_reference}</p>}
       {refund.customer_return_notes && <p className="whitespace-pre-wrap break-words">Customer return notes: {refund.customer_return_notes}</p>}
@@ -157,7 +160,8 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
           <option value="return">Approve item return</option><option value="no_return">Return Not Required</option><option value="reject">Reject request</option>
         </select>
       </label>}
-      {textField('adminNotes','Admin remarks / rejection reason',notes,setNotes,{required:mode==='reject'||Boolean(errors.adminNotes),options:REFUND_MESSAGE_PRESETS.adminNotes})}
+      {!refundApproved && textField('adminNotes','Admin remarks / rejection reason',notes,setNotes,{required:mode==='reject'||Boolean(errors.adminNotes),options:REFUND_MESSAGE_PRESETS.adminNotes})}
+      {refundApproved && next.includes('rejected') && textField('adminNotes','Rejection reason',notes,setNotes,{options:REFUND_MESSAGE_PRESETS.adminNotes})}
       {review && !noReturnRecorded && mode==='return' && textField('returnInstructions','Return instructions',instructions,setInstructions,{required:true,max:2000,options:REFUND_MESSAGE_PRESETS.returnInstructions})}
       {review && !noReturnRecorded && mode==='no_return' && textField('noReturnReason','Return Not Required reason',exception,setException,{required:true,options:REFUND_MESSAGE_PRESETS.noReturnReason})}
       {inspect && <>

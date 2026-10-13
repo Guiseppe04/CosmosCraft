@@ -11,6 +11,8 @@ export function OAuthSignupPage() {
   const { login } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [termsOpen, setTermsOpen] = useState(false)
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  const [error, setError] = useState('')
   const [userData, setUserData] = useState(null)
   useEffect(() => {
     const provider = searchParams.get('provider')
@@ -30,9 +32,10 @@ export function OAuthSignupPage() {
   }, [searchParams, navigate])
 
   const handleCompleteSignup = async () => {
-    if (!userData) return
+    if (!userData || isLoading || !termsAccepted) return
 
     setIsLoading(true)
+    setError('')
 
     try {
       // Call backend to complete signup
@@ -53,7 +56,7 @@ export function OAuthSignupPage() {
       if (acceptedUser) navigate('/dashboard')
     } catch (error) {
       console.error('Signup error:', error)
-      throw error
+      setError(error.message || 'Unable to complete account setup. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -69,7 +72,7 @@ export function OAuthSignupPage() {
 
   return (
     <div className="min-h-screen bg-light flex items-center justify-center py-12 px-4">
-      <TermsAndConditionsModal isOpen={termsOpen} account onClose={() => setTermsOpen(false)} onAgree={handleCompleteSignup} />
+      <TermsAndConditionsModal isOpen={termsOpen} account onClose={() => setTermsOpen(false)} onAgree={()=>{setTermsAccepted(true);setTermsOpen(false)}} />
       <div className="w-full max-w-md">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-dark mb-2">Complete Your Setup</h1>
@@ -101,9 +104,16 @@ export function OAuthSignupPage() {
             </p>
           </div>
 
+          <label className="flex items-start gap-2 text-sm text-gray-600">
+            <input type="checkbox" checked={termsAccepted} disabled={isLoading}
+              onChange={event=>event.target.checked?setTermsOpen(true):setTermsAccepted(false)} className="mt-1 h-4 w-4 shrink-0" />
+            <span>I have read and agree to the <button type="button" onClick={()=>setTermsOpen(true)} className="text-sm underline">Terms and Conditions</button>.</span>
+          </label>
+      
+          {error && <p role="alert" style={{color:'#ef4444'}}>{error}</p>}
           <button
-            onClick={() => setTermsOpen(true)}
-            disabled={isLoading}
+            onClick={handleCompleteSignup}
+            disabled={isLoading || !termsAccepted}
             className="w-full bg-[#d4af37] hover:bg-[#c39d2f] text-[#231f20] font-semibold py-3 rounded-lg transition disabled:opacity-60"
           >
             {isLoading ? 'Setting up...' : 'Complete Setup'}

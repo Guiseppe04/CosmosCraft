@@ -2,6 +2,13 @@ export const REFUND_STEPS = [
   ['pending', 'Refund Requested'], ['under_review', 'Under Review'], ['approved', 'Approved'],
   ['processing', 'Payment Processing'], ['refund_sent', 'Refund Sent'], ['completed', 'Completed'],
 ]
+export function hasPurchaseRefund(order = {}) {
+  const hasStatus = status => Boolean(status && !['none','not_requested','not_required'].includes(status));
+  return Boolean(order.has_refund_request || order.refund_request_id || order.refund_request_status
+    || hasStatus(order.refund_status) || order.status === 'refunded' || order.payment_status === 'refunded'
+    || order.payment?.status === 'refunded' || Number(order.refund_refunded_amount) > 0
+    || order.project?.refund_request_id || hasStatus(order.project?.refund_status));
+}
 export const refundMethodLabel = method => method === 'e_bank' || method === 'bank_transfer' ? 'E-Bank / Bank Transfer' : 'E-Wallet'
 export const emptyRefundDestination = () => ({ method: '', provider: '', accountName: '', accountNumber: '', details: '' })
 export function refundDestinationError(value) {

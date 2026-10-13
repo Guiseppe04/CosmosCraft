@@ -25,6 +25,7 @@ import CustomerRefundImages from '../components/refunds/CustomerRefundImages'
 import CustomerRefundTracking from '../components/refunds/CustomerRefundTracking'
 import DispatchPhotoGallery from '../components/DispatchPhotoGallery'
 import CustomerRefundReviewLoader from '../components/refunds/CustomerRefundReviewLoader'
+import { hasPurchaseRefund } from '../utils/refundWorkflow'
 import CustomerProjectTracker from '../components/projects/CustomerProjectTracker.jsx'
 import { AddressForm } from '../components/AddressForm.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
@@ -2054,7 +2055,7 @@ export function DashboardPage() {
       if (activePurchaseTab === 'Completed' && ['delivered', 'received', 'completed'].includes(order.status)) return true;
       if (activePurchaseTab === 'Cancelled' && order.status === 'cancelled') return true;
       if (activePurchaseTab === 'Refund') {
-        return Boolean(order.has_refund_request || order.refund_request_status || order.payment_status === 'refunded')
+        return hasPurchaseRefund(order)
       }
       return false;
     });

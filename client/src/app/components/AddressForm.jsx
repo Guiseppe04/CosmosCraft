@@ -3,6 +3,7 @@ import { regions, provincesInRegion, citiesFor, barangaysFor, resolveSavedLocati
 import { Home, Building, X, CheckCircle2, AlertCircle, Loader } from 'lucide-react'
 import { useZipValidation } from '../hooks/useZipValidation'
 const ADDRESS_CATEGORIES = ['Home', 'Work', 'Other']
+const INDEPENDENT_CITY = '__independent_city__'
 
 const locationSelectClass = 'w-full min-w-0 px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)] disabled:opacity-50'
 
@@ -35,6 +36,7 @@ const normalizeInitialAddress = (address = {}) => {
     streetLine1: address.streetLine1 ?? address.street_line1 ?? address.street ?? '',
     streetLine2: address.streetLine2 ?? address.street_line2 ?? address.street2 ?? '',
     ...location,
+    independentCity: Boolean(location.city && !location.province && location.region !== '1300000000'),
     stateProvince: address.stateProvince ?? address.province ?? '',
     postalZipCode: address.postalZipCode ?? address.postal_code ?? address.postalCode ?? '',
     isDefault: Boolean(address.isDefault ?? address.is_default),
@@ -53,6 +55,7 @@ export function AddressForm({
   const addressFormId = reactUseId()
   const [formData, setFormData] = useState(() => normalizeInitialAddress(initialAddress))
   const [errors, setErrors] = useState({})
+  const [checkingAddress, setCheckingAddress] = useState(false)
   const isPhilippines = true
   const isNcr = formData.region === '1300000000'
   const locationData = useMemo(() => ({
@@ -60,7 +63,11 @@ export function AddressForm({
     cities: citiesFor(formData.region, formData.province),
     barangays: formData.city ? barangaysFor(formData.city) : [],
   }), [formData.region, formData.province, formData.city])
-  const provinceRequired = !isNcr && !locationData.cities.some(c => c.psgcCode === formData.city && !formData.province)
+  const independentCities = citiesFor(formData.region)
+  const provinceOptions = independentCities.length
+    ? [...locationData.provinces, {psgcCode: INDEPENDENT_CITY, name: 'Independent City (No Province)'}]
+    : locationData.provinces
+  const provinceRequired = !isNcr && !formData.independentCity && !locationData.cities.some(c => c.psgcCode === formData.city && !formData.province)
 
   const {
     isValid: zipValid,
@@ -97,9 +104,10 @@ export function AddressForm({
     setFormData(prev => ({ ...prev, ...changes }))
     setErrors({})
   }
-  const handleRegionChange = region => resetLocation({ region, province: '', stateProvince: '', city: '', barangay: '' })
-  const handleProvinceChange = province => resetLocation({ province, city: '', barangay: '' })
-  const handleCityChange = city => resetLocation({ city, barangay: '' })
+  const handleRegionChange = region => resetLocation({ region, province: '', independentCity: false, stateProvince: '', city: '', barangay: '' })
+  const handleProvinceChange = selection => resetLocation({ province: selection === INDEPENDENT_CITY ? '' : selection,
+    independentCity: selection === INDEPENDENT_CITY, stateProvince: '', city: '', barangay: '' })
+  const handleCityChange = city => resetLocation({ city, barangay: '', independentCity: Boolean(city && !formData.province && !isNcr) })
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -119,8 +127,8 @@ export function AddressForm({
     if (!locationData.barangays.some(b => b.psgcCode === formData.barangay)) nextErrors.barangay = 'Select a barangay in the selected city'
     if (!formData.postalZipCode?.trim()) {
       nextErrors.postalZipCode = 'Postal code is required'
-    } else if (isPhilippines && formData.city && formData.postalZipCode.trim() && zipValid === false) {
-      nextErrors.postalZipCode = zipError || 'The ZIP code entered is incorrect for the selected city.'
+    } else if (!/^\d{4}$/.test(formData.postalZipCode.trim())) {
+      nextErrors.postalZipCode = 'Philippine ZIP code must contain exactly four digits.'
     }
     setErrors(nextErrors)
     return Object.keys(nextErrors).length === 0
@@ -139,8 +147,15 @@ export function AddressForm({
     return selectedProvince?.name || String(formData.stateProvince || formData.province || '').trim()
   }
 
-  const handleSubmit = () => {
-    if (!validate()) return
+  const handleSubmit = async () => {
+    if (isSubmitting || checkingAddress || !validate()) return
+    setCheckingAddress(true)
+    const result = await validateZip(formData.city, formData.postalZipCode.trim())
+    setCheckingAddress(false)
+    if (result.valid !== true) {
+      setErrors(prev => ({ ...prev, postalZipCode: result.message || result.error || 'Unable to verify ZIP code. Please try again.' }))
+      return
+    }
     const payload = {
       ...(showCategory ? { label: formData.label } : {}),
       country: 'PH',
@@ -213,8 +228,8 @@ export function AddressForm({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <LocationSelect id={addressFormId + '-region'} label="Region" value={formData.region}
           onChange={handleRegionChange} options={regions} placeholder="Select Region" error={errors.region} />
-        {!isNcr && <LocationSelect id={addressFormId + '-province'} label="Province" value={formData.province}
-          onChange={handleProvinceChange} options={locationData.provinces} placeholder="Select Province"
+        {!isNcr && <LocationSelect id={addressFormId + '-province'} label="Province" value={formData.province || (formData.independentCity ? INDEPENDENT_CITY : '')}
+          onChange={handleProvinceChange} options={provinceOptions} placeholder="Select Province"
           disabled={!formData.region} required={provinceRequired} error={errors.province} />}
         <LocationSelect id={addressFormId + '-city'} label="City / Municipality" value={formData.city}
           onChange={handleCityChange} options={locationData.cities}
@@ -233,6 +248,7 @@ export function AddressForm({
         <div className="relative">
           <input
             type="text"
+            inputMode="numeric"
             value={formData.postalZipCode}
             onChange={(e) => handleChange('postalZipCode', e.target.value)}
             className={`w-full px-4 py-2.5 pr-10 rounded-lg border bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)] ${
@@ -284,10 +300,10 @@ export function AddressForm({
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={isSubmitting || zipLoading}
+          disabled={isSubmitting || checkingAddress || zipLoading}
           className="flex-1 py-3 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-sm font-semibold text-[var(--text-dark)] hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isSubmitting ? 'Saving...' : submitLabel}
+          {isSubmitting ? 'Saving...' : checkingAddress ? 'Checking address...' : submitLabel}
         </button>
       </div>
     </div>

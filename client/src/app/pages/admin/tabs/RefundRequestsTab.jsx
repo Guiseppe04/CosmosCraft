@@ -8,7 +8,6 @@ import {
 import { formatCurrency } from '../../../utils/formatCurrency'
 import { adminApi } from '../../../utils/adminApi'
 import AdminRefundWorkflow from '../../../components/refunds/AdminRefundWorkflow'
-import RefundReviewTools from '../../../components/refunds/RefundReviewTools'
 import DispatchPhotoGallery from '../../../components/DispatchPhotoGallery'
 import { useRefundRealtime } from '../../../hooks/useRefundRealtime'
 import { useSocketEvent } from '../../../context/SocketContext'
@@ -729,7 +728,6 @@ export function RefundRequestsTab({ showToast, user }) {
                     }} />}
                   {!selectedRequest.original_payment_method && <>
                   {selectedRequest.workflow_version !== 2 && selectedRequest.order_id && <DispatchPhotoGallery orderId={selectedRequest.order_id} allowAdd={selectedRequest.can_manage} />}
-                  {selectedRequest.workflow_version !== 2 && <RefundReviewTools refund={selectedRequest} onUpdated={async()=>{const result=await adminApi.getRefundRequest(selectedRequest.refund_request_id);setSelectedRequest(result.data);await fetchRefundRequests()}} />}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-[var(--bg-primary)]/50 rounded-xl p-4">
                       <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Refund Status</p>

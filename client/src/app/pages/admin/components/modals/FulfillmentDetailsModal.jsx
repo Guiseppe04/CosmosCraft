@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import DispatchPhotoInput from '../../../../components/DispatchPhotoInput';
 import DispatchPhotoGallery from '../../../../components/DispatchPhotoGallery';
+import { normalizeRiderContact } from '../../../../utils/phone';
+import RiderContactInput from '../../../../components/RiderContactInput';
 import { motion } from 'motion/react';
 import {
   X,
@@ -49,7 +51,12 @@ export function FulfillmentDetailsModal({ request, onClose, onUpdateStatus }) {
   const [adminNotes, setAdminNotes] = useState(request.admin_notes || '');
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState(null);
+  const [fieldErrors,setFieldErrors]=useState([]);
   const [itemPhotos,setItemPhotos]=useState([]),[photosReady,setPhotosReady]=useState(false);
+  const [shippingFee,setShippingFee]=useState(request.additional_shipping_fee ?? '');
+  const [trackingNumber,setTrackingNumber]=useState(request.tracking_number || '');
+  const [riderName,setRiderName]=useState(request.rider_name || '');
+  const [riderContact,setRiderContact]=useState(request.rider_contact || '');
 
   const method = request.fulfillment_method?.includes('delivery') ? 'delivery' : 'pickup';
   const status = request.status;
@@ -83,13 +90,24 @@ export function FulfillmentDetailsModal({ request, onClose, onUpdateStatus }) {
   }
 
   const handleAdvance = async (targetStatus) => {
+    if(updating)return;
+    setFieldErrors([]);
+    if(method==='delivery' && targetStatus==='out_for_delivery'){
+      if(!/^\d+(?:\.\d{1,2})?$/.test(String(shippingFee)) || Number(shippingFee)>9999999999.99){setError('Enter a shipping fee of 0 or more, with up to two decimal places.');return;}
+      if(!trackingNumber.trim()){setError('Tracking number is required before dispatch.');return;}
+      if(!riderName.trim()){setError('Rider name is required before dispatch.');return;}
+      if(!normalizeRiderContact(riderContact)){setError('Enter a valid Philippine mobile number for the rider.');return;}
+    }
     if(method==='delivery' && targetStatus==='out_for_delivery' && !photosReady){setError('Upload pre-shipping photos for every customized item before dispatch.');return;}
     try {
       setUpdating(true);
       setError(null);
-      await onUpdateStatus(request.id, targetStatus, adminNotes,{itemPhotos:targetStatus==='out_for_delivery'?itemPhotos:undefined});
-      onClose();
+      await onUpdateStatus(request.id, targetStatus, adminNotes,targetStatus==='out_for_delivery'?{
+        itemPhotos,additional_shipping_fee:Number(shippingFee),tracking_number:trackingNumber.trim(),
+        rider_name:riderName.trim(),rider_contact:normalizeRiderContact(riderContact),
+      }:{});
     } catch (err) {
+      setFieldErrors(Array.isArray(err.fieldErrors)?err.fieldErrors:[]);
       setError(err.message || 'Failed to update fulfillment status');
     } finally {
       setUpdating(false);
@@ -146,9 +164,12 @@ export function FulfillmentDetailsModal({ request, onClose, onUpdateStatus }) {
         {error && (
           <div className="p-3 rounded-2xl border border-red-500/30 bg-red-500/10 text-xs text-red-300 flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-            <span>{error}</span>
+            <span role="alert" style={{color:'#ef4444'}}>{error}</span>
           </div>
         )}
+        {fieldErrors.length>0 && <ul className="space-y-1 text-sm" style={{color:'#ef4444'}}>
+          {fieldErrors.map(({field,message},index)=><li key={`${field}-${index}`} role="alert">{({additional_shipping_fee:'Shipping fee',tracking_number:'Tracking number',rider_name:'Rider name',rider_contact:'Rider contact number',admin_notes:'Admin notes'})[field] || (field?.startsWith('itemPhotos')?'Pre-shipping photos':field)}: {message}</li>)}
+        </ul>}
 
         {/* Status Tracker Box */}
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 space-y-3">
@@ -271,7 +292,30 @@ export function FulfillmentDetailsModal({ request, onClose, onUpdateStatus }) {
         </div>
 
         {/* Footer Actions */}
-        {method==='delivery' && nextStatus==='out_for_delivery' && <DispatchPhotoInput orderId={request.order_id} customOnly value={itemPhotos} onChange={setItemPhotos} onReadyChange={setPhotosReady} disabled={updating} />}
+        {method==='delivery' && nextStatus==='out_for_delivery' && <fieldset disabled={updating} className="space-y-4 rounded-xl border border-[var(--border)] p-4">
+          <h3 className="font-semibold text-white">Dispatch details</h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[
+              ['Shipping fee (PHP)',shippingFee,setShippingFee,'number'],
+              ['Tracking number',trackingNumber,setTrackingNumber,'text'],
+              ['Rider name',riderName,setRiderName,'text'],
+              ['Rider contact number',riderContact,setRiderContact,'tel'],
+            ].map(([label,value,setter,type],index)=><label key={label} className="block text-sm text-white">{label} <span style={{color:'#ef4444'}}>*</span>
+              {type==='tel'?<RiderContactInput aria-label={label} aria-invalid={fieldErrors.some(error=>error.field==='rider_contact')} value={value} onChange={event=>setter(event.target.value)} className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-3 text-white" />:<input aria-label={label} type={type} min={type==='number'?0:undefined} step={type==='number'?'0.01':undefined}
+                aria-invalid={fieldErrors.some(error=>error.field===['additional_shipping_fee','tracking_number','rider_name','rider_contact'][index])}
+                maxLength={type==='number'?undefined:100} value={value} onChange={e=>setter(e.target.value)}
+                className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-3 text-white" />}
+            </label>)}
+          </div>
+          <p className="text-xs text-[var(--text-muted)]">Enter 0 when no additional shipping fee applies.</p>
+          <DispatchPhotoInput orderId={request.order_id} customOnly value={itemPhotos} onChange={setItemPhotos} onReadyChange={setPhotosReady} disabled={updating} />
+        </fieldset>}
+        {method==='delivery' && ['out_for_delivery','completed'].includes(status) && <dl className="grid gap-2 text-sm text-white sm:grid-cols-2">
+          <div><dt>Shipping fee</dt><dd>{formatCurrency(request.additional_shipping_fee)}</dd></div>
+          <div><dt>Tracking number</dt><dd>{request.tracking_number || 'Not recorded'}</dd></div>
+          <div><dt>Rider name</dt><dd>{request.rider_name || 'Not recorded'}</dd></div>
+          <div><dt>Rider contact number</dt><dd>{request.rider_contact || 'Not recorded'}</dd></div>
+        </dl>}
         <DispatchPhotoGallery orderId={request.order_id} allowAdd />
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-[var(--border)]">
           <button

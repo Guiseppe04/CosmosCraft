@@ -2,6 +2,7 @@ const { pool } = require('../config/database')
 const { generateOrderNumber, generateRefundRequestNumber, determineOrderTypePrefix } = require('../utils/orderNumber')
 const projectRefundService = require('./projectRefundService')
 const { calculateOrderTotals } = require('../utils/orderTotals')
+const { validateAddressPostalCode } = require('../utils/phAddress')
 
 const validateShippingFee = (value) => {
   if (value === null || value === undefined || !/^\d+(?:\.\d{1,2})?$/.test(String(value).trim()) ||
@@ -659,12 +660,14 @@ exports.createOrder = async (orderData) => {
 
     if (providedShippingAddressId) {
       const allowedAddress = await client.query(
-        `SELECT address_id FROM addresses WHERE address_id = $1 AND user_id = $2`,
+        `SELECT address_id, city, province, postal_code FROM addresses WHERE address_id = $1 AND user_id = $2`,
         [providedShippingAddressId, userId]
       )
       if (allowedAddress.rows.length === 0) {
         throw createValidationError('Selected shipping address is invalid or does not belong to the current user', 400)
       }
+      try { validateAddressPostalCode(allowedAddress.rows[0]); }
+      catch (error) { throw createValidationError(error.message, 400); }
       shippingAddressId = providedShippingAddressId
     } else if (billingAddress?.street && billingAddress?.city) {
       const normalizedBillingProvince = billingAddress.province || billingAddress.stateProvince || null
@@ -845,8 +848,9 @@ exports.getUserOrders = async (userId) => {
   }, {})
 
   const refundRes = await pool.query(
-    `SELECT DISTINCT ON (order_id)
+    `SELECT DISTINCT ON (order_id, to_jsonb(refund_requests)->>'project_id')
        order_id,
+       to_jsonb(refund_requests)->>'project_id' AS project_id,
        refund_request_id,
        status,
        created_at,
@@ -863,8 +867,9 @@ exports.getUserOrders = async (userId) => {
        refund_type,
        request_number
      FROM refund_requests
-     WHERE order_id = ANY($1) AND deleted_at IS NULL
-     ORDER BY order_id, created_at DESC`,
+     WHERE (order_id = ANY($1) OR to_jsonb(refund_requests)->>'project_id' IN (SELECT project_id::text FROM projects WHERE order_id = ANY($1) AND deleted_at IS NULL))
+       AND deleted_at IS NULL
+     ORDER BY order_id, project_id, created_at DESC`,
     [orderIds]
   )
   const refundByOrder = refundRes.rows.reduce((acc, row) => {
@@ -891,7 +896,10 @@ exports.getUserOrders = async (userId) => {
   }, {})
 
   const projectsRes = await pool.query(
-    `SELECT project_id, order_id, title, status, fulfillment_status FROM projects WHERE order_id = ANY($1) AND deleted_at IS NULL`,
+    `SELECT project_id, order_id, title, status, fulfillment_status,
+       to_jsonb(projects)->>'refund_status' AS refund_status,
+       to_jsonb(projects)->>'refund_request_id' AS refund_request_id
+     FROM projects WHERE order_id = ANY($1) AND deleted_at IS NULL`,
     [orderIds]
   )
   const projectByOrder = projectsRes.rows.reduce((acc, proj) => {
@@ -906,7 +914,7 @@ exports.getUserOrders = async (userId) => {
       review: reviewsByItemId[item.order_item_id] || null,
     }))
     const payment = paymentsByOrder[order.order_id] || null
-    const refund = refundByOrder[order.order_id] || null
+    const refund = refundByOrder[order.order_id] || refundRes.rows.find(row => row.project_id && row.project_id === projectByOrder[order.order_id]?.project_id) || null
     const customization_feedback = feedbackByOrder[order.order_id] || null
     const project = projectByOrder[order.order_id] || null
 
@@ -2178,6 +2186,10 @@ exports.updateRefundStatus = async (refundRequestId, status, options = {}) => {
   };
   if (!allowedTransitions[currentStatus]?.includes(status)) {
     throw new Error(`Invalid refund status transition from '${currentStatus}' to '${status}'`);
+  }
+  if (status === 'rejected') {
+    const reasonError = require('../utils/refundValidation').refundTextError(adminNotes, 'Rejection reason');
+    if (reasonError) throw createValidationError(reasonError, 400);
   }
 
   const updateFields = ['status = $1', 'updated_at = CURRENT_TIMESTAMP'];

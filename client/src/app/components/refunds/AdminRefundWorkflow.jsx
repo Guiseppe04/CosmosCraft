@@ -7,11 +7,10 @@ import { formatCurrency } from '../../utils/formatCurrency'
 import { adminRefundTextError, REFUND_MESSAGE_PRESETS, refundMethodLabel } from '../../utils/refundWorkflow'
 import { CheckCircle, Clock, XCircle } from 'lucide-react'
 import AdminOrderRefundReview from './AdminOrderRefundReview'
-import RefundReviewTools from './RefundReviewTools'
 import DispatchPhotoGallery from '../DispatchPhotoGallery'
 
 export default function AdminRefundWorkflow(props) {
-  return <>{props.refund.order_id && <DispatchPhotoGallery orderId={props.refund.order_id} allowAdd={props.refund.can_manage} />}{props.refund.original_payment_method ? <AdminOrderRefundReview {...props} /> : <LegacyAdminRefundWorkflow {...props} />}<RefundReviewTools {...props} /></>
+  return <>{props.refund.order_id && <DispatchPhotoGallery orderId={props.refund.order_id} allowAdd={props.refund.can_manage} />}{props.refund.original_payment_method ? <AdminOrderRefundReview {...props} /> : <LegacyAdminRefundWorkflow {...props} />}</>
 }
 
 function LegacyAdminRefundWorkflow({ refund, onUpdated }) {
@@ -65,17 +64,17 @@ function LegacyAdminRefundWorkflow({ refund, onUpdated }) {
       {destination && <PrivateRefundFile refundId={refund.refund_request_id} kind="proof" label="Proof of refund payment" />}
     </div>}
     {destination && next.length > 0 && <fieldset disabled={busy || reading} className="space-y-4">
-      <label className="block text-sm text-[var(--text-light)]">Notes to customer / rejection reason
+      {!['approved','processing','refund_sent','completed','refunded'].includes(refund.status) && <label className="block text-sm text-[var(--text-light)]">Notes to customer / rejection reason
         <select aria-label="Suggested rejection reason" value={noteChoice} ref={node=>{if(noteChoice!=='other')notesField.current=node}} aria-invalid={noteChoice!=='other' && error.startsWith('Rejection reason')}
           onChange={e=>{const choice=e.target.value;setNoteChoice(choice);setNotes(choice==='other'?customNotes:choice);setError('')}} className="mt-2 w-full rounded-lg bg-[var(--bg-primary)] p-2"><option value="">Choose a suggested message</option>{REFUND_MESSAGE_PRESETS.adminNotes.map(message=><option key={message}>{message}</option>)}<option value="other">Other (Please specify)</option></select>
         {noteChoice==='other' && <textarea aria-label="Notes to customer / rejection reason" aria-invalid={Boolean(error.startsWith('Rejection reason'))} ref={notesField} rows={3} maxLength={1000} value={notes} autoFocus onChange={e => {setNotes(e.target.value);setCustomNotes(e.target.value)}}
           className={`mt-2 w-full rounded-lg border bg-[var(--bg-primary)] p-3 ${error.startsWith('Rejection reason')?'border-red-500 ring-1 ring-red-500':'border-[var(--border)]'}`} />}
         {error.startsWith('Rejection reason') && <p role="alert" style={{ color: '#ef4444' }} className="text-sm text-red-400">{error}</p>}
-      </label>
+      </label>}
       {refund.status === 'under_review' && <label className="block text-sm text-[var(--text-light)]">Approved refund amount (PHP)
         <input type="number" min="0.01" max={refund.amount_requested} step="0.01" value={amount} onChange={e => setAmount(e.target.value)}
           className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-3" />
-        <span className="text-xs text-[var(--text-muted)]">Explain any amount adjustment in the customer notes.</span>
+        <span className="text-xs text-[var(--text-muted)]">Remarks are optional when approving or adjusting the amount.</span>
       </label>}
       {refund.status === 'processing' && <div className="space-y-4 border-t border-[var(--border)] pt-4">
         <h3 className="font-semibold text-[var(--text-light)]">Admin payment confirmation</h3>

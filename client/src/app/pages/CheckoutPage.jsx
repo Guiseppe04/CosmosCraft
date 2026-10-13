@@ -606,9 +606,9 @@ function CheckoutSummaryCard({
         <input type="checkbox" checked={acceptedTerms} disabled={isProcessing || isCheckoutDisabled}
           onChange={event=>event.target.checked?onReviewTerms():onClearTerms()}
           className="mt-1 h-4 w-4 shrink-0 accent-[var(--gold-primary)]" />
-        <span>I have read and agree to the Terms and Conditions.</span>
+        <span>I have read and agree to the <button type="button" onClick={onReviewTerms} className="text-left text-sm text-[var(--gold-primary)] underline">Terms and Conditions</button></span>
       </label>
-      <button type="button" onClick={onReviewTerms} className="text-left text-sm text-[var(--gold-primary)] underline">Read Terms and Conditions</button>
+      
 
       <button
         onClick={onPlaceOrder}

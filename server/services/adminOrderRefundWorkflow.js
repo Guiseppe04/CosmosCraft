@@ -128,7 +128,6 @@ async function update(id,status,user,data={}) {
       const amount = data.approvedAmount == null ? calculation.suggestedAmount ?? Number(refund.amount_requested) : Number(data.approvedAmount);
       if (calculation.custom && amount > calculation.maximum) fail('The customized guitar refund cannot exceed the lower of verified material/base value and remaining actual payment minus verified incurred labor');
       await checkBudget(db,refund,amount);
-      if (amount !== Number(refund.amount_requested) && refundTextError(notes,'Adjustment explanation')) fail('Explain any adjustment to the refund amount using at least 10 meaningful characters');
       set('approved_amount',amount); fields.push('approved_at=now()');
       if (!refund.reviewed_by) set('reviewed_by',actorId(user));
     }

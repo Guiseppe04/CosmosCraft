@@ -43,12 +43,18 @@ export function useZipValidation() {
       return { valid: null }
     }
 
+    if (!/^\d{4}$/.test(String(zipCode).trim())) {
+      const message = 'Philippine ZIP code must contain exactly four digits.'
+      setState({ isValid: false, isLoading: false, error: message, validZips: null, city: null })
+      return { valid: false, message }
+    }
+
     setState((prev) => ({ ...prev, isValid: null, isLoading: true, error: null }))
 
     try {
       const params = new URLSearchParams({
         cityCode: String(cityCode),
-        zipCode: String(zipCode),
+        zipCode: String(zipCode).trim(),
       })
 
       const response = await fetch(`${API}/api/address/validate-zip?${params}`, {

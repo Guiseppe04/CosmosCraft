@@ -20,7 +20,7 @@ import {
 } from '../../utils/orderPaymentStatus'
 import { useDebounce } from '../../hooks/useDebounce'
 import { normalizeRiderContact } from '../../utils/phone'
-import PhoneInput from '../PhoneInput'
+import RiderContactInput from '../RiderContactInput'
 import { ShippingFeeInput, ShippingFeeNotice } from '../ShippingFeeNotice'
 import { isValidShippingFee } from '../../utils/shippingFee'
 import DispatchPhotoInput from '../DispatchPhotoInput'
@@ -467,7 +467,7 @@ function ReceiptPanel({ order }) {
   )
 }
 
-function OrderFulfillmentPanel({ order, onRefreshOrder, onManageProject }) {
+export function OrderFulfillmentPanel({ order, onRefreshOrder, onManageProject }) {
   const [fulfillmentData, setFulfillmentData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
@@ -475,6 +475,11 @@ function OrderFulfillmentPanel({ order, onRefreshOrder, onManageProject }) {
   const [notesSaving, setNotesSaving] = useState(false)
   const [error, setError] = useState(null)
   const [successMessage, setSuccessMessage] = useState(null)
+  const [shippingFee,setShippingFee]=useState(order.additional_shipping_fee ?? '')
+  const [trackingNumber,setTrackingNumber]=useState(order.tracking_number || '')
+  const [riderName,setRiderName]=useState(order.rider_name || '')
+  const [riderContact,setRiderContact]=useState(order.rider_contact || '')
+  const [itemPhotos,setItemPhotos]=useState([]),[photosReady,setPhotosReady]=useState(false)
 
   const loadFulfillment = useCallback(async () => {
     try {
@@ -497,6 +502,12 @@ function OrderFulfillmentPanel({ order, onRefreshOrder, onManageProject }) {
       }
 
       setFulfillmentData(data)
+      if(data){
+        setShippingFee(data.additional_shipping_fee ?? order.additional_shipping_fee ?? '')
+        setTrackingNumber(data.tracking_number || order.tracking_number || '')
+        setRiderName(data.rider_name || order.rider_name || '')
+        setRiderContact(data.rider_contact || order.rider_contact || '')
+      }
       if (data?.admin_notes) {
         setAdminNotes(data.admin_notes)
       }
@@ -513,7 +524,14 @@ function OrderFulfillmentPanel({ order, onRefreshOrder, onManageProject }) {
   }, [loadFulfillment])
 
   const handleAdvanceStatus = async (targetStatus) => {
-    if (!fulfillmentData?.id) return
+    if (!fulfillmentData?.id || updating) return
+    if(targetStatus==='out_for_delivery'){
+      if(!isValidShippingFee(shippingFee)){setError('Enter a shipping fee of 0 or more, with up to two decimal places.');return}
+      if(!trackingNumber.trim()){setError('Tracking number is required before dispatch.');return}
+      if(!riderName.trim()){setError('Rider name is required before dispatch.');return}
+      if(!normalizeRiderContact(riderContact)){setError('Enter a valid Philippine mobile number for the rider.');return}
+      if(!photosReady){setError('Upload pre-shipping photos for every customized item before dispatch.');return}
+    }
     try {
       setUpdating(true)
       setError(null)
@@ -522,6 +540,10 @@ function OrderFulfillmentPanel({ order, onRefreshOrder, onManageProject }) {
       await adminApi.updateFulfillmentStatus(fulfillmentData.id, {
         status: targetStatus,
         admin_notes: adminNotes.trim() || undefined,
+        ...(targetStatus==='out_for_delivery'?{
+          additional_shipping_fee:Number(shippingFee),tracking_number:trackingNumber.trim(),
+          rider_name:riderName.trim(),rider_contact:normalizeRiderContact(riderContact),itemPhotos,
+        }:{}),
       })
 
       setSuccessMessage(`Fulfillment stage advanced to ${targetStatus.replace(/_/g, ' ')}.`)
@@ -529,7 +551,7 @@ function OrderFulfillmentPanel({ order, onRefreshOrder, onManageProject }) {
       onRefreshOrder?.()
     } catch (err) {
       console.error('Failed to update fulfillment status:', err)
-      setError(err.message || 'Failed to advance fulfillment stage')
+      setError(err.fieldErrors?.length?err.fieldErrors.map(({field,message})=>`${field.startsWith('itemPhotos')?'Pre-shipping photos':({additional_shipping_fee:'Shipping fee',tracking_number:'Tracking number',rider_name:'Rider name',rider_contact:'Rider contact number',admin_notes:'Admin notes'})[field] || field}: ${message}`).join(' '):err.message || 'Failed to advance fulfillment stage')
     } finally {
       setUpdating(false)
     }
@@ -621,7 +643,7 @@ function OrderFulfillmentPanel({ order, onRefreshOrder, onManageProject }) {
       {error && (
         <div className="p-3 rounded-2xl border border-red-500/30 bg-red-500/10 text-xs text-red-300 flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-          <span>{error}</span>
+          <span role="alert" style={{color:'#ef4444'}}>{error}</span>
         </div>
       )}
 
@@ -798,6 +820,28 @@ function OrderFulfillmentPanel({ order, onRefreshOrder, onManageProject }) {
           </div>
 
           {/* Next Stage Action */}
+          {method==='delivery' && nextStatus==='out_for_delivery' && <fieldset disabled={updating} className="space-y-4 rounded-xl border border-[var(--border)] p-4">
+            <h5 className="font-semibold text-white">Dispatch details</h5>
+            <ShippingFeeInput value={shippingFee} onChange={setShippingFee} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              {[
+                ['Tracking number',trackingNumber,setTrackingNumber,'text'],
+                ['Rider name',riderName,setRiderName,'text'],
+                ['Rider contact number',riderContact,setRiderContact,'tel'],
+              ].map(([label,value,setter,type])=><label key={label} className="text-sm text-white">{label} <span style={{color:'#ef4444'}}>*</span>
+                {type==='tel'?<RiderContactInput aria-label={label} value={value} onChange={event=>setter(event.target.value)} className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3 text-sm text-white" />:<input aria-label={label} type={type} maxLength={100} value={value} onChange={event=>setter(event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3 text-sm text-white" />}
+              </label>)}
+            </div>
+            <DispatchPhotoInput orderId={order.order_id} customOnly value={itemPhotos} onChange={setItemPhotos} onReadyChange={setPhotosReady} disabled={updating} />
+          </fieldset>}
+          {method==='delivery' && ['out_for_delivery','completed'].includes(fStatus) && <div className="space-y-2 text-sm text-white">
+            <ShippingFeeNotice fee={fulfillmentData.additional_shipping_fee ?? order.additional_shipping_fee} />
+            <p>Tracking number: {fulfillmentData.tracking_number || order.tracking_number || 'Not recorded'}</p>
+            <p>Rider: {fulfillmentData.rider_name || order.rider_name || 'Not recorded'}</p>
+            <p>Rider contact: {fulfillmentData.rider_contact || order.rider_contact || 'Not recorded'}</p>
+          </div>}
+          <DispatchPhotoGallery orderId={order.order_id} allowAdd />
           {nextStatus && (
             <div className="pt-2">
               <button
@@ -1525,10 +1569,10 @@ function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
                 Rider Contact
                 <span className="text-red-400 ml-1">*</span>
               </p>
-              <PhoneInput
+              <RiderContactInput
                 value={riderContact}
                 onChange={(e) => { setRiderContact(e.target.value); setTrackingError('') }}
-                placeholder="9XXXXXXXXX"
+                placeholder="09XXXXXXXXX"
                 className={`w-full px-4 py-3 bg-[var(--surface-dark)] border rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] ${trackingError ? 'border-red-500' : 'border-[var(--border)]'}`}
               />
             </div>

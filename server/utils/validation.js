@@ -119,6 +119,7 @@ const addressFields = {
     .max(20)
     .required()
     .pattern(/^[a-zA-Z0-9\s-]+$/)
+    .when('country', { is: 'PH', then: Joi.string().pattern(/^\d{4}$/).messages({ 'string.pattern.base': 'Philippine ZIP code must contain exactly four digits' }) })
     .messages({
       'string.pattern.base': 'Postal code can only contain letters, numbers, spaces, and hyphens',
       'string.min': 'Postal code must be at least 3 characters',
@@ -284,11 +285,11 @@ exports.emailSignupSchema = Joi.object({
       .max(20)
       .required()
       .trim()
-      .pattern(/^[a-zA-Z0-9\s-]+$/)
+      .pattern(/^\d{4}$/)
       .messages({
         'string.min': 'Postal code must be at least 3 characters',
         'string.max': 'Postal code must not exceed 20 characters',
-        'string.pattern.base': 'Postal code can only contain letters, numbers, spaces, and hyphens',
+        'string.pattern.base': 'Philippine ZIP code must contain exactly four digits',
         'any.required': 'Postal code is required',
       }),
      country: Joi.string()
@@ -414,7 +415,7 @@ exports.updateAddressSchema = Joi.object({
   city: addressFields.city.optional(),
   barangay: addressFields.barangay.optional(),
   stateProvince: addressFields.stateProvince.optional().allow(null, ''),
-  postalZipCode: addressFields.postalZipCode.optional(),
+  postalZipCode: Joi.string().trim().pattern(/^\d{4}$/).optional().messages({ 'string.pattern.base': 'Philippine ZIP code must contain exactly four digits' }),
   country: Joi.string().valid('PH').optional(),
   isDefault: addressFields.isDefault,
 });
@@ -827,7 +828,8 @@ exports.createOrderSchema = Joi.object({
       'string.max': 'Province must not exceed 50 characters',
       'any.required': 'Province is required',
     }),
-    postalCode: Joi.string().min(3).max(20).required().trim().messages({
+    postalCode: Joi.string().pattern(/^\d{4}$/).required().trim().messages({
+      'string.pattern.base': 'Philippine ZIP code must contain exactly four digits',
       'string.min': 'Postal code must be at least 3 characters',
       'string.max': 'Postal code must not exceed 20 characters',
       'any.required': 'Postal code is required',
@@ -1059,6 +1061,10 @@ exports.submitFulfillmentSchema = Joi.object({
 }).or('fulfillment_method', 'method');
 
 exports.updateFulfillmentStatusSchema = Joi.object({
+  additional_shipping_fee: shippingFeeSchema.when('status', { is: 'out_for_delivery', then: Joi.required(), otherwise: Joi.optional() }),
+  tracking_number: Joi.string().trim().max(100).when('status', { is: 'out_for_delivery', then: Joi.required(), otherwise: Joi.optional() }),
+  rider_name: Joi.string().trim().max(100).when('status', { is: 'out_for_delivery', then: Joi.required(), otherwise: Joi.optional() }),
+  rider_contact: riderContactSchema.when('status', { is: 'out_for_delivery', then: Joi.required(), otherwise: Joi.optional() }),
   itemPhotos: require('./dispatchPhotoValidation').itemPhotos.optional(),
   status: Joi.string().valid('requested', 'processing', 'ready_for_pickup', 'out_for_delivery', 'completed', 'cancelled').required().messages({
     'any.only': 'Status must be one of: requested, processing, ready_for_pickup, out_for_delivery, completed, cancelled',
@@ -1230,7 +1236,9 @@ const buildValidationMiddleware = (schema, source) => {
 
       return res.status(400).json({
         status: 'error',
-        message: 'Some fields are invalid. Please check the details below.',
+        message: schema === exports.updateFulfillmentStatusSchema
+          ? errors.map(({ field, message }) => `${field.startsWith('itemPhotos') ? 'Pre-shipping photos' : ({ additional_shipping_fee: 'Shipping fee', tracking_number: 'Tracking number', rider_name: 'Rider name', rider_contact: 'Rider contact number', admin_notes: 'Admin notes' })[field] || field}: ${message}`).join(' ')
+          : 'Some fields are invalid. Please check the details below.',
         errors,
       });
     }

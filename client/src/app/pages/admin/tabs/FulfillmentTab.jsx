@@ -90,11 +90,12 @@ export function FulfillmentTab({ showToast }) {
   const handleAdvanceStatus = async (requestId, nextStatus, notes = '', options = {}) => {
     try {
       setActionLoading(requestId);
-      await adminApi.updateFulfillmentStatus(requestId, {
+      const result = await adminApi.updateFulfillmentStatus(requestId, {
         status: nextStatus,
         admin_notes: notes || undefined,
         ...options,
       });
+      setSelectedRequest(previous=>previous?.id===requestId?{...previous,...result.data,...options,status:result.data?.status || nextStatus}:previous);
 
       if (showToast) {
         showToast(`Fulfillment status advanced to ${formatLabel(nextStatus)}`, 'success');
@@ -404,6 +405,7 @@ export function FulfillmentTab({ showToast }) {
       <AnimatePresence>
         {selectedRequest && (
           <FulfillmentDetailsModal
+            key={selectedRequest.id}
             request={selectedRequest}
             onClose={() => setSelectedRequest(null)}
             onUpdateStatus={handleAdvanceStatus}

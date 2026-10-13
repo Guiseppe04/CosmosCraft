@@ -1,6 +1,7 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const notificationService = require('./notificationService');
+const { validateAddressPostalCode } = require('../utils/phAddress');
 
 const VALID_STATUS_TRANSITIONS = {
   pickup: {
@@ -145,6 +146,8 @@ exports.submitFulfillmentRequest = async (projectId, userId, userRole, data = {}
       if (!deliveryAddressSnapshot || !deliveryAddressSnapshot.line1 || !deliveryAddressSnapshot.city) {
         throw new AppError('Please add or select a delivery address before requesting Shop Delivery.', 400);
       }
+      try { validateAddressPostalCode(deliveryAddressSnapshot); }
+      catch (error) { throw new AppError(error.message, 400); }
 
       if (!isLuzonLocation(deliveryAddressSnapshot)) {
         throw new AppError('Shop delivery is currently only available for Luzon addresses. Please choose Pickup at Shop or provide a Luzon address.', 400);
@@ -307,6 +310,7 @@ exports.getFulfillmentRequestByProjectId = async (projectId, userId, userRole) =
               JOIN customizations c ON c.customization_id = oi.customization_id
               WHERE oi.order_id = o.order_id
             ), 'acoustic') AS guitar_type, p.notes AS project_notes,
+           o.additional_shipping_fee, o.tracking_number, o.rider_name, o.rider_contact,
            o.order_number, o.status AS order_status, o.payment_status AS order_payment_status,
            o.total_amount, o.created_at AS order_created_at,
            u.first_name, u.last_name, u.email, u.phone
@@ -442,6 +446,7 @@ exports.listFulfillmentRequests = async (filters = {}) => {
               JOIN customizations c ON c.customization_id = oi.customization_id
               WHERE oi.order_id = o.order_id
             ), 'acoustic') AS guitar_type, p.estimated_completion_date,
+           o.additional_shipping_fee, o.tracking_number, o.rider_name, o.rider_contact,
            o.order_number, o.status AS order_status, o.payment_status AS order_payment_status,
            o.total_amount, o.created_at AS order_created_at,
            u.first_name, u.last_name, u.email, u.phone
@@ -499,6 +504,7 @@ exports.getFulfillmentRequestById = async (requestId, userId, userRole) => {
             ), 'acoustic') AS guitar_type, p.notes AS project_notes, p.custom_build_id,
            o.order_number, o.status AS order_status, o.payment_status AS order_payment_status,
            o.payment_reference_number, o.total_amount, o.created_at AS order_created_at,
+           o.additional_shipping_fee, o.tracking_number, o.rider_name, o.rider_contact,
            u.first_name, u.last_name, u.email, u.phone
     FROM fulfillment_requests fr
     JOIN orders o ON o.order_id = fr.order_id
@@ -527,7 +533,7 @@ exports.getFulfillmentRequestById = async (requestId, userId, userRole) => {
 /**
  * Admin action: Transition fulfillment status
  */
-exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actorId, actorRole, pickupIdVerified = false, itemPhotos = undefined) => {
+exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actorId, actorRole, pickupIdVerified = false, itemPhotos = undefined, dispatchDetails = {}) => {
   const isPrivileged = ['staff', 'admin', 'super_admin'].includes(actorRole);
   if (!isPrivileged) {
     throw new AppError('You are not authorized to perform this action.', 403);
@@ -561,8 +567,16 @@ exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actor
       throw new AppError(`This fulfillment status transition is not allowed. (${currentStatus} → ${newStatus})`, 400);
     }
     if(method==='delivery' && newStatus==='out_for_delivery'){
+      const { error, value } = require('../utils/validation').updateFulfillmentStatusSchema.validate({ ...dispatchDetails, status: newStatus });
+      if (error) throw new AppError(error.details[0].message, 400);
       await client.query("SELECT set_config('cosmos.audit_actor_id',$1,true),set_config('cosmos.audit_source','shipment_api',true)",[String(actorId)]);
       await require('./dispatchPhotoService').save(client,currentReq.order_id,`fulfillment:${requestId}`,itemPhotos,actorId,{customOnly:true});
+      await client.query(`UPDATE orders SET additional_shipping_fee = $2, tracking_number = $3,
+        rider_name = $4, rider_contact = $5, shipped_at = COALESCE(shipped_at, now()),
+        out_for_delivery_at = COALESCE(out_for_delivery_at, now()),
+        status = CASE WHEN order_type = 'customization' THEN 'out_for_delivery' ELSE status END,
+        updated_at = now() WHERE order_id = $1`,
+        [currentReq.order_id, value.additional_shipping_fee, value.tracking_number, value.rider_name, value.rider_contact]);
     }
 
     // Set timestamps based on newStatus

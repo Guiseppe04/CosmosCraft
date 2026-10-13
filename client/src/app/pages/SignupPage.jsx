@@ -44,6 +44,7 @@ function isValidPhMobile(subscriberDigits) {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 const TOTAL_STEPS = 3
+const INDEPENDENT_CITY = '__independent_city__'
 
 export function SignupPage() {
   const navigate = useNavigate()
@@ -71,14 +72,16 @@ export function SignupPage() {
   // PH-specific cascading state
   const [phRegion, setPhRegion] = useState('')
   const [phProvince, setPhProvince] = useState('')
+  const [phIndependentCity, setPhIndependentCity] = useState(false)
   const [phMunicipality, setPhMunicipality] = useState('')
   const [phBarangay, setPhBarangay] = useState('')
 
   // Derived PH data lists
   const phRegions = regions
   const phProvinces = provincesInRegion(phRegion)
+  const hasIndependentCities = citiesFor(phRegion).length > 0
   const phMunicipalities = citiesFor(phRegion, phProvince)
-  const provinceRequired = phRegion !== '1300000000' && !phMunicipalities.some(c => c.psgcCode === phMunicipality && !provinceOf(c))
+  const provinceRequired = phRegion !== '1300000000' && !phIndependentCity && !phMunicipalities.some(c => c.psgcCode === phMunicipality && !provinceOf(c))
   const phBarangays = phMunicipality ? barangaysFor(phMunicipality) : []
 
   const [errors, setErrors] = useState({})
@@ -159,6 +162,7 @@ export function SignupPage() {
     if (form.address.country !== 'PH') {
       setPhRegion('')
       setPhProvince('')
+      setPhIndependentCity(false)
       setPhMunicipality('')
       setPhBarangay('')
       setForm(prev => ({
@@ -172,6 +176,7 @@ export function SignupPage() {
   const handlePhRegionChange = (psgcCode, name) => {
     setPhRegion(psgcCode)
     setPhProvince('')
+    setPhIndependentCity(false)
     setPhMunicipality('')
     setPhBarangay('')
     setForm(prev => ({
@@ -187,7 +192,8 @@ export function SignupPage() {
 
   // When PH province changes, reset downstream
   const handlePhProvinceChange = (psgcCode, name) => {
-    setPhProvince(psgcCode)
+    setPhProvince(psgcCode === INDEPENDENT_CITY ? '' : psgcCode)
+    setPhIndependentCity(psgcCode === INDEPENDENT_CITY)
     setPhMunicipality('')
     setPhBarangay('')
     setForm(prev => ({
@@ -204,6 +210,7 @@ export function SignupPage() {
   // When PH municipality changes, reset barangay/street
   const handlePhMunicipalityChange = (psgcCode, name) => {
     setPhMunicipality(psgcCode)
+    setPhIndependentCity(Boolean(psgcCode && !phProvince && phRegion !== '1300000000'))
     setPhBarangay('')
     setForm(prev => ({
       ...prev,
@@ -266,7 +273,7 @@ export function SignupPage() {
     if (!phBarangays.some(b => b.name === phBarangay)) newErrors['address.barangay'] = 'Barangay is required.'
     if (provinceRequired && !phProvince) newErrors['address.province'] = 'Province is required.'
     if (!phRegion) newErrors['address.region'] = 'Region is required.'
-    if (!form.address.postalZipCode.trim()) newErrors['address.postalZipCode'] = 'Postal/Zip code is required.'
+    if (!/^\d{4}$/.test(form.address.postalZipCode.trim())) newErrors['address.postalZipCode'] = 'Philippine ZIP code must contain exactly four digits.'
     if (phMunicipality && form.address.postalZipCode.trim() && zipValid === false) {
       newErrors['address.postalZipCode'] = zipError || 'The ZIP code entered is incorrect for the selected city. Please verify and try again.'
     }
@@ -330,7 +337,7 @@ export function SignupPage() {
       if (!phBarangays.some(b => b.name === phBarangay)) newErrors['address.barangay'] = 'Barangay is required.'
       if (provinceRequired && !phProvince) newErrors['address.province'] = 'Province is required.'
       if (!phRegion) newErrors['address.region'] = 'Region is required.'
-      if (!form.address.postalZipCode.trim()) newErrors['address.postalZipCode'] = 'Postal/Zip code is required.'
+      if (!/^\d{4}$/.test(form.address.postalZipCode.trim())) newErrors['address.postalZipCode'] = 'Philippine ZIP code must contain exactly four digits.'
       if (phMunicipality && form.address.postalZipCode.trim() && zipValid === false) {
         newErrors['address.postalZipCode'] = zipError || 'The ZIP code entered is incorrect for the selected city. Please verify and try again.'
       }
@@ -375,11 +382,12 @@ export function SignupPage() {
   }, [errors])
 
   const [showTermsModal, setShowTermsModal] = useState(false)
+  const [termsAccepted, setTermsAccepted] = useState(false)
   const signupSubmitting = useRef(false)
-  const handleSubmit = async (e, agreed = false) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (signupSubmitting.current || (showTermsModal && !agreed)) return
-    if (agreed) setShowTermsModal(false)
+    if (signupSubmitting.current || showTermsModal) return
+    if (!termsAccepted) { setShowTermsModal(true); return }
     setSuccess('')
     setAddressValidationAttempted(true)
     setErrors({})
@@ -387,10 +395,10 @@ export function SignupPage() {
     // ZIP Code validation (await async validation before proceeding)
     if (phMunicipality && form.address.postalZipCode.trim()) {
       const zipResult = await validateZip(phMunicipality, form.address.postalZipCode.trim())
-      if (zipResult.valid === false) {
+      if (zipResult.valid !== true) {
         setErrors(prev => ({
           ...prev,
-          'address.postalZipCode': zipResult.message || 'The ZIP code entered is incorrect for the selected city. Please verify and try again.',
+          'address.postalZipCode': zipResult.message || zipResult.error || 'Unable to verify ZIP code. Please try again.',
         }))
         setTimeout(() => focusFirstInvalidField({ 'address.postalZipCode': true }), 0)
         setIsLoading(false)
@@ -402,7 +410,6 @@ export function SignupPage() {
       return
     }
 
-    if (!agreed) { setShowTermsModal(true); return }
     signupSubmitting.current = true
     setIsLoading(true)
     try {
@@ -570,7 +577,7 @@ export function SignupPage() {
           </div>
 
           <TermsAndConditionsModal isOpen={showTermsModal} account onClose={() => setShowTermsModal(false)}
-            onAgree={() => handleSubmit({ preventDefault() {} }, true)} />
+            onAgree={() => { setTermsAccepted(true); setShowTermsModal(false) }} />
           <form onSubmit={handleSubmit} className="space-y-10" noValidate>
 
             {/* 1. PERSONAL INFO */}
@@ -821,9 +828,9 @@ export function SignupPage() {
                   </motion.div>
 
                   {phRegion !== '1300000000' && (<motion.div animate={getAddressError('province') ? shakeAnimation : {}}>
-                    <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Province <span style={{ color: '#ef4444' }}>*</span></label>
+                    <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Province {provinceRequired && <span style={{ color: '#ef4444' }}>*</span>}</label>
                     <select
-                      value={phProvince}
+                      value={phProvince || (phIndependentCity ? INDEPENDENT_CITY : '')}
                       ref={registerFieldRef('address.province')}
                       disabled={!phRegion}
                       onChange={e => {
@@ -832,10 +839,11 @@ export function SignupPage() {
                       }}
                       className={`${getInputStyles(getAddressError('province'))} appearance-none cursor-pointer disabled:opacity-40`}
                     >
-                      <option value="" className="text-gray-900">{phRegion ? 'Select Province (or an independent city)' : 'Select a region first'}</option>
+                      <option value="" className="text-gray-900">{phRegion ? 'Select Province' : 'Select a region first'}</option>
                       {phProvinces.map(p => (
                         <option key={p.psgcCode} value={p.psgcCode} className="text-gray-900">{p.name}</option>
                       ))}
+                      {hasIndependentCities && <option value={INDEPENDENT_CITY} className="text-gray-900">Independent City (No Province)</option>}
                     </select>
                     {getAddressError('province') && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{getAddressError('province')}</span>}
                   </motion.div>)}
@@ -918,6 +926,7 @@ export function SignupPage() {
                     <input
                       type="text"
                       value={form.address.postalZipCode}
+                      inputMode="numeric"
                       ref={registerFieldRef('address.postalZipCode')}
                       placeholder="e.g. 1000"
                       onChange={e => updateAddressField('postalZipCode', e.target.value)}
@@ -954,13 +963,19 @@ export function SignupPage() {
               {/* TERMS & ACTIONS */}
               <div className="pt-6 border-t border-white/10">
                 <motion.div className="mt-2 mb-8">
-                  <p className="text-sm text-[var(--text-muted)]">Before creating your account, review and acknowledge the Terms and Conditions.</p>
+                  <label className="flex items-start gap-2 text-sm text-[var(--text-muted)]">
+                    <input type="checkbox" checked={termsAccepted} disabled={isLoading}
+                      onChange={event=>event.target.checked?setShowTermsModal(true):setTermsAccepted(false)}
+                      className="mt-1 h-4 w-4 shrink-0 accent-[var(--gold-primary)]" />
+                    <span>I have read and agree to the <button type="button" onClick={()=>setShowTermsModal(true)} className="text-sm text-[var(--gold-primary)] underline">Terms and Conditions</button>.</span>
+                  </label>
+                  
                 </motion.div>
 
                 {/* Desktop submit (unchanged) */}
                 <button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || !termsAccepted}
                   className="hidden md:flex w-full py-4 bg-white text-black rounded-2xl font-bold tracking-wide hover:bg-[var(--gold-primary)] transition-all duration-300 disabled:opacity-70 justify-center items-center gap-3 shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_30px_rgba(212,175,55,0.4)]"
                 >
                   {isLoading ? (
@@ -1001,7 +1016,7 @@ export function SignupPage() {
     ) : (
       <button
         type="submit"
-        disabled={isLoading}
+        disabled={isLoading || !termsAccepted}
         className="flex-1 min-w-0 py-3.5 rounded-2xl font-bold tracking-wide bg-[var(--gold-primary)] text-black hover:bg-[var(--gold-secondary)] transition-all duration-300 disabled:opacity-70 flex justify-center items-center gap-2 shadow-[0_0_20px_rgba(212,175,55,0.3)]"
       >
         {isLoading ? (

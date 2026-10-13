@@ -94,6 +94,10 @@ exports.createOAuthUser = async (userData) => {
 };
 
 exports.createEmailUser = async (userData) => {
+  if (userData.address) {
+    try { userData = { ...userData, address: normalizeShippingAddress(userData.address) }; }
+    catch (error) { throw new AppError(error.message, 400); }
+  }
   if (!userData.email || !userData.password || !userData.firstName || !userData.lastName) {
     throw new Error('Missing required fields');
   }
@@ -291,6 +295,8 @@ exports.updateProfile = async (userId, updates) => {
 };
 
 exports.addAddress = async (userId, addressData) => {
+  try { addressData = normalizeShippingAddress(addressData); }
+  catch (error) { throw new AppError(error.message, 400); }
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -354,12 +360,12 @@ exports.updateAddress = async (userId, addressId, updates) => {
   try {
     await client.query('BEGIN');
     
-    if (['regionCode', 'city', 'barangay', 'stateProvince', 'country'].some(key => Object.hasOwn(updates, key))) {
+    if (['regionCode', 'city', 'barangay', 'stateProvince', 'country', 'postalZipCode'].some(key => Object.hasOwn(updates, key))) {
       const existing = await client.query('SELECT * FROM addresses WHERE address_id = $1 AND user_id = $2 FOR UPDATE', [addressId, userId]);
       if (!existing.rows[0]) throw new AppError('Address not found', 404);
       const record = existing.rows[0];
       try {
-        const normalized = normalizeShippingAddress({ city: record.city, barangay: record.barangay, stateProvince: record.province, country: record.country, ...updates });
+        const normalized = normalizeShippingAddress({ city: record.city, barangay: record.barangay, stateProvince: record.province, country: record.country, postalZipCode: record.postal_code, ...updates });
         updates = { ...updates, city: normalized.city, barangay: normalized.barangay, stateProvince: normalized.stateProvince, country: 'PH' };
       } catch (error) { throw new AppError(error.message, 400); }
     }
