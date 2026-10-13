@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { adminApi } from '../../utils/adminApi'
+import DispatchPhotoInput from '../DispatchPhotoInput'
+import DispatchPhotoGallery from '../DispatchPhotoGallery'
 import {
   CheckCircle, Clock, Loader2, Package, Truck, MapPin,
   AlertCircle, Camera, ChevronDown, ChevronRight, Send
@@ -41,6 +43,7 @@ export default function BuildClaimManager({ projectId, projectData }) {
   const [deliveryFee, setDeliveryFee] = useState('')
   const [estimatedDeliveryDate, setEstimatedDeliveryDate] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const [itemPhotos,setItemPhotos]=useState([]),[photosReady,setPhotosReady]=useState(false)
   const [actionFeedback, setActionFeedback] = useState(null)
 
   const loadClaim = useCallback(async () => {
@@ -106,9 +109,10 @@ export default function BuildClaimManager({ projectId, projectData }) {
   }
 
   const handleStatusTransition = async (newStatus) => {
+    if(newStatus==='out_for_delivery' && !photosReady){showFeedback('Upload pre-shipping photos for every customized item before dispatch.','error');return}
     try {
       setActionLoading(true)
-      await adminApi.updateBuildClaimStatus(projectId, { status: newStatus })
+      await adminApi.updateBuildClaimStatus(projectId, { status: newStatus,...(newStatus==='out_for_delivery'?{itemPhotos}:{}) })
       showFeedback(newStatus === 'delivered' ? 'Marked as delivered — fulfillment completed' : `Status updated to ${formatStatus(newStatus)}`)
       await loadClaim()
     } catch (err) {
@@ -376,14 +380,14 @@ export default function BuildClaimManager({ projectId, projectData }) {
 
               {/* Mark Out for Delivery (status: courier_arranged) */}
               {claim.claim_status === 'courier_arranged' && (
-                <button
+                <><DispatchPhotoInput orderId={claim.order_id || projectData?.order_id} customOnly value={itemPhotos} onChange={setItemPhotos} onReadyChange={setPhotosReady} disabled={actionLoading} /><button
                   onClick={() => handleStatusTransition('out_for_delivery')}
                   disabled={actionLoading}
                   className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-600 transition-colors disabled:opacity-50"
                 >
                   {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Truck className="w-4 h-4" />}
                   Mark as Out for Delivery
-                </button>
+                </button></>
               )}
 
               {/* Mark Delivered (status: out_for_delivery) */}
@@ -446,6 +450,7 @@ export default function BuildClaimManager({ projectId, projectData }) {
               )}
 
               {/* Admin confirmation info */}
+              {(claim.order_id || projectData?.order_id) && <DispatchPhotoGallery orderId={claim.order_id || projectData.order_id} allowAdd />}
               {claim.admin_confirmed_at && (
                 <div className="text-xs text-[var(--text-muted)] space-y-0.5">
                   <p>Confirmed by: {claim.admin_confirmed_first_name} {claim.admin_confirmed_last_name}</p>

@@ -38,6 +38,6 @@ export default function RefundImageInput({ label, value, onChange, disabled, onB
     <p className="text-xs text-[var(--text-muted)]">PNG, JPG, JPEG or WebP. Maximum 5 MB. {busy ? 'Reading image…' : ''}</p>
     {value && <div className="space-y-2"><img src={value} alt={label} className="max-h-48 max-w-full rounded-lg bg-white object-contain" />
       <button type="button" disabled={disabled || busy} onClick={() => onChange(undefined)} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-light)]">Remove image</button></div>}
-    {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+    {error && <p role="alert" style={{ color: '#ef4444' }} className="text-sm text-red-400">{error}</p>}
   </div>
 }

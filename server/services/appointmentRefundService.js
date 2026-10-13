@@ -2,11 +2,7 @@ const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const { appointmentRefundDestinationSchema } = require('../utils/appointmentValidation');
 const transitions = { pending: ['processing', 'rejected'], processing: ['refunded', 'rejected'], refunded: [], rejected: [] };
-exports.recordEvent = async (db, appointment, actorId, status, previousStatus, details = {}) => {
-  await require('./auditService').logAppointmentEvent({ userId: actorId, action: status,
-    entityId: appointment.appointment_id, entityType: 'appointment', status, previousStatus,
-    details, context: { referenceCode: appointment.reference_code, scheduledAt: appointment.scheduled_at }, executor: db });
-};
+
 exports.notify = async (db, userId, title, message, appointmentId, admins = false) => {
   const ids = [userId];
   if (admins) {
@@ -44,7 +40,7 @@ exports.create = async (data) => {
       (appointment_id,user_id,amount_requested,original_payment,refund_method,account_holder,account_number,reason,destination_type,qr_code_url)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
       [a.appointment_id,a.user_id,amount,JSON.stringify(payment),destination.refund_method,destination.account_holder || null,destination.account_number || null,data.reason || null,destination.destination_type,destination.qr_code_url || null]);
-    await exports.recordEvent(db,a,a.user_id,'refund_requested',a.status,{refund_request_id:result.rows[0].refund_request_id,amount});
+
     await exports.notify(db,a.user_id,'Refund requested','Your appointment refund is awaiting admin processing.',a.appointment_id,true);
     await db.query('COMMIT');
     require('./socketService').emitToUserAndStaff(a.user_id,'appointment:updated',{action:'refund_requested',appointment_id:a.appointment_id,refund_request_id:result.rows[0].refund_request_id,status:'pending'});
@@ -80,7 +76,7 @@ exports.update = async (id, actorId, data) => {
       admin_notes=$5, reviewed_by=$6, reviewed_at=now(), updated_at=now() WHERE refund_request_id=$1 RETURNING *`,
       [id,data.status,refundReference || r.refund_reference,proofUrl,data.admin_notes ?? r.admin_notes,actorId]);
     if (data.status === 'refunded') await db.query("UPDATE appointments SET payment_status='refunded', updated_at=now() WHERE appointment_id=$1",[r.appointment_id]);
-    await exports.recordEvent(db,r,actorId,`refund_${data.status}`,r.status,{ refund_request_id:id,refund_reference:data.refund_reference,amount:r.amount_requested });
+
     await exports.notify(db,r.user_id,data.status === 'refunded' ? 'Refund Completed' : `Refund ${data.status}`,data.status === 'refunded' ? `Your refund has been completed.${refundReference ? ` Reference: ${refundReference}.` : ''}${proofUrl ? ' View the refund payment proof in your appointment.' : ''}` : `Your refund is ${data.status}. ${data.admin_notes || ''}`,r.appointment_id);
     await db.query('COMMIT');
     require('./socketService').emitToUserAndStaff(r.user_id,'appointment:updated',{action:'refund_updated',appointment_id:r.appointment_id,refund_request_id:id,status:data.status});

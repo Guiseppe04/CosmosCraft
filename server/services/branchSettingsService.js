@@ -1,7 +1,8 @@
 const { pool } = require('../config/database');
 const Joi = require('joi');
 const { randomUUID } = require('node:crypto');
-const { addAddressSchema } = require('../utils/validation');
+const { branchAddressBaseSchema } = require('../utils/validation');
+const { validateShippingAddress } = require('../utils/phAddress');
 
 const DEFAULT_BRANCH = {
   id: 'balagtas-main',
@@ -11,15 +12,16 @@ const DEFAULT_BRANCH = {
   address_details: null,
 };
 
-const branchAddressSchema = addAddressSchema.required()
+const branchAddressSchema = branchAddressBaseSchema.required()
   .fork(['city', 'stateProvince', 'postalZipCode'], (field) => field.trim())
   .keys({
+    stateProvince: Joi.string().trim().min(2).max(50).optional().allow(null, ''),
     label: Joi.forbidden(),
     isDefault: Joi.forbidden(),
     barangay: Joi.string().trim().max(80).when('country', {
       is: 'PH', then: Joi.string().min(2).required(), otherwise: Joi.string().optional().allow(''),
     }),
-  });
+  }).custom((value, helpers) => value.stateProvince ? value : validateShippingAddress(value, helpers));
 const branchLocationSchema = Joi.object({
   name: Joi.string().trim().min(2).max(100).required(),
   hours: Joi.string().trim().min(2).max(200).required(),
@@ -61,7 +63,7 @@ async function ensureBranchSettings() {
 
 function formatBranchAddress(details) {
   return [details.streetLine1, details.streetLine2, details.barangay, details.city,
-    `${details.stateProvince} ${details.postalZipCode}`, details.country === 'PH' ? 'Philippines' : details.country]
+    [details.stateProvince, details.postalZipCode].filter(Boolean).join(' '), details.country === 'PH' ? 'Philippines' : details.country]
     .filter(Boolean).join(', ');
 }
 

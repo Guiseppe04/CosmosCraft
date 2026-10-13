@@ -227,19 +227,6 @@ exports.applyDefaultWorkflowToProject = async (projectId, userId) => {
       }
     }
 
-    // Log the activity
-    await client.query(
-      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        userId,
-        'UPDATE',
-        'project',
-        projectId,
-        JSON.stringify({ message: 'Default workflow applied to project' }),
-      ]
-    );
-
     await client.query('COMMIT');
     return { applied: true, message: 'Default workflow applied successfully' };
   } catch (err) {

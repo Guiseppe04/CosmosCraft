@@ -73,38 +73,6 @@ const getRefundById = async (db, refundId) => {
   return res.rows[0] || null;
 };
 
-/**
- * Records a refund transition with the refund request number, the related order
- * and the amounts, so the audit trail never shows a bare refund UUID.
- */
-const logRefundTransition = async (db, { refund, actorId, action, from, to, extra = {} }) => {
-  const auditService = require('./auditService');
-
-  await auditService.logRefundEvent({
-    userId: actorId,
-    action,
-    entityId: refund.project_id || refund.order_id,
-    status: to,
-    previousStatus: from,
-    details: { refund_request_id: refund.refund_request_id, from, to, ...extra },
-    context: {
-      refundId: refund.refund_request_id,
-      refundNumber: refund.request_number,
-      orderId: refund.order_id,
-      orderNumber: refund.order_number,
-      projectId: refund.project_id,
-      amount: refund.amount_requested,
-      approvedAmount: refund.approved_amount ?? extra.approved_amount,
-      refundType: refund.refund_type,
-      refundStatus: to,
-      reason: refund.reason,
-      rejectionReason: extra.rejection_reason,
-      customerName: refund.customer_name,
-    },
-    executor: db,
-  });
-};
-
 const getVerifiedPaymentTotal = async (db, orderId) => {
   const res = await db.query(
     `SELECT COALESCE(SUM(amount) FILTER (WHERE status = 'verified'), 0)::numeric AS verified_total
@@ -282,12 +250,7 @@ exports.applyTransition = async (refundId, newStatus, actorId, actorRole, data =
 
     // Withdrawal is customer-initiated; all other transitions require staff+.
     if (newStatus === 'withdrawn') {
-      if (isPrivileged && data.adminOnly !== true) {
-        // Allow admin withdraw only when explicitly requested via admin path.
-      }
-      if (['pending', 'pending_payment_verification'].includes(from)) {
-        // Customer withdraw is allowed below via exports.withdrawRefund instead.
-      }
+
     }
 
     if (!canTransition(from, newStatus)) {
@@ -391,9 +354,6 @@ exports.applyTransition = async (refundId, newStatus, actorId, actorRole, data =
     if (newStatus === 'rejected' && !data.rejectionReason) {
       push('rejection_reason', 'Rejected by admin');
     }
-    if (newStatus === 'cancelled_at_approval') {
-      // reserved for future use
-    }
 
     updateValues.push(refundId);
     const res = await client.query(
@@ -401,24 +361,6 @@ exports.applyTransition = async (refundId, newStatus, actorId, actorRole, data =
        WHERE refund_request_id = $${paramIndex} RETURNING *`,
       updateValues
     );
-
-    // Audit log
-    await logRefundTransition(client, {
-      refund,
-      actorId,
-      action: `refund_${newStatus}`,
-      from,
-      to: newStatus,
-      extra: {
-        admin_notes: data.adminNotes,
-        rejection_reason: data.rejectionReason,
-        approved_amount: data.approvedAmount,
-        adjustment_reason: data.adjustmentReason,
-        refund_method: data.refundMethod,
-        refund_reference: data.refundReference,
-        refund_fee: data.refundFee,
-      },
-    });
 
     // Notifications (only after commit for robustness, but within same process okay).
     const { entityType, entityId } = await getRefundEntityInfo(client, refund);
@@ -479,14 +421,6 @@ exports.withdrawRefund = async (refundId, userId) => {
        WHERE refund_request_id = $1 RETURNING *`,
       [refundId, userId]
     );
-
-    await logRefundTransition(client, {
-      refund,
-      actorId: userId,
-      action: 'refund_withdrawn',
-      from: refund.status,
-      to: 'withdrawn',
-    });
 
     const { entityType, entityId } = await getRefundEntityInfo(client, refund);
     await sendRefundNotification(userId, 'Refund withdrawn', 'Your refund request was withdrawn.', entityId, entityType);
@@ -561,20 +495,6 @@ exports.updateReturnStatus = async (refundId, returnStatus, actorId, actorRole, 
        WHERE refund_request_id = $${paramIndex} RETURNING *`,
       updateValues
     );
-
-    await logRefundTransition(client, {
-      refund,
-      actorId,
-      action: `refund_return_${returnStatus}`,
-      from: currentReturn,
-      to: returnStatus,
-      extra: {
-        return_status: returnStatus,
-        return_method: data.returnMethod,
-        return_reference: data.returnReference,
-        return_notes: data.returnNotes,
-      },
-    });
 
     await client.query('COMMIT');
     return res.rows[0];

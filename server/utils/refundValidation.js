@@ -10,4 +10,8 @@ const refundDestinationSchema = Joi.object({
   details: Joi.string().trim().max(500).allow('').optional(),
   qrImage: Joi.when('method', { is: 'e_wallet', then: image.optional(), otherwise: Joi.forbidden() }),
 });
-module.exports = { refundDestinationSchema, refundImageSchema: image };
+function refundTextError(value, label) {
+  const meaningful = typeof value === 'string' ? (value.trim().match(/[\p{L}\p{N}]/gu) || []).length : 0;
+  return meaningful >= 10 && !/^other(?:\s*\(please specify\))?$/i.test(value.trim()) ? '' : `${label} ${/instructions$/i.test(label) ? 'are' : 'is'} required. Please enter at least 10 meaningful characters.`;
+}
+module.exports = { refundDestinationSchema, refundImageSchema: image, refundTextError };

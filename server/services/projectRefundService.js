@@ -637,33 +637,6 @@ exports.createProjectRefundRequest = async (projectId, userId, userRole, data = 
       ]
     );
 
-    await require('./auditService').logRefundEvent({
-      userId,
-      action: 'refund_requested',
-      entityId: projectId,
-      entityType: 'project',
-      status: 'pending',
-      details: {
-        refund_request_id: insertRes.rows[0].refund_request_id,
-        request_number: requestNumber,
-        amount: amountRequested,
-        reason,
-        customer_notes: data.customerNotes,
-      },
-      context: {
-        refundId: insertRes.rows[0].refund_request_id,
-        refundNumber: requestNumber,
-        orderId: eligibility.order_id,
-        orderNumber: eligibility.order_number,
-        projectId,
-        amount: amountRequested,
-        refundStatus: 'pending',
-        reason,
-        customerNotes: data.customerNotes,
-      },
-      executor: client,
-    });
-
     await client.query('COMMIT');
     return insertRes.rows[0];
   } catch (err) {
@@ -725,31 +698,6 @@ const orderRes = await client.query(
       [orderId]
     );
 
-      await require('./auditService').logRefundEvent({
-        userId: null,
-        action: nextStatus === 'pending' ? 'refund_pending_payment_verified' : 'refund_pending_payment_rejected',
-        entityId: refund.project_id,
-        entityType: 'project',
-        status: nextStatus,
-        previousStatus: 'pending_payment_verification',
-        details: {
-          refund_request_id: refund.refund_request_id,
-          from: 'pending_payment_verification',
-          to: nextStatus,
-          order_id: orderId,
-          amount: verifiedTotal,
-        },
-        context: {
-          refundId: refund.refund_request_id,
-          refundNumber: refund.request_number,
-          orderId,
-          orderNumber: orderRes.rows[0]?.order_number,
-          projectId: refund.project_id,
-          amount: verifiedTotal,
-          refundStatus: nextStatus,
-        },
-        executor: client,
-      });
   }
 };
 

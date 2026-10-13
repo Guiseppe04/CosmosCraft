@@ -18,7 +18,9 @@ export const termsOfService = {
     ] },
     { id: 'refunds', title: 'Cancellations, returns, and refunds', paragraphs: [
       'Cancellation and refund eligibility depend on the order or service and the applicable purchase terms. Contact the shop about damaged, defective, or incorrect items and keep available evidence and packaging for assessment. Requesting a refund does not automatically approve it.',
-      'For new order refund requests, choose E-Wallet or Bank Transfer and provide a valid payment destination. An E-Wallet QR code can be used instead of typing account details. The shop reviews requests before approval and payment processing. After payment is sent, you can view its amount, reference when provided, and payment proof, and confirm receipt in your account.',
+      'Submit regular-product refund requests within 14 days of receipt, or customized guitar warranty requests within three calendar months of receipt. Missing or disputed receipt confirmation requires admin review. Timely requests do not expire during processing. Refunds use the original verified payment channel; admins confirm payment completion and provide proof.',
+      'Eligible non-defective regular-product change-of-mind refunds have a suggested 50% amount, subject to admin review and approval. Customized guitar refunds cannot exceed the lower of verified material/base value and remaining actual payment minus verified incurred labor. Unknown costs require verification; refunds never exceed the requested amount or remaining actual payment.',
+      'Estimated refund payment completion is 1–3 calendar days for regular products or 1–2 calendar weeks for customized guitars after required evidence, return receipt and inspection are complete, or a documented no-return exception. These estimates are separate from the request submission windows.',
       'These terms do not remove remedies available under applicable Philippine consumer protection laws. A refund for a change of mind is subject to review; defective or incorrect goods may qualify for remedies required by law.',
     ] },
     { id: 'content', title: 'Reviews and uploaded content', paragraphs: [

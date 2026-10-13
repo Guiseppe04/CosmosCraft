@@ -529,27 +529,7 @@ exports.autoMarkNoShows = async () => {
   for (const row of result.rows || []) {
     const previousStatus = row.previous_status;
     const appliedGrace = previousStatus === 'pending' ? 0 : graceMinutes;
-    await require('./auditService').logAppointmentEvent({
-      userId: null,
-      action: 'APPOINTMENT_NO_SHOW',
-      entityId: row.appointment_id,
-      entityType: 'appointment',
-      status: 'no_show',
-      previousStatus,
-      details: {
-        from: previousStatus,
-        to: 'no_show',
-        automatic: true,
-        note: `Marked automatically ${appliedGrace} minutes after the scheduled time`,
-        grace_minutes: appliedGrace,
-      },
-      context: {
-        appointmentId: row.appointment_id,
-        referenceCode: row.reference_code,
-        previousStatus,
-        automatic: true,
-      },
-    });
+
   }
 
   return result.rows || [];
@@ -573,7 +553,7 @@ exports.getAppointmentById = async (appointmentId) => {
   assertAppointmentId(appointmentId);
   await this.autoMarkNoShows();
   const result = await pool.query(
-    `SELECT 
+    `SELECT
        a.*,
        (${RELATED_PICKUP_READY_SQL}) AS related_pickup_ready,
        u.email AS user_email,
@@ -643,7 +623,7 @@ exports.listAppointments = async ({ user_id, appointment_type, status, date_from
   const sortOrderUpper = sort_order.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
 
   const result = await pool.query(
-    `SELECT 
+    `SELECT
        a.*,
        (${RELATED_PICKUP_READY_SQL}) AS related_pickup_ready,
        u.email AS user_email,
@@ -724,7 +704,7 @@ exports.getUserUpcomingAppointments = async (userId) => {
   // in_progress and ready_for_pickup are active/on-going, intentionally excluded
   // from the 'upcoming' list to avoid confusion with truly future appointments.
   const result = await pool.query(
-    `SELECT 
+    `SELECT
        a.*,
        u.email AS user_email,
        u.first_name || ' ' || u.last_name AS user_name
@@ -738,24 +718,6 @@ exports.getUserUpcomingAppointments = async (userId) => {
   );
   return result.rows.map(row => formatAppointmentResponse(row));
 };
-
-/**
- * Builds the audit context for an appointment event.
- *
- * Appointments are reachable by their reference code in support conversations
- * but their id is an opaque UUID, so the code, the customer and the booking
- * time travel with the audit row.
- */
-const appointmentAuditContext = (appointment) => ({
-  appointmentId: appointment.appointment_id,
-  referenceCode: appointment.reference_code,
-  appointmentType: appointment.appointment_type,
-  scheduledAt: appointment.scheduled_at,
-  customerName: appointment.user_name,
-  customerEmail: appointment.user_email,
-  contactNumber: appointment.customer_phone,
-  status: appointment.status,
-});
 
 exports.getAppointmentsByDateRange = async (startDate, endDate, filters = {}) => this.listAppointments({ ...filters, date_from: startDate, date_to: endDate });
 
@@ -814,8 +776,7 @@ exports.updateAppointment = async (appointmentId, updates, actorId = null) => {
         [appointmentId, scheduled_at, reference]);
       targetId = successor.rows[0].appointment_id;
       await client.query("UPDATE appointments SET status = 'rescheduled_by_customer', updated_at = now() WHERE appointment_id = $1", [appointmentId]);
-      await require('./appointmentRefundService').recordEvent(client, currentAppt, actorId, 'rescheduled_by_customer', currentAppt.status,
-        { old_schedule: currentAppt.scheduled_at, new_schedule: scheduled_at, new_appointment_id: targetId });
+
       await require('./appointmentRefundService').notify(client, currentAppt.user_id, 'Appointment rescheduled',
         `Previous schedule: ${currentAppt.scheduled_at}. New schedule: ${scheduled_at}.`, targetId, true);
     }
@@ -891,65 +852,6 @@ exports.updateAppointment = async (appointmentId, updates, actorId = null) => {
 
     const updatedAppt = formatAppointmentResponse(updateRes.rows[0]);
 
-    await require('./auditService').logAppointmentEvent({
-      userId: actorId,
-      action: updatedAppt.status !== currentAppt.status ? `APPOINTMENT_${updatedAppt.status}` : 'UPDATE',
-      entityId: appointmentId,
-      entityType: 'appointment',
-      status: updatedAppt.status,
-      previousStatus: currentAppt.status,
-      details: {
-        updated_fields: Object.keys(updates),
-        previous: {
-          scheduled_at: currentAppt.scheduled_at,
-          status: currentAppt.status,
-          appointment_type: currentAppt.appointment_type,
-          notes: currentAppt.notes,
-          reason: currentAppt.reason,
-          confirmation_notes: currentAppt.confirmation_notes,
-          payment_method: currentAppt.payment_method,
-          customer_phone: currentAppt.customer_phone,
-        },
-        updated: {
-          scheduled_at: updatedAppt.scheduled_at,
-          status: updatedAppt.status,
-          appointment_type: updatedAppt.appointment_type,
-          notes: updatedAppt.notes,
-          reason: updatedAppt.reason,
-          confirmation_notes: updatedAppt.confirmation_notes,
-          payment_method: updatedAppt.payment_method,
-          customer_phone: updatedAppt.customer_phone,
-        },
-      },
-      context: {
-        ...appointmentAuditContext(updatedAppt),
-        previousStatus: currentAppt.status,
-      },
-      changes: require('./auditContext').buildChanges(
-        {
-          scheduled_at: currentAppt.scheduled_at,
-          status: currentAppt.status,
-          appointment_type: currentAppt.appointment_type,
-          notes: currentAppt.notes,
-          reason: currentAppt.reason,
-          confirmation_notes: currentAppt.confirmation_notes,
-          payment_method: currentAppt.payment_method,
-          customer_phone: currentAppt.customer_phone,
-        },
-        {
-          scheduled_at: updatedAppt.scheduled_at,
-          status: updatedAppt.status,
-          appointment_type: updatedAppt.appointment_type,
-          notes: updatedAppt.notes,
-          reason: updatedAppt.reason,
-          confirmation_notes: updatedAppt.confirmation_notes,
-          payment_method: updatedAppt.payment_method,
-          customer_phone: updatedAppt.customer_phone,
-        }
-      ),
-      executor: client,
-    });
-
     await client.query('COMMIT');
     return this.getAppointmentById(targetId);
   } catch (error) {
@@ -1017,22 +919,6 @@ exports.updateStatus = async (appointmentId, newStatus, reason, actorId = null) 
     sql += ` WHERE appointment_id = $2`;
     await client.query(sql, params);
 
-    await require('./auditService').logAppointmentEvent({
-      userId: actorId,
-      action: `APPOINTMENT_${newStatus}`,
-      entityId: appointmentId,
-      entityType: 'appointment',
-      status: newStatus,
-      previousStatus: currentStatus,
-      details: { from: currentStatus, to: newStatus, reason },
-      context: {
-        ...appointmentAuditContext({ ...currentRow, status: newStatus }),
-        previousStatus: currentStatus,
-        reason,
-      },
-      executor: client,
-    });
-
     await require('./appointmentRefundService').notify(client, currentRow.user_id, 'Appointment status updated', `Your appointment is now ${newStatus.replace(/_/g, ' ')}.`, appointmentId);
     await client.query('COMMIT');
 
@@ -1088,22 +974,6 @@ exports.cancelAppointment = async (appointmentId, reason, { forCustomer = false,
       `UPDATE appointments SET status = 'cancelled', reason = $1, updated_at = now() WHERE appointment_id = $2`,
       [cancelReason, appointmentId]
     );
-
-    await require('./auditService').logAppointmentEvent({
-      userId: actorId,
-      action: 'APPOINTMENT_CANCELLED',
-      entityId: appointmentId,
-      entityType: 'appointment',
-      status: 'cancelled',
-      previousStatus: appointment.status,
-      details: { from: appointment.status, to: 'cancelled', reason: cancelReason },
-      context: {
-        ...appointmentAuditContext(appointment),
-        previousStatus: appointment.status,
-        reason: cancelReason,
-      },
-      executor: client,
-    });
 
     await client.query('COMMIT');
   } catch (err) {
@@ -1417,27 +1287,7 @@ exports.updatePaymentStatus = async (appointmentId, paymentStatus, paymentMethod
 
     if (previous) {
       await require('./appointmentRefundService').notify(client, previous.user_id, 'Appointment payment reviewed', `Your appointment payment is ${paymentStatus}.`, appointmentId);
-      await require('./auditService').logAppointmentEvent({
-        userId: actorId,
-        action: 'PAYMENT',
-        entityId: appointmentId,
-        entityType: 'appointment',
-        status: paymentStatus,
-        previousStatus: previous.payment_status,
-        details: {
-          from: previous.payment_status,
-          to: paymentStatus,
-          payment_method: paymentMethod,
-          has_payment_proof: Boolean(paymentProofUrl),
-        },
-        context: {
-          ...appointmentAuditContext(updated),
-          previousStatus: previous.payment_status,
-          paymentStatus,
-          method: paymentMethod || updated.payment_method,
-        },
-        executor: client,
-      });
+
     }
 
     await client.query('COMMIT');
@@ -1469,7 +1319,7 @@ exports.getAvailableSlots = async (serviceId, date, slotDuration = 30) => {
   endOfDay.setHours(23, 59, 59, 999);
 
   const appointmentsResult = await pool.query(
-    `SELECT scheduled_at, estimated_end_at FROM appointments 
+    `SELECT scheduled_at, estimated_end_at FROM appointments
      WHERE scheduled_at >= $1 AND scheduled_at <= $2 AND lower(status::text) NOT IN ('cancelled', 'rejected', 'rescheduled_by_customer')`,
     [startOfDay, endOfDay]
   );
@@ -1531,7 +1381,7 @@ exports.checkAvailability = async (serviceId, scheduledAt, durationMinutes) => {
   endOfDay.setHours(23, 59, 59, 999);
 
   const appointmentsResult = await pool.query(
-    `SELECT scheduled_at, estimated_end_at FROM appointments 
+    `SELECT scheduled_at, estimated_end_at FROM appointments
      WHERE scheduled_at >= $1 AND scheduled_at <= $2 AND lower(status::text) NOT IN ('cancelled', 'rejected', 'rescheduled_by_customer')`,
     [startOfDay, endOfDay]
   );

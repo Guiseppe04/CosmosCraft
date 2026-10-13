@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router'
-import SitePolicyAgreement from '../components/SitePolicyAgreement'
+import TermsAndConditionsModal from '../components/TermsAndConditionsModal'
+import { accountAgreement } from '../utils/termsAgreement'
 import { motion } from 'motion/react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { API } from '../utils/apiConfig'
 import { useZipValidation } from '../hooks/useZipValidation'
 import { ArrowRight, AlertCircle, CheckCircle2 , Eye, EyeOff} from 'lucide-react'
-import { getAllRegions, getProvincesByRegion, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
+import { regions, provincesInRegion, citiesFor, barangaysFor, provinceOf } from '../utils/phAddress'
 
 // ─── Philippine Phone Input Helpers ──────────────────────────────────────────
 
@@ -65,7 +66,6 @@ export function SignupPage() {
       postalZipCode: '',
       country: 'PH',
     },
-    terms: false,
   })
 
   // PH-specific cascading state
@@ -75,10 +75,11 @@ export function SignupPage() {
   const [phBarangay, setPhBarangay] = useState('')
 
   // Derived PH data lists
-  const phRegions = getAllRegions()
-  const phProvinces = phRegion ? getProvincesByRegion(phRegion) : []
-  const phMunicipalities = phProvince ? getMunicipalitiesByProvince(phProvince) : []
-  const phBarangays = phMunicipality ? getBarangaysByMunicipality(phMunicipality) : []
+  const phRegions = regions
+  const phProvinces = provincesInRegion(phRegion)
+  const phMunicipalities = citiesFor(phRegion, phProvince)
+  const provinceRequired = phRegion !== '1300000000' && !phMunicipalities.some(c => c.psgcCode === phMunicipality && !provinceOf(c))
+  const phBarangays = phMunicipality ? barangaysFor(phMunicipality) : []
 
   const [errors, setErrors] = useState({})
   const [success, setSuccess] = useState('')
@@ -90,7 +91,6 @@ export function SignupPage() {
   const fieldRefs = useRef({})
 
   const getAddressError = (field) => addressValidationAttempted && errors[`address.${field}`]
-  const showTermsError = addressValidationAttempted && errors.terms
 
   // ZIP Code validation hook
   const {
@@ -126,7 +126,6 @@ export function SignupPage() {
       'address.city',
       'address.barangay',
       'address.postalZipCode',
-      'terms',
     ]
     const firstKey = fieldOrder.find((key) => validationErrors[key]) || Object.keys(validationErrors)[0]
     if (!firstKey) return
@@ -177,7 +176,7 @@ export function SignupPage() {
     setPhBarangay('')
     setForm(prev => ({
       ...prev,
-      address: { ...prev.address, stateProvince: name, city: '', barangay: '' }
+      address: { ...prev.address, stateProvince: '', city: '', barangay: '' }
     }))
     setErrors(prev => ({
       ...prev,
@@ -263,17 +262,14 @@ export function SignupPage() {
     // Address Information
     if (!form.address.country.trim()) newErrors['address.country'] = 'Country is required.'
     if (!form.address.streetLine1.trim()) newErrors['address.streetLine1'] = 'Street address is required.'
-    if (!phMunicipality) newErrors['address.city'] = 'Municipality is required.'
-    if (!phBarangay) newErrors['address.barangay'] = 'Barangay is required.'
-    if (!phProvince) newErrors['address.province'] = 'Province is required.'
+    if (!phMunicipalities.some(c => c.psgcCode === phMunicipality)) newErrors['address.city'] = 'Municipality is required.'
+    if (!phBarangays.some(b => b.name === phBarangay)) newErrors['address.barangay'] = 'Barangay is required.'
+    if (provinceRequired && !phProvince) newErrors['address.province'] = 'Province is required.'
     if (!phRegion) newErrors['address.region'] = 'Region is required.'
     if (!form.address.postalZipCode.trim()) newErrors['address.postalZipCode'] = 'Postal/Zip code is required.'
     if (phMunicipality && form.address.postalZipCode.trim() && zipValid === false) {
       newErrors['address.postalZipCode'] = zipError || 'The ZIP code entered is incorrect for the selected city. Please verify and try again.'
     }
-
-    // Terms
-    if (!form.terms) newErrors.terms = 'You must agree to the terms to continue.'
 
     setErrors(newErrors)
     if (Object.keys(newErrors).length > 0) {
@@ -330,15 +326,14 @@ export function SignupPage() {
     if (step === 3) {
       if (!form.address.country.trim()) newErrors['address.country'] = 'Country is required.'
       if (!form.address.streetLine1.trim()) newErrors['address.streetLine1'] = 'Street address is required.'
-      if (!phMunicipality) newErrors['address.city'] = 'Municipality is required.'
-      if (!phBarangay) newErrors['address.barangay'] = 'Barangay is required.'
-      if (!phProvince) newErrors['address.province'] = 'Province is required.'
+      if (!phMunicipalities.some(c => c.psgcCode === phMunicipality)) newErrors['address.city'] = 'Municipality is required.'
+      if (!phBarangays.some(b => b.name === phBarangay)) newErrors['address.barangay'] = 'Barangay is required.'
+      if (provinceRequired && !phProvince) newErrors['address.province'] = 'Province is required.'
       if (!phRegion) newErrors['address.region'] = 'Region is required.'
       if (!form.address.postalZipCode.trim()) newErrors['address.postalZipCode'] = 'Postal/Zip code is required.'
       if (phMunicipality && form.address.postalZipCode.trim() && zipValid === false) {
         newErrors['address.postalZipCode'] = zipError || 'The ZIP code entered is incorrect for the selected city. Please verify and try again.'
       }
-      if (!form.terms) newErrors.terms = 'You must agree to the terms to continue.'
     }
 
     setErrors(newErrors)
@@ -367,7 +362,7 @@ export function SignupPage() {
     const stepForError = (key) => {
       if (['firstName', 'lastName', 'email', 'phone', 'middleName'].includes(key)) return 1
       if (['password', 'confirmPassword'].includes(key)) return 2
-      if (key.startsWith('address.') || key === 'terms') return 3
+      if (key.startsWith('address.')) return 3
       return 1
     }
 
@@ -379,8 +374,12 @@ export function SignupPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [errors])
 
-  const handleSubmit = async e => {
+  const [showTermsModal, setShowTermsModal] = useState(false)
+  const signupSubmitting = useRef(false)
+  const handleSubmit = async (e, agreed = false) => {
     e.preventDefault()
+    if (signupSubmitting.current || (showTermsModal && !agreed)) return
+    if (agreed) setShowTermsModal(false)
     setSuccess('')
     setAddressValidationAttempted(true)
     setErrors({})
@@ -403,9 +402,12 @@ export function SignupPage() {
       return
     }
 
+    if (!agreed) { setShowTermsModal(true); return }
+    signupSubmitting.current = true
     setIsLoading(true)
     try {
       const payload = {
+        termsAgreement: accountAgreement(),
         firstName: form.firstName.trim(),
         middleName: form.middleName.trim(),
         lastName: form.lastName.trim(),
@@ -418,7 +420,8 @@ export function SignupPage() {
           streetLine2: form.address.streetLine2.trim(),
           city: form.address.city.trim(),
           barangay: form.address.barangay.trim(),
-          stateProvince: form.address.stateProvince.trim(),
+          stateProvince: phProvince ? form.address.stateProvince.trim() : null,
+          regionCode: phRegion,
           postalZipCode: form.address.postalZipCode.trim(),
           country: form.address.country.trim(),
           addressLocationCityCode: phMunicipality || '',
@@ -468,6 +471,7 @@ export function SignupPage() {
       setErrors({ submit: 'Network error. Please check your connection and try again.' })
     } finally {
       setIsLoading(false)
+      signupSubmitting.current = false
     }
   }
 
@@ -565,6 +569,8 @@ export function SignupPage() {
             </div>
           </div>
 
+          <TermsAndConditionsModal isOpen={showTermsModal} account onClose={() => setShowTermsModal(false)}
+            onAgree={() => handleSubmit({ preventDefault() {} }, true)} />
           <form onSubmit={handleSubmit} className="space-y-10" noValidate>
 
             {/* 1. PERSONAL INFO */}
@@ -814,7 +820,7 @@ export function SignupPage() {
                     {getAddressError('region') && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{getAddressError('region')}</span>}
                   </motion.div>
 
-                  <motion.div animate={getAddressError('province') ? shakeAnimation : {}}>
+                  {phRegion !== '1300000000' && (<motion.div animate={getAddressError('province') ? shakeAnimation : {}}>
                     <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Province <span style={{ color: '#ef4444' }}>*</span></label>
                     <select
                       value={phProvince}
@@ -826,13 +832,13 @@ export function SignupPage() {
                       }}
                       className={`${getInputStyles(getAddressError('province'))} appearance-none cursor-pointer disabled:opacity-40`}
                     >
-                      <option value="" disabled className="text-gray-900">{phRegion ? 'Select Province' : 'Select a region first'}</option>
+                      <option value="" className="text-gray-900">{phRegion ? 'Select Province (or an independent city)' : 'Select a region first'}</option>
                       {phProvinces.map(p => (
                         <option key={p.psgcCode} value={p.psgcCode} className="text-gray-900">{p.name}</option>
                       ))}
                     </select>
                     {getAddressError('province') && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{getAddressError('province')}</span>}
-                  </motion.div>
+                  </motion.div>)}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -841,14 +847,14 @@ export function SignupPage() {
                     <select
                       value={phMunicipality}
                       ref={registerFieldRef('address.city')}
-                      disabled={!phProvince}
+                      disabled={!phRegion || !phMunicipalities.length}
                       onChange={e => {
                         const opt = phMunicipalities.find(m => m.psgcCode === e.target.value)
                         handlePhMunicipalityChange(e.target.value, opt?.name || '')
                       }}
                       className={`${getInputStyles(getAddressError('city'))} appearance-none cursor-pointer disabled:opacity-40`}
                     >
-                      <option value="" disabled className="text-gray-900">{phProvince ? 'Select Municipality' : 'Select a province first'}</option>
+                      <option value="" disabled className="text-gray-900">{phMunicipalities.length ? 'Select Municipality / City' : 'Select a province first'}</option>
                       {phMunicipalities.map(m => (
                         <option key={m.psgcCode} value={m.psgcCode} className="text-gray-900">{m.name}</option>
                       ))}
@@ -947,9 +953,8 @@ export function SignupPage() {
 
               {/* TERMS & ACTIONS */}
               <div className="pt-6 border-t border-white/10">
-                <motion.div animate={showTermsError ? shakeAnimation : {}} className="mt-2 mb-8">
-                  <SitePolicyAgreement checked={form.terms} onChange={checked => updateField('terms', checked)}
-                    inputRef={registerFieldRef('terms')} error={showTermsError} />
+                <motion.div className="mt-2 mb-8">
+                  <p className="text-sm text-[var(--text-muted)]">Before creating your account, review and acknowledge the Terms and Conditions.</p>
                 </motion.div>
 
                 {/* Desktop submit (unchanged) */}

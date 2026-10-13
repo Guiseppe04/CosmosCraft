@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { API } from '../utils/apiConfig'
 
 /**
@@ -21,6 +21,7 @@ import { API } from '../utils/apiConfig'
  *   // the component can read `isValid` (null / true / false) to style the input
  */
 export function useZipValidation() {
+  const requestSequence = useRef(0)
   const [state, setState] = useState({
     isValid: null,
     isLoading: false,
@@ -30,6 +31,7 @@ export function useZipValidation() {
   })
 
   const validate = useCallback(async (cityCode, zipCode) => {
+    const sequence = ++requestSequence.current
     if (!cityCode || !zipCode) {
       setState({
         isValid: null,
@@ -41,7 +43,7 @@ export function useZipValidation() {
       return { valid: null }
     }
 
-    setState((prev) => ({ ...prev, isLoading: true, error: null }))
+    setState((prev) => ({ ...prev, isValid: null, isLoading: true, error: null }))
 
     try {
       const params = new URLSearchParams({
@@ -54,6 +56,7 @@ export function useZipValidation() {
       })
 
       const data = await response.json()
+      if (sequence !== requestSequence.current) return { valid: null }
 
       if (!response.ok) {
         const msg = data.message || 'Validation failed'
@@ -70,13 +73,15 @@ export function useZipValidation() {
       const result = data.data
       setState({
         isValid: result.valid,
+        message: result.message,
         isLoading: false,
-        error: null,
+        error: result.valid === false ? result.message : null,
         validZips: result.zips || null,
         city: result.city || null,
       })
       return result
     } catch (err) {
+      if (sequence !== requestSequence.current) return { valid: null }
       const msg = err.message || 'Network error. Please check your connection.'
       setState({
         isValid: false,
@@ -90,6 +95,7 @@ export function useZipValidation() {
   }, [])
 
   const clearValidation = useCallback(() => {
+    requestSequence.current++
     setState({
       isValid: null,
       isLoading: false,
@@ -101,6 +107,7 @@ export function useZipValidation() {
 
   return {
     isValid: state.isValid,
+    message: state.message,
     isLoading: state.isLoading,
     error: state.error,
     validZips: state.validZips,

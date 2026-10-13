@@ -3,7 +3,7 @@ const { AppError } = require('../middleware/errorHandler');
 
 /**
  * Installment Service
- * 
+ *
  * Handles:
  * - Creating installment schedules for custom build orders
  * - Auto-putting projects on hold when installments are overdue
@@ -32,63 +32,6 @@ const INSTALLMENT_AUDIT_SELECT = `
   LEFT JOIN orders o ON o.order_id = p.order_id
   LEFT JOIN users cu ON cu.user_id = o.user_id
 `;
-
-/**
- * Records an installment payment event with its full transaction context.
- */
-const logInstallmentPaymentAudit = async ({
-  client,
-  actorId,
-  action,
-  payment,
-  installment,
-  status,
-  previousStatus,
-  reason,
-  notes,
-}) => {
-  await require('./auditService').logPaymentEvent({
-    userId: actorId || null,
-    action,
-    entityId: payment?.payment_id || installment?.order_id || null,
-    status,
-    previousStatus,
-    details: {
-      amount: payment?.amount ?? installment?.amount ?? null,
-      currency: payment?.currency ?? 'PHP',
-      method: payment?.method ?? null,
-      reference_number: payment?.reference_number ?? null,
-      payment_type: 'installment',
-      installment_number: installment?.installment_number ?? null,
-      schedule_id: installment?.schedule_id ?? null,
-      reason: reason || null,
-      notes: notes || null,
-      proof_provided: Boolean(payment?.proof_url),
-    },
-    context: {
-      paymentId: payment?.payment_id ?? null,
-      amount: payment?.amount ?? installment?.amount ?? null,
-      currency: payment?.currency ?? 'PHP',
-      method: payment?.method ?? null,
-      referenceNumber: payment?.reference_number ?? null,
-      rejectionReason: reason || null,
-      paymentStatus: status,
-      paymentType: 'installment',
-      installmentNumber: installment?.installment_number ?? null,
-      proofProvided: Boolean(payment?.proof_url),
-      orderId: installment?.order_id ?? null,
-      orderNumber: installment?.order_number ?? null,
-      orderType: installment?.order_type ?? null,
-      totalAmount: installment?.order_total ?? null,
-      customerName: installment?.customer_name ?? null,
-      customerEmail: installment?.customer_email ?? null,
-      projectId: installment?.project_id ?? null,
-      projectNumber: installment?.custom_build_id ?? null,
-      projectTitle: installment?.project_title ?? null,
-    },
-    executor: client || null,
-  });
-};
 
 /**
  * Ensure the project_installment_schedules table exists.
@@ -188,7 +131,7 @@ exports.createInstallmentSchedule = async (
     dueDate.setDate(1); // Due on the 1st of each month
 
     const res = await client.query(
-      `INSERT INTO project_installment_schedules 
+      `INSERT INTO project_installment_schedules
        (project_id, installment_number, amount, due_date, status)
        VALUES ($1, $2, $3, $4, 'pending')
        RETURNING *`,
@@ -316,15 +259,6 @@ exports.submitCustomerInstallmentPayment = async ({
 
     // An installment payment is the most confusing entry in the trail if it only
     // says "payment recorded": the order, the build and the installment number
-    // are all captured here.
-    await logInstallmentPaymentAudit({
-      client,
-      actorId: userId || customerId,
-      action: 'PAYMENT_RECORDED',
-      payment,
-      installment,
-      status: payment.status,
-    });
 
     await client.query('COMMIT');
 
@@ -450,16 +384,6 @@ exports.verifyInstallmentPayment = async ({
 
     await client.query('COMMIT');
 
-    await logInstallmentPaymentAudit({
-      actorId: adminUserId || null,
-      action: 'PAYMENT_VERIFIED',
-      payment,
-      installment,
-      status: 'verified',
-      previousStatus: previousPaymentRes.rows[0]?.status ?? (installment.payment_id ? null : 'unlinked'),
-      notes,
-    });
-
     const updatedInstallment = updateRes.rows[0];
     updatedInstallment.payment = payment;
 
@@ -561,17 +485,6 @@ exports.rejectInstallmentPayment = async ({
     );
 
     await client.query('COMMIT');
-
-    await logInstallmentPaymentAudit({
-      actorId: adminUserId || null,
-      action: 'PAYMENT_REJECTED',
-      payment,
-      installment,
-      status: 'rejected',
-      previousStatus: previousPaymentRes.rows[0]?.status ?? null,
-      reason: reason || 'Payment verification failed',
-      notes,
-    });
 
     const updatedInstallment = updateRes.rows[0];
     updatedInstallment.payment = payment;
@@ -760,8 +673,8 @@ exports.autoHoldProjectForOverdue = async (projectId) => {
 
     // Check project is not already on hold or cancelled/completed
     const pRes = await client.query(
-      `SELECT status, auto_hold_due_to_overdue 
-       FROM projects 
+      `SELECT status, auto_hold_due_to_overdue
+       FROM projects
        WHERE project_id = $1 AND deleted_at IS NULL`,
       [projectId]
     );
@@ -789,8 +702,8 @@ exports.autoHoldProjectForOverdue = async (projectId) => {
     // Find the current build step for reference
     let currentStepName = null;
     const milestones = await client.query(
-      `SELECT * FROM project_milestones 
-       WHERE project_id = $1 AND status != 'completed' 
+      `SELECT * FROM project_milestones
+       WHERE project_id = $1 AND status != 'completed'
        ORDER BY order_index ASC LIMIT 1`,
       [projectId]
     );
@@ -811,20 +724,6 @@ exports.autoHoldProjectForOverdue = async (projectId) => {
            updated_at = CURRENT_TIMESTAMP
        WHERE project_id = $2`,
       [currentStepName, projectId]
-    );
-
-    // Log the auto-hold action
-    await client.query(
-      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-       VALUES (NULL, 'UPDATE', 'project', $1, $2)`,
-      [
-        projectId,
-        JSON.stringify({
-          action: 'auto_hold_overdue_installment',
-          reason: 'Project auto-held due to overdue installment payment',
-          current_step: currentStepName,
-        }),
-      ]
     );
 
     await client.query('COMMIT');
@@ -853,8 +752,8 @@ exports.checkAndAutoResumeProject = async (projectId) => {
 
   // Check if project is on hold due to overdue installments
   const pRes = await pool.query(
-    `SELECT status, auto_hold_due_to_overdue 
-     FROM projects 
+    `SELECT status, auto_hold_due_to_overdue
+     FROM projects
      WHERE project_id = $1 AND deleted_at IS NULL`,
     [projectId]
   );
@@ -904,19 +803,6 @@ exports.checkAndAutoResumeProject = async (projectId) => {
            updated_at = CURRENT_TIMESTAMP
        WHERE project_id = $1`,
       [projectId]
-    );
-
-    // Log the auto-resume action
-    await client.query(
-      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-       VALUES (NULL, 'UPDATE', 'project', $1, $2)`,
-      [
-        projectId,
-        JSON.stringify({
-          action: 'auto_resume_installment_paid',
-          reason: 'Project auto-resumed after overdue installment was paid',
-        }),
-      ]
     );
 
     await client.query('COMMIT');
@@ -995,7 +881,7 @@ exports.getInstallmentSchedule = async (projectId) => {
   await ensureInstallmentTable();
 
   const scheduleRes = await pool.query(
-    `SELECT 
+    `SELECT
        pis.*,
        p.status AS payment_status,
        p.reference_number AS payment_reference,

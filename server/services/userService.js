@@ -1,4 +1,6 @@
 const bcrypt = require('bcryptjs');
+const { normalizeShippingAddress } = require('../utils/phAddress');
+const { AppError } = require('../middleware/errorHandler');
 const { pool } = require('../config/database');
 const rbacService = require('./rbacService');
 const { lockAppointmentCapacity } = require('../middleware/appointmentCapacityLock');
@@ -55,9 +57,9 @@ exports.createOAuthUser = async (userData) => {
 
     // Insert user
     const userRes = await client.query(
-      `INSERT INTO users (email, first_name, middle_name, last_name, is_verified) 
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [userData.email, userData.firstName, userData.middleName || null, userData.lastName, isVerified]
+      `INSERT INTO users (email, first_name, middle_name, last_name, is_verified, terms_registration_pending)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [userData.email, userData.firstName, userData.middleName || null, userData.lastName, isVerified, !userData.termsAgreement]
     );
     const user = userRes.rows[0];
 
@@ -78,6 +80,9 @@ exports.createOAuthUser = async (userData) => {
       await rbacService.assignRoleToUser(user.user_id, defaultRole.role_id, user.user_id, null, client);
     }
 
+    if (userData.termsAgreement) {
+      await require('./termsService').recordAccount(user.user_id, userData.termsAgreement, 'registration', client);
+    }
     await client.query('COMMIT');
     return user;
   } catch (err) {
@@ -139,6 +144,7 @@ exports.createEmailUser = async (userData) => {
       await rbacService.assignRoleToUser(user.user_id, defaultRole.role_id, user.user_id, null, client);
     }
 
+    await require('./termsService').recordAccount(user.user_id, userData.termsAgreement, 'registration', client);
     await client.query('COMMIT');
     delete user.password_hash;
     return user;
@@ -348,6 +354,16 @@ exports.updateAddress = async (userId, addressId, updates) => {
   try {
     await client.query('BEGIN');
     
+    if (['regionCode', 'city', 'barangay', 'stateProvince', 'country'].some(key => Object.hasOwn(updates, key))) {
+      const existing = await client.query('SELECT * FROM addresses WHERE address_id = $1 AND user_id = $2 FOR UPDATE', [addressId, userId]);
+      if (!existing.rows[0]) throw new AppError('Address not found', 404);
+      const record = existing.rows[0];
+      try {
+        const normalized = normalizeShippingAddress({ city: record.city, barangay: record.barangay, stateProvince: record.province, country: record.country, ...updates });
+        updates = { ...updates, city: normalized.city, barangay: normalized.barangay, stateProvince: normalized.stateProvince, country: 'PH' };
+      } catch (error) { throw new AppError(error.message, 400); }
+    }
+
     if (updates.isDefault) {
       await client.query('UPDATE addresses SET is_default = false WHERE user_id = $1', [userId]);
     }

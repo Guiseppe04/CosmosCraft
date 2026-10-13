@@ -8,6 +8,8 @@ import {
 import { formatCurrency } from '../../../utils/formatCurrency'
 import { adminApi } from '../../../utils/adminApi'
 import AdminRefundWorkflow from '../../../components/refunds/AdminRefundWorkflow'
+import RefundReviewTools from '../../../components/refunds/RefundReviewTools'
+import DispatchPhotoGallery from '../../../components/DispatchPhotoGallery'
 import { useRefundRealtime } from '../../../hooks/useRefundRealtime'
 import { useSocketEvent } from '../../../context/SocketContext'
 import { useDebounce } from '../../../hooks/useDebounce'
@@ -21,14 +23,15 @@ import {
 } from '../../../utils/orderPaymentStatus'
 
 const REFUND_STATUS_MAP = {
+  ...Object.fromEntries([['return_required','Return Required'],['return_in_transit','Return in Transit'],['item_received','Item Received'],['under_inspection','Under Inspection']].map(([key,label]) => [key,{label,color:'#f59e0b',bgColor:'bg-amber-500/20',textColor:'text-amber-400',borderColor:'border-amber-500/30'}])),
   under_review: { label: 'Under Review', color: '#f59e0b', bgColor: 'bg-amber-500/20', textColor: 'text-amber-400', borderColor: 'border-amber-500/30' },
-  refund_sent: { label: 'Refund Sent', color: '#38bdf8', bgColor: 'bg-sky-500/20', textColor: 'text-sky-400', borderColor: 'border-sky-500/30' },
-  completed: { label: 'Completed', color: '#22c55e', bgColor: 'bg-green-500/20', textColor: 'text-green-400', borderColor: 'border-green-500/30' },
+  refund_sent: { label: 'Refund Processing (payment recorded)', color: '#38bdf8', bgColor: 'bg-sky-500/20', textColor: 'text-sky-400', borderColor: 'border-sky-500/30' },
+  completed: { label: 'Refund Completed', color: '#22c55e', bgColor: 'bg-green-500/20', textColor: 'text-green-400', borderColor: 'border-green-500/30' },
   pending: { label: 'Pending Review', color: '#f59e0b', bgColor: 'bg-amber-500/20', textColor: 'text-amber-400', borderColor: 'border-amber-500/30' },
   'pending_payment_verification': { label: 'Awaiting Payment Verification', color: '#8b5cf6', bgColor: 'bg-violet-500/20', textColor: 'text-violet-400', borderColor: 'border-violet-500/30' },
-  approved: { label: 'Approved', color: '#22c55e', bgColor: 'bg-green-500/20', textColor: 'text-green-400', borderColor: 'border-green-500/30' },
-  processing: { label: 'Processing', color: '#38bdf8', bgColor: 'bg-sky-500/20', textColor: 'text-sky-400', borderColor: 'border-sky-500/30' },
-  rejected: { label: 'Rejected', color: '#f87171', bgColor: 'bg-red-500/20', textColor: 'text-red-400', borderColor: 'border-red-500/30' },
+  approved: { label: 'Refund Approved', color: '#22c55e', bgColor: 'bg-green-500/20', textColor: 'text-green-400', borderColor: 'border-green-500/30' },
+  processing: { label: 'Refund Processing', color: '#38bdf8', bgColor: 'bg-sky-500/20', textColor: 'text-sky-400', borderColor: 'border-sky-500/30' },
+  rejected: { label: 'Refund Rejected', color: '#f87171', bgColor: 'bg-red-500/20', textColor: 'text-red-400', borderColor: 'border-red-500/30' },
   refunded: { label: 'Refunded', color: '#22c55e', bgColor: 'bg-green-500/20', textColor: 'text-green-400', borderColor: 'border-green-500/30' },
   withdrawn: { label: 'Withdrawn', color: '#94a3b8', bgColor: 'bg-slate-500/20', textColor: 'text-slate-400', borderColor: 'border-slate-500/30' },
   'return_pending': { label: 'Return Pending', color: '#f59e0b', bgColor: 'bg-amber-500/20', textColor: 'text-amber-400', borderColor: 'border-amber-500/30' },
@@ -337,12 +340,24 @@ export function RefundRequestsTab({ showToast, user }) {
   }, [page, statusFilter, debouncedSearch])
 
   const handleViewDetails = async (requestId, defaultSection = 'details') => {
+    const version = ++detailVersion.current
     try {
       const res = await adminApi.getRefundRequest(requestId)
+      if (version !== detailVersion.current) return
       const reqData = res.data || {}
       setSelectedRequest(reqData)
       setAdminNotes(reqData?.admin_notes || '')
       setActiveSection(defaultSection)
+
+      if (defaultSection === 'details' && reqData.status === 'pending' && reqData.can_manage) {
+        try {
+          const review = await adminApi.updateRefundStatus(requestId,'under_review',{action:'start_review'})
+          setSelectedRequest(current => current?.refund_request_id === requestId ? {...current,...review.data} : current)
+          fetchRefundRequests({silent:true})
+        } catch (err) {
+          showToast?.(`Refund details loaded, but review could not start: ${err.message}`,'error')
+        }
+      }
 
       if (reqData.order_id) {
         try {
@@ -496,14 +511,18 @@ export function RefundRequestsTab({ showToast, user }) {
               className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
             >
               <option value="all">All Status</option>
-              <option value="pending">Pending</option>
+              <option value="pending">Pending Review</option>
+              <option value="return_required">Return Required</option>
+              <option value="return_in_transit">Return in Transit</option>
+              <option value="item_received">Item Received</option>
+              <option value="under_inspection">Under Inspection</option>
               <option value="pending_payment_verification">Awaiting Payment Verification</option>
-              <option value="approved">Approved</option>
+              <option value="approved">Refund Approved</option>
               <option value="under_review">Under Review</option>
               <option value="refund_sent">Refund Sent</option>
-              <option value="completed">Completed</option>
-              <option value="processing">Processing</option>
-              <option value="rejected">Rejected</option>
+              <option value="completed">Refund Completed</option>
+              <option value="processing">Refund Processing</option>
+              <option value="rejected">Refund Rejected</option>
               <option value="refunded">Refunded</option>
             </select>
             <select
@@ -689,7 +708,7 @@ export function RefundRequestsTab({ showToast, user }) {
             <div className="flex-1 overflow-y-auto pr-1">
               {activeSection === 'details' && (
                 <div className="space-y-6">
-                  {selectedRequest.workflow_version === 2 && <AdminRefundWorkflow key={selectedRequest.refund_request_id + selectedRequest.status} refund={selectedRequest}
+                  {selectedRequest.workflow_version === 2 && <AdminRefundWorkflow key={selectedRequest.refund_request_id + (['pending','under_review'].includes(selectedRequest.status) ? 'review' : selectedRequest.status)} refund={selectedRequest}
                     onUpdated={async () => {
                       const result = await adminApi.getRefundRequest(selectedRequest.refund_request_id)
                       setSelectedRequest(result.data)
@@ -697,6 +716,9 @@ export function RefundRequestsTab({ showToast, user }) {
                       await fetchRefundRequests()
                       showToast?.('Refund status updated.')
                     }} />}
+                  {!selectedRequest.original_payment_method && <>
+                  {selectedRequest.workflow_version !== 2 && selectedRequest.order_id && <DispatchPhotoGallery orderId={selectedRequest.order_id} allowAdd={selectedRequest.can_manage} />}
+                  {selectedRequest.workflow_version !== 2 && <RefundReviewTools refund={selectedRequest} onUpdated={async()=>{const result=await adminApi.getRefundRequest(selectedRequest.refund_request_id);setSelectedRequest(result.data);await fetchRefundRequests()}} />}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-[var(--bg-primary)]/50 rounded-xl p-4">
                       <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Refund Status</p>
@@ -730,6 +752,7 @@ export function RefundRequestsTab({ showToast, user }) {
                     )}
                   </div>
 
+                  </>}
                   <div>
                     <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-3">Refund Items</p>
                     <div className="bg-[var(--bg-primary)]/50 rounded-xl overflow-hidden">
@@ -777,13 +800,13 @@ export function RefundRequestsTab({ showToast, user }) {
                     </div>
                   )}
 
-                  {selectedRequest.workflow_version !== 2 && selectedRequest.status === 'pending' && (
+                  {selectedRequest.can_manage && selectedRequest.workflow_version !== 2 && ['pending','under_review'].includes(selectedRequest.status) && (
                     <div>
                       <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Admin Notes</p>
                       <textarea
                         value={adminNotes}
                         onChange={(e) => setAdminNotes(e.target.value)}
-                        placeholder="Add internal notes (optional)..."
+                        placeholder="Add customer-facing remarks or a rejection reason..."
                         rows={3}
                         className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-sm text-white placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)] resize-none"
                       />
@@ -848,7 +871,7 @@ export function RefundRequestsTab({ showToast, user }) {
                     </div>
                   )}
 
-                  {selectedRequest.workflow_version !== 2 && selectedRequest.status === 'approved' && (
+                  {selectedRequest.can_manage && selectedRequest.workflow_version !== 2 && selectedRequest.status === 'approved' && (
                     <div className="flex gap-3">
                       <button
                         onClick={() => handleUpdateStatus('processing')}
@@ -861,7 +884,7 @@ export function RefundRequestsTab({ showToast, user }) {
                     </div>
                   )}
 
-                  {selectedRequest.workflow_version !== 2 && selectedRequest.status === 'processing' && (
+                  {selectedRequest.can_manage && selectedRequest.workflow_version !== 2 && selectedRequest.status === 'processing' && (
                     <div className="flex gap-3">
                       <button
                         onClick={() => handleUpdateStatus('refunded')}

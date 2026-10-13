@@ -1,6 +1,8 @@
 import { motion } from 'motion/react'
 import { X, RefreshCw, Save, Loader2, Package, Check } from 'lucide-react'
 import { ShippingFeeInput, ShippingFeeNotice } from '../../../../components/ShippingFeeNotice'
+import DispatchPhotoInput from '../../../../components/DispatchPhotoInput'
+import DispatchPhotoGallery from '../../../../components/DispatchPhotoGallery'
 
 export function OrderDetailsModal({
   modal,
@@ -93,6 +95,7 @@ export function OrderDetailsModal({
           </div>
 
           {/* Order Items */}
+          <DispatchPhotoGallery orderId={modal.data.order_id} allowAdd />
           {modal.data.items?.length > 0 && (
             <div>
               <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-3">Items</p>
@@ -276,6 +279,7 @@ export function OrderDetailsModal({
                   {/* Save Button */}
                   {form.order_status === 'shipped' && modal.data.status !== 'shipped' && (
                     <div className="mb-4 space-y-3">
+                      <DispatchPhotoInput orderId={modal.data.order_id} value={form.itemPhotos || []} onChange={itemPhotos=>setForm(previous=>({...previous,itemPhotos}))} onReadyChange={dispatchReady=>setForm(previous=>({...previous,dispatchReady}))} disabled={paymentStatusUpdate.loading} />
                       <ShippingFeeInput value={form.additional_shipping_fee} onChange={(value) => setForm((f) => ({ ...f, additional_shipping_fee: value }))} />
                       <label className="block text-sm text-[var(--text-muted)]">Tracking Number
                         <input type="text" value={form.tracking_info || ''} onChange={(e) => setForm((f) => ({ ...f, tracking_info: e.target.value }))} className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white" />

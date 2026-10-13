@@ -18,6 +18,7 @@ exports.prepareCheckoutSchema = Joi.object({
 });
 
 exports.checkoutSchema = Joi.object({
+  checkoutAcknowledgmentId: Joi.string().uuid().required(),
   shipping_address_id: Joi.string().uuid().optional(),
   notes: Joi.string().max(1000).optional().allow(''),
   payment_method: Joi.string().valid('gcash', 'bank_transfer', 'cash').optional(),

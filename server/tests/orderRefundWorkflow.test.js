@@ -126,9 +126,12 @@ test('complete HTTP and PostgreSQL refund flow enforces privacy, proof, review o
     const payments = await fixture.db.query('SELECT amount,status FROM payments');
     assert.equal(Number(payments.rows[0].amount),1000);
     assert.equal(payments.rows[0].status,'refunded');
-    const audit = await fixture.db.query('SELECT new_status,details FROM audit_logs');
+    const audit = await fixture.db.query("SELECT user_id,new_status,details FROM audit_logs WHERE context->>'source_table'='refund_requests' AND action LIKE 'refund_%' ORDER BY audit_id");
     assert.deepEqual(audit.rows.map(row => row.new_status),['under_review','approved','processing','refund_sent','completed']);
     assert.ok(!JSON.stringify(audit.rows).includes('09123456789'));
+    assert.deepEqual(audit.rows.map(row => row.user_id), [fixture.ids.admin,fixture.ids.admin,fixture.ids.admin,fixture.ids.admin,fixture.ids.customer]);
+    const allAudit = await fixture.db.query('SELECT details,context,changes,search_text FROM audit_logs');
+    assert.ok(!JSON.stringify(allAudit.rows).includes('09123456789'));
     await fixture.db.query('SET ROLE anon');
     await assert.rejects(fixture.db.query('SELECT * FROM refund_private_files'),/permission denied/);
     await assert.rejects(fixture.db.query('SELECT * FROM refund_private_destinations'),/permission denied/);

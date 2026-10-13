@@ -191,23 +191,6 @@ const syncFulfillmentCompletion = async (db, projectId, orderId, actorId, reason
       [orderId, projectId]
     );
 
-    // Audit log
-    await db.query(
-      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-       VALUES ($1, 'UPDATE', 'project', $2, $3)`,
-      [
-        actorId,
-        projectId,
-        JSON.stringify({
-          reason,
-          previous_fulfillment_status: current.fulfillment_status,
-          previous_customization_status: current.customization_status,
-          new_fulfillment_status: 'completed',
-          new_customization_status: 'fulfilled',
-        }),
-      ]
-    );
-
     // Customer notification
     try {
       await notificationService.createNotification({
@@ -295,8 +278,8 @@ const generateCustomBuildId = async () => {
 
   // Find the highest existing sequence number for today
   const res = await pool.query(
-    `SELECT custom_build_id FROM projects 
-     WHERE custom_build_id LIKE $1 
+    `SELECT custom_build_id FROM projects
+     WHERE custom_build_id LIKE $1
      ORDER BY custom_build_id DESC LIMIT 1`,
     [`CMB-${datePrefix}-%`]
   );
@@ -1735,7 +1718,7 @@ exports.createProject = async (projectData) => {
         const totalAmount = Number(order.total_amount) || 0;
         const initialPaymentPercentage = Number(order.initial_payment_percentage) || 0.50;
         const tenureMonths = Number(order.installment_tenure_months) || 6;
-        
+
         await installmentService.createInstallmentSchedule(
           pool,
           projectId,
@@ -1785,7 +1768,7 @@ exports.updateProject = async (projectId, projectData) => {
   }
 
   const result = await pool.query(
-    `UPDATE projects 
+    `UPDATE projects
      SET title = COALESCE($1, title),
          status = COALESCE($2, status),
          notes = COALESCE($3, notes),
@@ -1901,15 +1884,6 @@ exports.cancelProject = async (projectId, userId, userRole) => {
       );
     }
 
-    await logActivity(client, projectId, userId, 'project_cancelled', {
-      previous_status: tracking.status,
-      previous_progress: tracking.progress,
-      order_id: project.order_id,
-      has_build_progress: hasBuildProgress,
-      cancel_resolution: resolutionType,
-      settlement,
-    });
-
     if (hasBuildProgress) {
       // Build has started — create a current build claim instead of a refund.
       // The down payment was used to purchase parts and is not refundable.
@@ -1982,12 +1956,6 @@ exports.cancelProject = async (projectId, userId, userRole) => {
               ]
             );
 
-            await logActivity(client, projectId, userId, 'refund_requested', {
-              refund_request_reason: 'Automatic refund request from project cancellation',
-              amount_requested: amountRequested,
-              refund_status: refundStatus,
-              payment_status_at_cancel: latestPayment.status,
-            });
           }
         }
       }
@@ -2047,7 +2015,7 @@ exports.assignTeam = async (projectId, userIds) => {
   try {
     await client.query('BEGIN');
     await client.query('DELETE FROM project_team_members WHERE project_id = $1', [projectId]);
-    
+
     if (userIds && userIds.length > 0) {
       for (const userId of userIds) {
         await client.query(
@@ -2056,7 +2024,7 @@ exports.assignTeam = async (projectId, userIds) => {
         );
       }
     }
-    
+
     await client.query('COMMIT');
     return true;
   } catch (error) {
@@ -2068,100 +2036,6 @@ exports.assignTeam = async (projectId, userIds) => {
 };
 
 // ─── PROJECT TRACKING & TASKS ───────────────────────────────────────────────
-
-/**
- * Short-lived cache of project → order/customer identity.
- *
- * logActivity is called inside transactions many times per minute, and the
- * project → order → customer chain never changes for a given project, so the
- * lookup is cached briefly instead of running an extra query per event.
- */
-const projectAuditContextCache = new Map();
-const PROJECT_CONTEXT_TTL_MS = 60_000;
-
-const readProjectAuditContext = async (client, projectId) => {
-  if (!projectId) return {};
-
-  const cached = projectAuditContextCache.get(projectId);
-  if (cached && Date.now() - cached.at < PROJECT_CONTEXT_TTL_MS) return cached.value;
-
-  let value = {};
-  const savepoint = 'project_audit_context_savepoint';
-  const inTransaction = typeof client.release === 'function';
-  let savepointCreated = false;
-  try {
-    if (inTransaction) {
-      await client.query(`SAVEPOINT ${savepoint}`);
-      savepointCreated = true;
-    }
-    const { rows } = await client.query(
-      `SELECT p.project_id, p.order_id, o.order_number, p.title,
-              (SELECT MAX(c_model.body_model)
-               FROM order_items oi_model
-               JOIN customizations c_model ON c_model.customization_id = oi_model.customization_id
-               WHERE oi_model.order_id = p.order_id) AS body_model,
-              p.custom_build_id,
-              COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '') AS customer_name,
-              c.email AS customer_email
-       FROM projects p
-       LEFT JOIN orders o ON o.order_id = p.order_id
-       LEFT JOIN users c ON c.user_id = o.user_id
-       WHERE p.project_id = $1`,
-      [projectId]
-    );
-    const row = rows[0];
-    if (row) {
-      value = {
-        projectId: row.project_id,
-        customBuildId: row.custom_build_id,
-        orderId: row.order_id,
-        orderNumber: row.order_number,
-        projectTitle: row.title,
-        bodyModel: row.body_model,
-        customerName: row.customer_name,
-        customerEmail: row.customer_email,
-      };
-    }
-  } catch (err) {
-    // A failed lookup must never break the surrounding transaction.
-    if (savepointCreated) {
-      await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
-    }
-    console.warn('Could not resolve project audit context:', err.message);
-    return {};
-  } finally {
-    if (savepointCreated) await client.query(`RELEASE SAVEPOINT ${savepoint}`);
-  }
-
-  projectAuditContextCache.set(projectId, { at: Date.now(), value });
-  return value;
-};
-
-/**
- * Records a custom-guitar-build event.
- *
- * The project, its order number and the customer are resolved automatically so
- * every project event in the admin audit trail is traceable to a transaction
- * instead of showing a bare UUID.
- */
-const logActivity = async (client, projectId, userId, actionType, details, context = {}) => {
-  const auditService = require('./auditService');
-  const resolved = await readProjectAuditContext(client, projectId);
-  const previousStatus = details?.previous_status || details?.old_status;
-  const newStatus = details?.new_status || details?.refund_status || details?.status;
-
-  await auditService.writeAudit({
-    user_id: userId,
-    action: actionType,
-    entity_type: 'project',
-    entity_id: projectId,
-    previous_status: previousStatus,
-    new_status: newStatus,
-    details,
-    context: require('./auditContext').projectContext({ ...resolved, ...context }),
-    executor: client,
-  });
-};
 
 exports.getProjectRequiredParts = async (projectId) => {
   await ensureProjectArchiveColumns();
@@ -2227,16 +2101,13 @@ exports.getProjectRequiredParts = async (projectId) => {
     ));
 
     const receiptsResult = await client.query(
-      `SELECT details
-       FROM audit_logs
-       WHERE entity_type = 'project'
-         AND entity_id = $1
-         AND action IN ('project_part_received', 'project_part_unreceived')
-       ORDER BY created_at ASC`,
+      `SELECT part_key, received_quantity, stock_deducted_quantity,
+              received_at, received_by, supplier
+       FROM project_part_receipts WHERE project_id = $1`,
       [projectId]
     );
 
-    const receiptState = getProjectPartReceiptState(receiptsResult.rows);
+    const receiptState = new Map(receiptsResult.rows.map(row => [row.part_key, row]));
 
     let builderPartsLookup = null;
     let productsByNameLookup = null;
@@ -2371,6 +2242,28 @@ exports.getProjectRequiredParts = async (projectId) => {
   }
 };
 
+// Receipt state is business data; its database trigger creates audit history.
+const saveProjectPartReceipt = async (client, projectId, part, delta, userId, stockUpdated) => {
+  await client.query(
+    `INSERT INTO project_part_receipts
+       (project_id, part_key, part_name, received_quantity, stock_deducted_quantity,
+        received_at, received_by, product_id, builder_part_id)
+     VALUES ($1, $2, $3, GREATEST(0, $4::numeric), GREATEST(0, $5::numeric),
+             CASE WHEN $4::numeric > 0 THEN now() END,
+             CASE WHEN $4::numeric > 0 THEN $6::uuid END, $7, $8)
+     ON CONFLICT (project_id, part_key) DO UPDATE SET
+       part_name = EXCLUDED.part_name,
+       received_quantity = project_part_receipts.received_quantity + $4::numeric,
+       stock_deducted_quantity = GREATEST(0, project_part_receipts.stock_deducted_quantity + $5::numeric),
+       received_at = CASE WHEN project_part_receipts.received_quantity + $4::numeric > 0 THEN now() END,
+       received_by = CASE WHEN project_part_receipts.received_quantity + $4::numeric > 0 THEN $6::uuid END,
+       product_id = EXCLUDED.product_id, builder_part_id = EXCLUDED.builder_part_id,
+       updated_at = now()`,
+    [projectId, part.part_key, part.name, delta, stockUpdated ? delta : 0,
+      userId, part.product_id || null, part.builder_part_id || null]
+  );
+};
+
 exports.requestProjectProcurement = async (projectId, userId) => {
   const requiredParts = await exports.getProjectRequiredParts(projectId);
   if (requiredParts === null) {
@@ -2390,21 +2283,7 @@ exports.requestProjectProcurement = async (projectId, userId) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query(
-      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        userId,
-        'UPDATE',
-        'project',
-        projectId,
-        JSON.stringify({
-          procurement_requested: true,
-          purchase_count: purchaseItems.length,
-          requested_at: new Date().toISOString(),
-        }),
-      ]
-    );
+    await client.query(`INSERT INTO project_procurement_requests (project_id, requested_by, purchase_count) VALUES ($1, $2, $3)`, [projectId, userId, purchaseItems.length]);
 
     await client.query('COMMIT');
   } catch (error) {
@@ -2439,6 +2318,7 @@ exports.receiveProjectRequiredPart = async (projectId, partKey, payload = {}, us
   let stockUpdated = false;
   try {
     await client.query('BEGIN');
+    await client.query('SELECT project_id FROM projects WHERE project_id=$1 FOR UPDATE', [projectId]);
 
     const stockChange = await applyRequiredPartStockChange({
       client,
@@ -2451,28 +2331,7 @@ exports.receiveProjectRequiredPart = async (projectId, partKey, payload = {}, us
     stockUpdated = stockChange.updated;
     updatedStock = stockChange.stock;
 
-    await client.query(
-      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        userId,
-        'project_part_received',
-        'project',
-        projectId,
-        JSON.stringify({
-          part_key: part.part_key,
-          part_name: part.name,
-          quantity: Number(receivedQuantity),
-          received_quantity: Number(receivedQuantity),
-          received_at: new Date().toISOString(),
-          received_by: userId,
-          supplier: null,
-          product_id: part.product_id || null,
-          builder_part_id: part.builder_part_id || null,
-          stock_updated: stockUpdated,
-        }),
-      ]
-    );
+    await saveProjectPartReceipt(client, projectId, part, Number(receivedQuantity), userId, stockUpdated);
 
     await client.query('COMMIT');
   } catch (error) {
@@ -2504,21 +2363,6 @@ exports.receiveProjectRequiredPart = async (projectId, partKey, payload = {}, us
         [nextStatus, projectId]
       );
 
-      await pool.query(
-        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [
-          userId,
-          'project_ready_for_assembly',
-          'project',
-          projectId,
-          JSON.stringify({
-            all_parts_received: true,
-            status: nextStatus,
-            received_at: new Date().toISOString(),
-          }),
-        ]
-      );
     }
   }
 
@@ -2549,24 +2393,25 @@ exports.toggleProjectRequiredPart = async (projectId, partKey, received, userId)
   }
 
   const quantity = Number(part.quantity) || 1;
-  const currentReceivedQty = Number(part.received_quantity || 0);
   const isStockTracked = Boolean(part.builder_part_id || part.product_id);
-
-  if (received) {
-    if (currentReceivedQty >= quantity) {
-      return { part, received: true, stock_updated: false, already_received: true };
-    }
-  } else {
-    if (currentReceivedQty === 0) {
-      return { part, received: false, stock_updated: false, already_received: false };
-    }
-  }
 
   const client = await pool.connect();
   let updatedStock = null;
   let stockUpdated = false;
   try {
     await client.query('BEGIN');
+    await client.query('SELECT project_id FROM projects WHERE project_id=$1 FOR UPDATE', [projectId]);
+    const receiptRes = await client.query(
+      'SELECT received_quantity, stock_deducted_quantity FROM project_part_receipts WHERE project_id=$1 AND part_key=$2 FOR UPDATE',
+      [projectId, part.part_key]
+    );
+    const receipt = receiptRes.rows[0] || {};
+    const currentReceivedQty = Number(receipt.received_quantity || 0);
+    if ((received && currentReceivedQty >= quantity) || (!received && currentReceivedQty === 0)) {
+      await client.query('COMMIT');
+      return { part, received, stock_updated: false, already_received: currentReceivedQty >= quantity };
+    }
+    const quantityToChange = received ? quantity - currentReceivedQty : Math.min(quantity, currentReceivedQty);
 
     if (received) {
       const stockChange = await applyRequiredPartStockChange({
@@ -2574,34 +2419,13 @@ exports.toggleProjectRequiredPart = async (projectId, partKey, received, userId)
         projectId,
         part,
         direction: -1,
-        quantity,
+        quantity: quantityToChange,
         userId,
       });
       stockUpdated = stockChange.updated;
       updatedStock = stockChange.stock;
 
-      await client.query(
-        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [
-          userId,
-          'project_part_received',
-          'project',
-          projectId,
-          JSON.stringify({
-            part_key: part.part_key,
-            part_name: part.name,
-            quantity,
-            received_quantity: quantity,
-            received_at: new Date().toISOString(),
-            received_by: userId,
-            supplier: null,
-            product_id: part.product_id || null,
-            builder_part_id: part.builder_part_id || null,
-            stock_updated: stockUpdated,
-          }),
-        ]
-      );
+      await saveProjectPartReceipt(client, projectId, part, quantityToChange, userId, stockUpdated);
     } else {
       const projectRes = await client.query(
         `SELECT progress, status FROM projects WHERE project_id = $1`,
@@ -2616,14 +2440,14 @@ exports.toggleProjectRequiredPart = async (projectId, partKey, received, userId)
 
       // Only hand back stock that was actually deducted when the part was received. Parts
       // received before this flow tracked their stock have nothing to give back.
-      const deductedQuantity = Number(part.stock_deducted_quantity || 0);
-      if (isStockTracked && deductedQuantity >= quantity) {
+      const deductedQuantity = Number(receipt.stock_deducted_quantity || 0);
+      if (isStockTracked && deductedQuantity >= quantityToChange) {
         const stockChange = await applyRequiredPartStockChange({
           client,
           projectId,
           part,
           direction: 1,
-          quantity,
+          quantity: quantityToChange,
           userId,
         });
         stockUpdated = stockChange.updated;
@@ -2635,28 +2459,7 @@ exports.toggleProjectRequiredPart = async (projectId, partKey, received, userId)
         );
       }
 
-      await client.query(
-        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [
-          userId,
-          'project_part_unreceived',
-          'project',
-          projectId,
-          JSON.stringify({
-            part_key: part.part_key,
-            part_name: part.name,
-            quantity,
-            received_quantity: -quantity,
-            received_at: null,
-            received_by: null,
-            supplier: null,
-            product_id: part.product_id || null,
-            builder_part_id: part.builder_part_id || null,
-            stock_updated: stockUpdated,
-          }),
-        ]
-      );
+      await saveProjectPartReceipt(client, projectId, part, -quantityToChange, userId, stockUpdated);
     }
 
     await client.query('COMMIT');
@@ -2810,7 +2613,7 @@ exports.getProjectHierarchy = async (projectId) => {
       WHERE m.project_id = $1
       ORDER BY s.created_at ASC
     `, [projectId]);
-    
+
     let totalSubtasks = 0;
     let completedSubtasks = 0;
 
@@ -3053,8 +2856,6 @@ exports.submitFulfillmentChoice = async (projectId, userId, userRole, data = {})
       [method, fulfillmentStatus, notes, pickupAppointmentId, fulfillmentAddressId, fulfillmentAddressSnapshot ? JSON.stringify(fulfillmentAddressSnapshot) : null, projectId]
     );
 
-    await logActivity(client, projectId, userId, 'fulfillment_updated', { method, fulfillmentStatus });
-
     await client.query('COMMIT');
 
     await notifyCustomizationCustomer(
@@ -3125,7 +2926,7 @@ exports.addMilestone = async (projectId, data, userId) => {
       'INSERT INTO project_milestones (project_id, title, description, order_index) VALUES ($1, $2, $3, $4) RETURNING *',
       [projectId, title, description || null, order_index ?? last.rows[0].next_index]
     );
-    await logActivity(client, projectId, userId, 'milestone_created', { title });
+
     await synchronizeTaskProgress(client, projectId);
     await client.query('COMMIT');
     return res.rows[0];
@@ -3147,15 +2948,15 @@ exports.updateMilestone = async (milestoneId, data, userId) => {
     await lockTaskProject(client, parent.rows[0].project_id);
     const { title, description, order_index, status } = data;
     const res = await client.query(
-      `UPDATE project_milestones 
-       SET title = COALESCE($1, title), description = COALESCE($2, description), 
+      `UPDATE project_milestones
+       SET title = COALESCE($1, title), description = COALESCE($2, description),
            order_index = COALESCE($3, order_index), status = COALESCE($4, status),
            updated_at = CURRENT_TIMESTAMP
        WHERE milestone_id = $5 RETURNING *`,
       [title, description, order_index, status, milestoneId]
     );
     if (res.rows.length === 0) throw new Error('Milestone not found');
-    await logActivity(client, res.rows[0].project_id, userId, 'milestone_updated', { title: res.rows[0].title });
+
     await synchronizeTaskProgress(client, res.rows[0].project_id);
     await client.query('COMMIT');
     return res.rows[0];
@@ -3177,7 +2978,7 @@ exports.deleteMilestone = async (milestoneId, userId) => {
     await lockTaskProject(client, parent.rows[0].project_id);
     const res = await client.query('DELETE FROM project_milestones WHERE milestone_id = $1 RETURNING *', [milestoneId]);
     if (res.rows.length === 0) throw new Error('Milestone not found');
-    await logActivity(client, res.rows[0].project_id, userId, 'milestone_deleted', { title: res.rows[0].title });
+
     await synchronizeTaskProgress(client, res.rows[0].project_id);
     await client.query('COMMIT');
     return res.rows[0];
@@ -3209,7 +3010,6 @@ exports.addSubtask = async (milestoneId, data, userId) => {
     // If milestone was completed, revert to in_progress because a new pending subtask was added
     await client.query("UPDATE project_milestones SET status = 'in_progress' WHERE milestone_id = $1 AND status = 'completed'", [milestoneId]);
 
-    await logActivity(client, projectId, userId, 'subtask_created', { title });
     await synchronizeTaskProgress(client, projectId);
     await client.query('COMMIT');
     return { ...res.rows[0], project_id: projectId };
@@ -3248,7 +3048,7 @@ const ensureSubtaskStatusConstraint = async () => {
       ALTER TABLE project_subtasks DROP CONSTRAINT IF EXISTS project_subtasks_status_check;
     `);
     await pool.query(`
-      ALTER TABLE project_subtasks ADD CONSTRAINT project_subtasks_status_check 
+      ALTER TABLE project_subtasks ADD CONSTRAINT project_subtasks_status_check
         CHECK (status IN ('pending', 'in_progress', 'completed'));
     `);
   } catch (err) {
@@ -3266,14 +3066,14 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
+
     const sRes = await client.query(`
       SELECT s.*, m.project_id, m.order_index AS milestone_order, m.title AS milestone_title
       FROM project_subtasks s
       JOIN project_milestones m ON s.milestone_id = m.milestone_id
       WHERE s.subtask_id = $1
     `, [subtaskId]);
-    
+
     if (sRes.rows.length === 0) throw new AppError('Subtask not found', 404);
     let subtask = sRes.rows[0];
     const lockedProject = await lockTaskProject(client, subtask.project_id);
@@ -3360,7 +3160,7 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
     }
 
     const updatedRes = await client.query(
-      `UPDATE project_subtasks 
+      `UPDATE project_subtasks
        SET status = COALESCE($1, status),
            title = COALESCE($2, title),
            assigned_user_id = CASE WHEN $8 THEN $3::uuid ELSE assigned_user_id END,
@@ -3378,11 +3178,6 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
     const tracking = await synchronizeTaskProgress(client, subtask.project_id);
     const taskSummary = tracking.task_summary;
     const progress = tracking.progress;
-    await logActivity(client, subtask.project_id, userId, 'subtask_updated', { title: title ?? subtask.title, progress: taskProgress, status });
-
-    if (status && status !== subtask.status) {
-      await logActivity(client, subtask.project_id, userId, 'subtask_status_changed', { title: subtask.title, status });
-    }
 
     // ─── BUILD PROJECT → MY PURCHASES TRANSITION ─────────────────────────────
     // When "Ready for Release" subtask is completed, automatically transition the
@@ -3412,10 +3207,7 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
             [subtask.project_id]
           );
           const order = await updateCustomizationOrderStatus(client, project.order_id, 'fulfillment_pending');
-          await logActivity(client, subtask.project_id, userId, 'build_released', {
-            order_id: project.order_id,
-            customization_status: 'fulfillment_pending',
-          });
+
           await notifyCustomizationCustomer(
             order,
             'Your customization is complete',
@@ -3446,19 +3238,6 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
           [subtask.project_id]
         );
 
-        // Log the release activity
-        await logActivity(
-          client,
-          subtask.project_id,
-          userId,
-          'build_released',
-          {
-            order_id: project.order_id,
-            new_order_status: newOrderStatus,
-            fulfillment_method: project.fulfillment_method,
-            is_pickup: isPickup,
-          }
-        );
         }
       }
     }
@@ -3498,13 +3277,13 @@ exports.deleteSubtask = async (subtaskId, userId) => {
     if (!parent.rows[0]) throw new AppError('Subtask not found', 404);
     await lockTaskProject(client, parent.rows[0].project_id);
     const res = await client.query(`
-      DELETE FROM project_subtasks 
-      WHERE subtask_id = $1 
+      DELETE FROM project_subtasks
+      WHERE subtask_id = $1
       RETURNING *, (SELECT project_id FROM project_milestones WHERE milestone_id = project_subtasks.milestone_id) as project_id
     `, [subtaskId]);
-    
+
     if (res.rows.length === 0) throw new Error('Subtask not found');
-    await logActivity(client, res.rows[0].project_id, userId, 'subtask_deleted', { title: res.rows[0].title });
+
     await synchronizeTaskProgress(client, res.rows[0].project_id);
     await client.query('COMMIT');
     return res.rows[0];
@@ -3618,7 +3397,7 @@ exports.initializeManufacturingWorkflow = async (projectId, userId) => {
  */
 exports.claimProject = async (projectId, userId, userRole) => {
   await ensureClaimColumns();
-  
+
   if (!['staff', 'admin', 'super_admin'].includes(userRole)) {
     throw new AppError('Only staff and admins can claim projects', 403);
   }
@@ -3677,10 +3456,6 @@ exports.claimProject = async (projectId, userId, userRole) => {
       await defaultWorkflowService.applyDefaultWorkflowToProject(projectId, userId);
     }
 
-    await logActivity(client, projectId, userId, 'project_claimed', {
-      claimed_by: userId,
-    });
-
     await client.query('COMMIT');
 
     // Return updated project
@@ -3697,7 +3472,7 @@ exports.claimProject = async (projectId, userId, userRole) => {
 /**
  * Unclaim a project (admin feature):
  * - Removes claimed_by and claimed_at
- * - Reverts status to 'not_started' 
+ * - Reverts status to 'not_started'
  * - Keeps workflow intact
  */
 exports.unclaimProject = async (projectId, userId, userRole) => {
@@ -3734,10 +3509,6 @@ exports.unclaimProject = async (projectId, userId, userRole) => {
        WHERE project_id = $1`,
       [projectId]
     );
-
-    await logActivity(client, projectId, userId, 'project_unclaimed', {
-      previous_claimed_by: project.claimed_by,
-    });
 
     await client.query('COMMIT');
 
@@ -3798,12 +3569,6 @@ exports.reassignProject = async (projectId, newUserId, currentUserId, userRole) 
       [newUserId, projectId]
     );
 
-    await logActivity(client, projectId, currentUserId, 'project_reassigned', {
-      from: previousClaimedBy,
-      to: newUserId,
-      to_name: `${newUser.first_name} ${newUser.last_name}`,
-    });
-
     await client.query('COMMIT');
 
     const updated = await exports.getProjectById(projectId);
@@ -3821,7 +3586,7 @@ exports.reassignProject = async (projectId, newUserId, currentUserId, userRole) 
  */
 exports.getStaffClaimStatus = async () => {
   const res = await pool.query(`
-    SELECT 
+    SELECT
       u.user_id,
       u.first_name,
       u.last_name,
@@ -3909,12 +3674,6 @@ exports.requestProjectHold = async (projectId, userId, userRole, data = {}) => {
       [projectId]
     );
 
-    await logActivity(client, projectId, userId, 'hold_requested', {
-      reason: data.reason,
-      hold_option: holdOption,
-      current_step: currentStepName,
-    });
-
     await client.query('COMMIT');
 
     await notifyCustomizationCustomer(order, 'Customization order on hold', 'Your customization order is on hold. Open the project tracker for details.');
@@ -3954,18 +3713,12 @@ exports.approveProjectHold = async (projectId, userId, data = {}) => {
     if (action === 'reject') {
       await updateCustomizationOrderStatus(client, project.order_id, 'active');
 
-      await logActivity(client, projectId, userId, 'hold_rejected', {
-        reason: data.rejection_reason || 'Rejected by admin',
-      });
     } else {
       await updateCustomizationOrderStatus(client, project.order_id, 'on_hold', {
         holdApprovedBy: userId,
         holdApprovedAt: new Date(),
       });
 
-      await logActivity(client, projectId, userId, 'hold_approved', {
-        reason: project.customization_hold_reason,
-      });
     }
 
     await client.query('COMMIT');
@@ -4018,11 +3771,6 @@ exports.resumeProject = async (projectId, userId, userRole) => {
       `UPDATE projects SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE project_id = $2`,
       [tracking.status, projectId]
     );
-
-    await logActivity(client, projectId, userId, 'project_resumed', {
-      previous_hold_reason: project.customization_hold_reason,
-      resumed_at: new Date(),
-    });
 
     await client.query('COMMIT');
 
@@ -4227,14 +3975,6 @@ exports.requestProjectCancel = async (projectId, userId, userRole, data = {}) =>
       );
     }
 
-    await logActivity(client, projectId, userId, 'cancel_requested', {
-      cancel_option: cancelOption,
-      cancel_reason: data.cancel_reason,
-      cancel_address_id: cancelAddressId,
-      cancel_address_snapshot: cancelAddressSnapshot,
-      settlement: settlementSnapshot,
-    });
-
     await updateCustomizationOrderStatus(client, project.order_id, 'cancellation_requested');
 
     await client.query('COMMIT');
@@ -4315,12 +4055,6 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
         [data.rejection_reason || 'Cancellation request rejected by admin', userId, projectId, project.order_id]
       );
 
-      await logActivity(client, projectId, userId, 'cancel_rejected', {
-        rejection_reason: data.rejection_reason || 'Rejected by admin',
-        previous_cancel_option: project.cancel_option,
-        previous_cancel_address_id: project.cancel_address_id,
-        previous_cancel_address_snapshot: project.cancel_address_snapshot,
-      });
       await updateCustomizationOrderStatus(client, project.order_id, 'active');
     } else {
       // Approve cancellation with full settlement resolution
@@ -4453,28 +4187,11 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
                 ]
               );
 
-              await logActivity(client, projectId, userId, 'refund_requested', {
-                refund_request_reason: 'Approved project cancellation settlement',
-                amount_requested: amountRequested,
-                approved_amount: approvedRefundAmount,
-                refund_status: refundStatus,
-                payment_status_at_cancel: latestPayment.status,
-              });
             }
           }
         }
       }
 
-      await logActivity(client, projectId, userId, 'cancel_approved', {
-        cancel_option: cancelOption,
-        cancel_reason: project.cancel_reason,
-        cancel_address_id: project.cancel_address_id,
-        cancel_address_snapshot: project.cancel_address_snapshot,
-        fulfillment_status: fulfillmentStatus,
-        cancel_resolution: resolutionType,
-        settlement,
-        refund_type: hasPhysicalRelease ? (hasMoneyRefund ? 'partial_refund_and_release' : 'physical_release') : 'money_refund',
-      });
     }
 
     await client.query('COMMIT');
@@ -4539,13 +4256,6 @@ exports.cancelProjectCancelRequest = async (projectId, userId, userRole) => {
          AND deleted_at IS NULL`,
       [projectId, project.order_id]
     );
-
-    await logActivity(client, projectId, userId, 'cancel_request_withdrawn', {
-      previous_cancel_option: project.cancel_option,
-      previous_cancel_reason: project.cancel_reason,
-      previous_cancel_address_id: project.cancel_address_id,
-      previous_cancel_address_snapshot: project.cancel_address_snapshot,
-    });
 
     await updateCustomizationOrderStatus(client, project.order_id, 'active');
 

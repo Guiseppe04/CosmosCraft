@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "regularRefundDays": 14,
+  "customWarrantyMonths": 3,
+  "changeOfMindPercent": 50,
+  "regularProcessingDaysMin": 1,
+  "regularProcessingDaysMax": 3,
+  "customProcessingDaysMin": 7,
+  "customProcessingDaysMax": 14
+}

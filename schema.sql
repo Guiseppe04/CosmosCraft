@@ -1,1945 +1,359 @@
--- =============================================
--- COSMOSCRAFT DATABASE - POSTGRESQL 15+
--- Full Schema with OTP Management
--- =============================================
+--
+-- PostgreSQL database dump
+--
 
--- Required for gen_random_uuid()
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+\restrict NbhJB4aaCLLI5JqimG3kfHyK4FAOpvtfvZY3OdFCef3mpWhlLZhf3ovKTyVg900
 
--- =============================================
--- ENUMS & CUSTOM TYPES
--- =============================================
+-- Dumped from database version 18.6
+-- Dumped by pg_dump version 18.4
 
-CREATE TYPE user_role_enum AS ENUM ('customer', 'staff', 'admin', 'super_admin');
-CREATE TYPE auth_provider_enum AS ENUM ('local', 'google', 'facebook');
-CREATE TYPE guitar_type_enum AS ENUM ('acoustic', 'electric', 'bass');
-CREATE TYPE order_status_enum AS ENUM ('pending', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'received', 'cancelled');
-CREATE TYPE payment_method_enum AS ENUM ('gcash', 'bank_transfer', 'cash');
-CREATE TYPE payment_status_enum AS ENUM (
-  'pending',
-  'for_verification',
-  'verified',
-  'rejected',
-  'cancelled',
-  'refunded'
-);
-CREATE TYPE order_payment_status_enum AS ENUM (
-    'pending',              -- order created, no payment submitted yet
-    'proof_submitted',    -- customer uploaded proof of payment
-    'under_review',       -- admin is currently checking the proof
-    'approved',           -- payment verified by admin
-    'rejected',           -- proof invalid / denied
-    'failed'              -- payment attempt failed (optional fallback)
-);
-CREATE TYPE appointment_status_enum AS ENUM ('pending', 'confirmed', 'in_progress', 'ready_for_pickup', 'completed', 'cancelled', 'no_show');
-CREATE TYPE project_status_enum AS ENUM ('not_started', 'in_progress', 'on_hold', 'completed', 'cancelled');
-CREATE TYPE notification_type_enum AS ENUM ('order_update', 'appointment_reminder', 'system', 'promotional', 'low_stock', 'project_update', 'refund');
+-- Started on 2026-10-11 20:23:23
 
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
 
--- =============================================
--- 1. USERS
--- =============================================
+--
+-- TOC entry 7 (class 2615 OID 2200)
+-- Name: public; Type: SCHEMA; Schema: -; Owner: postgres
+--
 
-CREATE TABLE users (
-    user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(100) NOT NULL UNIQUE,
-    password_hash TEXT,
-    first_name VARCHAR(50) NOT NULL,
-    middle_name VARCHAR(50),
-    last_name VARCHAR(50) NOT NULL,
-    suffix VARCHAR(10),
-    avatar_url TEXT,
-    phone VARCHAR(15),
-    role user_role_enum NOT NULL DEFAULT 'customer',
-    is_verified BOOLEAN NOT NULL DEFAULT FALSE,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    login_attempts SMALLINT NOT NULL DEFAULT 0 CHECK (login_attempts >= 0),
-    locked_until TIMESTAMPTZ,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+-- *not* creating schema, since initdb creates it
 
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_role ON users(role);
-CREATE INDEX idx_users_created_at ON users(created_at DESC);
-CREATE INDEX idx_users_deleted_at ON users(deleted_at) WHERE deleted_at IS NOT NULL;
+ALTER SCHEMA public OWNER TO postgres;
 
+--
+-- TOC entry 4899 (class 0 OID 0)
+-- Dependencies: 7
+-- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: postgres
+--
 
--- =============================================
--- 2. REFRESH TOKENS
--- =============================================
+COMMENT ON SCHEMA public IS '';
 
-CREATE TABLE refresh_tokens (
-    token_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL,
-    token_hash TEXT NOT NULL UNIQUE,
-    expires_at TIMESTAMPTZ NOT NULL,
-    is_revoked BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+--
+-- TOC entry 3 (class 3079 OID 21205)
+-- Name: pg_trgm; Type: EXTENSION; Schema: -; Owner: -
+--
 
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    CHECK (expires_at > created_at)
-);
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
 
-CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens(user_id);
-CREATE INDEX idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
+--
+-- TOC entry 4901 (class 0 OID 0)
+-- Dependencies: 3
+-- Name: EXTENSION pg_trgm; Type: COMMENT; Schema: -; Owner:
+--
 
+COMMENT ON EXTENSION pg_trgm IS 'text similarity measurement and index searching based on trigrams';
 
--- =============================================
--- 3. USER IDENTITIES (OAuth/Multi-Auth)
--- =============================================
+--
+-- TOC entry 2 (class 3079 OID 18701)
+-- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: -
+--
 
-CREATE TABLE user_identities (
-    identity_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL,
-    provider auth_provider_enum NOT NULL,
-    provider_user_id VARCHAR(255) NOT NULL,
-    provider_email VARCHAR(100),
-    access_token TEXT,
-    refresh_token TEXT,
-    token_expires_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    UNIQUE(provider, provider_user_id)
+--
+-- TOC entry 4902 (class 0 OID 0)
+-- Dependencies: 2
+-- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner:
+--
+
+COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
+
+--
+-- TOC entry 1008 (class 1247 OID 18740)
+-- Name: appointment_status_enum; Type: TYPE; Schema: public; Owner: postgres
+--
+
+CREATE TYPE public.appointment_status_enum AS ENUM (
+    'pending',
+    'confirmed',
+    'in_progress',
+    'ready_for_pickup',
+    'completed',
+    'cancelled',
+    'no_show',
+    'rescheduled_by_customer'
 );
 
-CREATE INDEX idx_user_identities_user_id ON user_identities(user_id);
-CREATE INDEX idx_user_identities_provider ON user_identities(provider);
+ALTER TYPE public.appointment_status_enum OWNER TO postgres;
 
+--
+-- TOC entry 1011 (class 1247 OID 18756)
+-- Name: auth_provider_enum; Type: TYPE; Schema: public; Owner: postgres
+--
 
--- =============================================
--- 4. AUDIT LOGS
--- =============================================
--- Consolidated audit table: replaces payment_audit_log, project_activity_logs,
--- and otp_attempts by using entity_type + entity_id + details JSONB.
--- The details column stores action-specific data (admin info, rejection reasons,
--- OTP attempt metadata, project activity details, etc.).
-
-CREATE TABLE audit_logs (
-    audit_id BIGSERIAL PRIMARY KEY,
-    user_id UUID,
-    entity_type VARCHAR(50) NOT NULL,
-    entity_id UUID,
-    action VARCHAR(50) NOT NULL,
-    previous_status VARCHAR(50),
-    new_status VARCHAR(50),
-    details JSONB DEFAULT '{}'::jsonb,
-    ip_address INET,
-    user_agent TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
-    CHECK (action IN ('INSERT', 'UPDATE', 'DELETE', 'VERIFY', 'REJECT', 'REFUND', 'LOGIN_ATTEMPT', 'PASSWORD_RESET', 'STOCK_ALERT'))
+CREATE TYPE public.auth_provider_enum AS ENUM (
+    'local',
+    'google',
+    'facebook'
 );
 
-CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
-CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
-CREATE INDEX idx_audit_logs_action ON audit_logs(action);
-CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at DESC);
+ALTER TYPE public.auth_provider_enum OWNER TO postgres;
 
+--
+-- TOC entry 1014 (class 1247 OID 18764)
+-- Name: guitar_type_enum; Type: TYPE; Schema: public; Owner: postgres
+--
 
--- =============================================
--- 5. ADDRESSES
--- =============================================
-
-CREATE TABLE addresses (
-    address_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL,
-    label VARCHAR(50) NOT NULL DEFAULT 'Home',
-    line1 VARCHAR(150) NOT NULL,
-    line2 VARCHAR(150),
-    city VARCHAR(80) NOT NULL,
-    barangay VARCHAR(80),
-    province VARCHAR(80) NOT NULL,
-    postal_code VARCHAR(20) NOT NULL,
-    country CHAR(2) NOT NULL,
-    is_default BOOLEAN NOT NULL DEFAULT FALSE,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    CHECK (country ~ '^[A-Z]{2}$')
+CREATE TYPE public.guitar_type_enum AS ENUM (
+    'acoustic',
+    'electric',
+    'bass'
 );
 
-CREATE INDEX idx_addresses_user_id ON addresses(user_id);
-CREATE INDEX idx_addresses_is_default ON addresses(user_id, is_default);
-CREATE INDEX idx_addresses_deleted_at ON addresses(deleted_at) WHERE deleted_at IS NOT NULL;
+ALTER TYPE public.guitar_type_enum OWNER TO postgres;
 
+--
+-- TOC entry 1017 (class 1247 OID 18772)
+-- Name: inventory_change_type_enum; Type: TYPE; Schema: public; Owner: postgres
+--
 
--- =============================================
--- 6. CATEGORIES
--- =============================================
-
-CREATE TABLE categories (
-    category_id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    description TEXT,
-    sort_order SMALLINT NOT NULL DEFAULT 0,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    CHECK (sort_order >= 0)
-);
-CREATE INDEX idx_categories_deleted_at ON categories(deleted_at) WHERE deleted_at IS NOT NULL;
-
-
--- =============================================
--- 7. PRODUCTS
--- =============================================
-
-CREATE TABLE products (
-    product_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(150) NOT NULL,
-    description TEXT NOT NULL DEFAULT '',
-    price NUMERIC(12, 2) NOT NULL CHECK (price >= 0),
-    brand VARCHAR(100) NOT NULL DEFAULT '',
-    sku VARCHAR(100) NOT NULL UNIQUE,
-    category_id INT,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (category_id) REFERENCES categories(category_id) ON DELETE RESTRICT
-);
-CREATE INDEX idx_products_brand ON products(brand);
-CREATE INDEX idx_products_sku ON products(sku);
-CREATE INDEX idx_products_category_id ON products(category_id);
-CREATE INDEX idx_products_is_active ON products(is_active);
-CREATE INDEX idx_products_deleted_at ON products(deleted_at) WHERE deleted_at IS NOT NULL;
-
-
--- =============================================
--- 7A. INVENTORY (Product Stock & Cost)
--- =============================================
-
-CREATE TABLE inventory (
-    inventory_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    product_id UUID NOT NULL UNIQUE,
-    cost_price NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (cost_price >= 0),
-    stock INT NOT NULL DEFAULT 0 CHECK (stock >= 0),
-    low_stock_threshold NUMERIC(5,2) NOT NULL DEFAULT 10 CHECK (low_stock_threshold >= 0 AND low_stock_threshold <= 100),
-    max_stock INT NULL CHECK (max_stock IS NULL OR max_stock > 0),
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE
+CREATE TYPE public.inventory_change_type_enum AS ENUM (
+    'stock_in',
+    'stock_out',
+    'adjustment',
+    'sale',
+    'return'
 );
 
-CREATE INDEX idx_inventory_product_id ON inventory(product_id);
-CREATE INDEX idx_inventory_stock ON inventory(stock);
-CREATE INDEX idx_inventory_deleted_at ON inventory(deleted_at) WHERE deleted_at IS NOT NULL;
+ALTER TYPE public.inventory_change_type_enum OWNER TO postgres;
 
+--
+-- TOC entry 1020 (class 1247 OID 18784)
+-- Name: notification_type_enum; Type: TYPE; Schema: public; Owner: postgres
+--
 
--- =============================================
--- 8. PRODUCT IMAGES
--- =============================================
-
-CREATE TABLE product_images (
-    image_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    product_id UUID NOT NULL,
-    image_url TEXT NOT NULL,
-    alt_text VARCHAR(200),
-    sort_order SMALLINT NOT NULL DEFAULT 0,
-    is_primary BOOLEAN NOT NULL DEFAULT FALSE,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE,
-    CHECK (sort_order >= 0)
+CREATE TYPE public.notification_type_enum AS ENUM (
+    'order_update',
+    'appointment_reminder',
+    'system',
+    'promotional',
+    'low_stock',
+    'project_update',
+    'refund'
 );
 
-CREATE INDEX idx_product_images_product_id ON product_images(product_id);
-CREATE INDEX idx_product_images_is_primary ON product_images(product_id, is_primary);
-CREATE INDEX idx_product_images_deleted_at ON product_images(deleted_at) WHERE deleted_at IS NOT NULL;
+ALTER TYPE public.notification_type_enum OWNER TO postgres;
 
+--
+-- TOC entry 1023 (class 1247 OID 18796)
+-- Name: order_payment_status_enum; Type: TYPE; Schema: public; Owner: postgres
+--
 
--- =============================================
--- 9. CARTS
--- =============================================
-
-CREATE TABLE carts (
-    cart_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL UNIQUE,
-    subtotal NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (subtotal >= 0),
-    tax_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (tax_amount >= 0),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+CREATE TYPE public.order_payment_status_enum AS ENUM (
+    'pending',
+    'proof_submitted',
+    'under_review',
+    'approved',
+    'rejected',
+    'failed',
+    'refunded'
 );
 
-CREATE INDEX idx_carts_user_id ON carts(user_id);
+ALTER TYPE public.order_payment_status_enum OWNER TO postgres;
 
+--
+-- TOC entry 1026 (class 1247 OID 18812)
+-- Name: order_status_enum; Type: TYPE; Schema: public; Owner: postgres
+--
 
--- =============================================
--- 10. CART ITEMS
--- =============================================
-
-CREATE TABLE cart_items (
-    cart_item_id BIGSERIAL PRIMARY KEY,
-    cart_id UUID NOT NULL,
-    product_id UUID,
-    customization_id UUID,
-    quantity INT NOT NULL CHECK (quantity > 0),
-    unit_price NUMERIC(12, 2) NOT NULL CHECK (unit_price >= 0),
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (cart_id) REFERENCES carts(cart_id) ON DELETE CASCADE,
-    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE SET NULL,
-    CHECK ((product_id IS NOT NULL) OR (customization_id IS NOT NULL))
+CREATE TYPE public.order_status_enum AS ENUM (
+    'pending',
+    'processing',
+    'shipped',
+    'out_for_delivery',
+    'delivered',
+    'cancelled',
+    'received'
 );
 
-CREATE INDEX idx_cart_items_cart_id ON cart_items(cart_id);
-CREATE INDEX idx_cart_items_product_id ON cart_items(product_id);
-CREATE INDEX idx_cart_items_deleted_at ON cart_items(deleted_at) WHERE deleted_at IS NOT NULL;
+ALTER TYPE public.order_status_enum OWNER TO postgres;
 
+--
+-- TOC entry 1029 (class 1247 OID 18828)
+-- Name: payment_method_enum; Type: TYPE; Schema: public; Owner: postgres
+--
 
--- =============================================
--- 11. CUSTOMIZATIONS
--- =============================================
-
-CREATE TABLE customizations (
-    customization_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID,
-    name VARCHAR(150),
-    guitar_type guitar_type_enum NOT NULL,
-    body_model VARCHAR(80),
-    body_wood VARCHAR(100),
-    neck_wood VARCHAR(100),
-    fingerboard_wood VARCHAR(100),
-    bridge_type VARCHAR(50),
-    pickups VARCHAR(200),
-    color VARCHAR(100),
-    finish_type VARCHAR(50),
-    config_json JSONB DEFAULT '{}'::jsonb,
-    stickers JSONB DEFAULT '[]'::jsonb,
-    preview_image TEXT,
-    total_price NUMERIC(12, 2) NOT NULL CHECK (total_price >= 0),
-    is_saved BOOLEAN NOT NULL DEFAULT TRUE,
-    is_locked BOOLEAN NOT NULL DEFAULT FALSE,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL
+CREATE TYPE public.payment_method_enum AS ENUM (
+    'gcash',
+    'bank_transfer',
+    'cash'
 );
 
-CREATE INDEX idx_customizations_user_id ON customizations(user_id);
-CREATE INDEX idx_customizations_guitar_type ON customizations(guitar_type);
-CREATE INDEX idx_customizations_is_saved ON customizations(is_saved);
-CREATE INDEX idx_customizations_deleted_at ON customizations(deleted_at) WHERE deleted_at IS NOT NULL;
+ALTER TYPE public.payment_method_enum OWNER TO postgres;
 
+--
+-- TOC entry 1032 (class 1247 OID 18836)
+-- Name: payment_status_enum; Type: TYPE; Schema: public; Owner: postgres
+--
 
--- =============================================
--- 12. CUSTOMIZATION PARTS
--- =============================================
-
-CREATE TABLE customization_parts (
-    part_id BIGSERIAL PRIMARY KEY,
-    customization_id UUID NOT NULL,
-    product_id UUID,
-    part_name VARCHAR(150) NOT NULL,
-    quantity SMALLINT NOT NULL CHECK (quantity > 0),
-    price NUMERIC(12, 2) NOT NULL CHECK (price >= 0),
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (customization_id) REFERENCES customizations(customization_id) ON DELETE CASCADE,
-    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE SET NULL
+CREATE TYPE public.payment_status_enum AS ENUM (
+    'pending',
+    'for_verification',
+    'verified',
+    'rejected',
+    'cancelled',
+    'refunded'
 );
 
-CREATE INDEX idx_customization_parts_customization_id ON customization_parts(customization_id);
-CREATE INDEX idx_customization_parts_deleted_at ON customization_parts(deleted_at) WHERE deleted_at IS NOT NULL;
+ALTER TYPE public.payment_status_enum OWNER TO postgres;
 
+--
+-- TOC entry 1035 (class 1247 OID 18850)
+-- Name: pos_payment_method_enum; Type: TYPE; Schema: public; Owner: postgres
+--
 
--- =============================================
--- 13. ORDERS
--- =============================================
-
-CREATE TABLE orders (
-    order_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    order_number VARCHAR(30) NOT NULL UNIQUE,
-    order_type VARCHAR(20) NOT NULL DEFAULT 'product',
-    user_id UUID,
-    shipping_address_id UUID,
-    subtotal NUMERIC(12, 2) NOT NULL CHECK (subtotal >= 0),
-    tax_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (tax_amount >= 0),
-    shipping_cost NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (shipping_cost >= 0),
-    additional_shipping_fee NUMERIC(12, 2) CHECK (additional_shipping_fee >= 0),
-    discount_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (discount_amount >= 0),
-    total_amount NUMERIC(12, 2) NOT NULL CHECK (total_amount >= 0),
-    status order_status_enum NOT NULL DEFAULT 'pending',
-    payment_status order_payment_status_enum NOT NULL DEFAULT 'pending',
-    payment_reference_number VARCHAR(100),
-    proof_submitted_at TIMESTAMPTZ,
-    reviewed_by UUID,
-    reviewed_at TIMESTAMPTZ,
-    rejection_reason TEXT,
-    admin_notes TEXT,
-    notes TEXT,
-    tracking_number VARCHAR(100),
-    courier_name VARCHAR(100),
-    shipped_at TIMESTAMPTZ,
-    out_for_delivery_at TIMESTAMPTZ,
-    delivered_at TIMESTAMPTZ,
-    delivered_by_user_id UUID,
-    delivery_confirmation_method VARCHAR(20) CHECK (delivery_confirmation_method IS NULL OR delivery_confirmation_method IN ('customer', 'admin', 'staff')),
-    received_at TIMESTAMPTZ,
-    rider_name VARCHAR(100),
-    rider_contact VARCHAR(50),
-    -- Customization-only lifecycle; product/service orders continue using status.
-    customization_status VARCHAR(50),
-    customization_hold_reason TEXT,
-    customization_hold_requested_at TIMESTAMPTZ,
-    customization_hold_approved_by UUID,
-    customization_hold_approved_at TIMESTAMPTZ,
-    customization_resumed_at TIMESTAMPTZ,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
-    FOREIGN KEY (shipping_address_id) REFERENCES addresses(address_id) ON DELETE SET NULL,
-    FOREIGN KEY (reviewed_by) REFERENCES users(user_id) ON DELETE SET NULL,
-    FOREIGN KEY (customization_hold_approved_by) REFERENCES users(user_id) ON DELETE SET NULL,
-    FOREIGN KEY (delivered_by_user_id) REFERENCES users(user_id) ON DELETE SET NULL
+CREATE TYPE public.pos_payment_method_enum AS ENUM (
+    'cash',
+    'gcash',
+    'bank_transfer'
 );
 
-CREATE INDEX idx_orders_order_number ON orders(order_number);
-CREATE INDEX idx_orders_user_id ON orders(user_id);
-CREATE INDEX idx_orders_status ON orders(status);
-CREATE INDEX idx_orders_created_at ON orders(created_at DESC);
-CREATE INDEX idx_orders_payment_status ON orders(payment_status);
-CREATE INDEX idx_orders_tracking_number ON orders(tracking_number);
-CREATE INDEX idx_orders_shipped_at ON orders(shipped_at) WHERE shipped_at IS NOT NULL;
-CREATE INDEX idx_orders_delivered_at ON orders(delivered_at) WHERE delivered_at IS NOT NULL;
-CREATE INDEX idx_orders_received_at ON orders(received_at) WHERE received_at IS NOT NULL;
-CREATE INDEX idx_orders_payment_reference ON orders(payment_reference_number);
-CREATE INDEX idx_orders_proof_submitted_at ON orders(proof_submitted_at) WHERE proof_submitted_at IS NOT NULL;
-CREATE INDEX idx_orders_reviewed_at ON orders(reviewed_at) WHERE reviewed_at IS NOT NULL;
-CREATE INDEX idx_orders_deleted_at ON orders(deleted_at) WHERE deleted_at IS NOT NULL;
--- Composite index for dashboard queries filtering by status + date range
-CREATE INDEX idx_orders_status_created ON orders(status, created_at DESC);
--- Composite index for payment verification workflow
-CREATE INDEX idx_orders_payment_review ON orders(payment_status, reviewed_at) WHERE payment_status IN ('proof_submitted', 'under_review');
+ALTER TYPE public.pos_payment_method_enum OWNER TO postgres;
 
--- Check constraint for order_type
-ALTER TABLE orders ADD CONSTRAINT chk_orders_order_type CHECK (order_type IN ('product', 'customization', 'service'));
-ALTER TABLE orders ADD CONSTRAINT chk_orders_customization_status CHECK (
-  customization_status IS NULL OR customization_status IN (
-    'payment_pending', 'active', 'on_hold', 'payment_required',
-    'fulfillment_pending', 'fulfillment_in_progress', 'fulfilled',
-    'cancellation_requested', 'resolution_in_progress', 'cancelled'
-  )
+--
+-- TOC entry 1038 (class 1247 OID 18858)
+-- Name: pos_sale_status_enum; Type: TYPE; Schema: public; Owner: postgres
+--
+
+CREATE TYPE public.pos_sale_status_enum AS ENUM (
+    'pending',
+    'completed',
+    'cancelled',
+    'refunded',
+    'voided',
+    'returned'
 );
 
--- Index on order_type
-CREATE INDEX idx_orders_order_type ON orders(order_type);
-CREATE INDEX idx_orders_customization_status ON orders(customization_status) WHERE order_type = 'customization';
+ALTER TYPE public.pos_sale_status_enum OWNER TO postgres;
 
--- Composite indexes for optimized search, filter, and sort
-CREATE INDEX idx_orders_type_status_created ON orders(order_type, status, created_at DESC);
-CREATE INDEX idx_orders_payment_status_created ON orders(payment_status, created_at DESC);
-CREATE INDEX idx_orders_amount_created ON orders(total_amount, created_at DESC);
+--
+-- TOC entry 1041 (class 1247 OID 18872)
+-- Name: project_status_enum; Type: TYPE; Schema: public; Owner: postgres
+--
 
--- Indexes for related tables used in joins
-CREATE INDEX idx_payments_reference_number ON payments(reference_number);
-CREATE INDEX idx_order_items_product_name ON order_items(product_name);
-CREATE INDEX idx_order_items_customization_id ON order_items(customization_id) WHERE customization_id IS NOT NULL;
-
--- =============================================
--- 13A. ORDER NUMBER COUNTERS
--- =============================================
--- Atomic counter table for generating unique, sequential order numbers
--- per type and per day (PO-YYYYMMDD-0001, CO-YYYYMMDD-0001, SO-YYYYMMDD-0001)
-
-CREATE TABLE order_number_counters (
-    prefix VARCHAR(2) PRIMARY KEY,
-    date DATE NOT NULL DEFAULT CURRENT_DATE,
-    last_number INT NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+CREATE TYPE public.project_status_enum AS ENUM (
+    'not_started',
+    'in_progress',
+    'completed',
+    'cancelled',
+    'on_hold'
 );
 
-CREATE INDEX idx_order_number_counters_date ON order_number_counters(date);
+ALTER TYPE public.project_status_enum OWNER TO postgres;
 
--- Seed initial counter rows (day-reset is handled dynamically in application logic)
-INSERT INTO order_number_counters (prefix, date, last_number) VALUES
-    ('PO', CURRENT_DATE, 0),
-    ('CO', CURRENT_DATE, 0),
-    ('SO', CURRENT_DATE, 0)
-ON CONFLICT (prefix) DO NOTHING;
+--
+-- TOC entry 1044 (class 1247 OID 18884)
+-- Name: user_role_enum; Type: TYPE; Schema: public; Owner: postgres
+--
 
-
--- =============================================
--- 14. ORDER ITEMS
--- =============================================
-
-CREATE TABLE order_items (
-    order_item_id BIGSERIAL PRIMARY KEY,
-    order_id UUID NOT NULL,
-    product_id UUID,
-    customization_id UUID,
-    product_name VARCHAR(150),
-    quantity INT NOT NULL CHECK (quantity > 0),
-    unit_price NUMERIC(12, 2) NOT NULL CHECK (unit_price >= 0),
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
-    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE SET NULL,
-    FOREIGN KEY (customization_id) REFERENCES customizations(customization_id) ON DELETE SET NULL,
-    CHECK ((product_id IS NOT NULL) OR (customization_id IS NOT NULL))
+CREATE TYPE public.user_role_enum AS ENUM (
+    'customer',
+    'staff',
+    'admin',
+    'super_admin'
 );
 
-CREATE INDEX idx_order_items_order_id ON order_items(order_id);
-CREATE INDEX idx_order_items_product_id ON order_items(product_id);
-CREATE INDEX idx_order_items_deleted_at ON order_items(deleted_at) WHERE deleted_at IS NOT NULL;
-
-
--- =============================================
--- 15. PAYMENTS
--- =============================================
-
-CREATE TABLE payments (
-    payment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    order_id UUID NOT NULL,
-    user_id UUID,
-    amount NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
-    currency VARCHAR(3) NOT NULL DEFAULT 'PHP',
-    method payment_method_enum NOT NULL,
-    status payment_status_enum NOT NULL DEFAULT 'pending',
-    reference_number VARCHAR(100),
-    proof_url TEXT,
-    payment_instructions JSONB,
-    verified_by UUID,
-    verified_at TIMESTAMPTZ,
-    rejection_reason TEXT,
-    metadata JSONB,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
-    FOREIGN KEY (verified_by) REFERENCES users(user_id) ON DELETE SET NULL,
-    UNIQUE(order_id, reference_number)
-);
-
-CREATE INDEX idx_payments_order_id ON payments(order_id);
-CREATE INDEX idx_payments_user_id ON payments(user_id);
-CREATE INDEX idx_payments_status ON payments(status);
-CREATE INDEX idx_payments_method ON payments(method);
-CREATE INDEX idx_payments_created_at ON payments(created_at DESC);
-CREATE INDEX idx_payments_reference_number ON payments(reference_number);
-CREATE INDEX idx_payments_deleted_at ON payments(deleted_at) WHERE deleted_at IS NOT NULL;
-
--- =============================================
--- 15A. PAYMENT CONFIGURATION
--- =============================================
-
-CREATE TABLE payment_config (
-    config_id SERIAL PRIMARY KEY,
-    payment_method payment_method_enum NOT NULL,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    gcash_number VARCHAR(20),
-    gcash_qr_code TEXT,
-    bank_name VARCHAR(100),
-    bank_account_name VARCHAR(150),
-    bank_account_number VARCHAR(50),
-    bank_branch VARCHAR(100),
-    instructions TEXT,
-    display_name VARCHAR(100),
-    sort_order SMALLINT NOT NULL DEFAULT 0,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    UNIQUE(payment_method)
-);
-
-CREATE INDEX idx_payment_config_deleted_at ON payment_config(deleted_at) WHERE deleted_at IS NOT NULL;
-
-INSERT INTO payment_config (payment_method, is_active, display_name, instructions, sort_order) VALUES
-('gcash'::payment_method_enum, true, 'GCash', 'Send payment via GCash to our designated number. Upload your receipt as proof of payment.', 1),
-('bank_transfer'::payment_method_enum, true, 'Bank Transfer', 'Transfer to our bank account. Keep your transaction reference for verification.', 2),
-('cash'::payment_method_enum, true, 'Cash', 'Pay directly at our store location.', 3);
-
-
--- =============================================
--- 15B. PAYMENT SETTINGS
-
-CREATE TABLE payment_settings (
-    id INTEGER PRIMARY KEY DEFAULT 1,
-    bank_name VARCHAR(255) NOT NULL DEFAULT '',
-    account_name VARCHAR(255) NOT NULL DEFAULT '',
-    account_number VARCHAR(255) NOT NULL DEFAULT '',
-    gcash_number VARCHAR(255) NOT NULL DEFAULT '',
-    maya_number VARCHAR(255) NOT NULL DEFAULT '',
-    qr_image_url TEXT NOT NULL DEFAULT '',
-    bank_transfer_qr_image_url TEXT NOT NULL DEFAULT '',
-    bank_transfer_display_mode VARCHAR(20) NOT NULL DEFAULT 'details',
-    notes TEXT NOT NULL DEFAULT '',
-    pickup_storage_fee NUMERIC(12, 2) NOT NULL DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-);
-
-INSERT INTO payment_settings (id, bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, notes)
-VALUES (1, '', '', '', '', '', '', '')
-ON CONFLICT (id) DO NOTHING;
-
-
--- =============================================
--- 15C. SITE CONTACT SETTINGS
-
-CREATE TABLE contact_settings (
-    id INTEGER PRIMARY KEY DEFAULT 1,
-    email VARCHAR(254) NOT NULL DEFAULT 'cosmosguitars@gmail.com',
-    phone VARCHAR(64) NOT NULL DEFAULT '+095213121581',
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-);
-
-INSERT INTO contact_settings (id, email, phone)
-VALUES (1, 'cosmosguitars@gmail.com', '+095213121581')
-ON CONFLICT (id) DO NOTHING;
-
-
--- =============================================
--- 16. SERVICES
--- =============================================
-
-CREATE TABLE services (
-    service_id SERIAL PRIMARY KEY,
-    name VARCHAR(150) NOT NULL,
-    slug VARCHAR(150),
-    description TEXT,
-    image_url TEXT,
-    price NUMERIC(12, 2) NOT NULL CHECK (price >= 0),
-    duration_minutes SMALLINT NOT NULL CHECK (duration_minutes > 0),
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_services_is_active ON services(is_active);
-CREATE INDEX idx_services_deleted_at ON services(deleted_at) WHERE deleted_at IS NOT NULL;
-
-
--- =============================================
--- 17. APPOINTMENTS
--- =============================================
-
-CREATE TABLE appointments (
-    appointment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    reference_code VARCHAR(20) UNIQUE,
-    user_id UUID,
-    appointment_type VARCHAR(50) NOT NULL DEFAULT 'service_in_shop',
-    order_id UUID,
-    services JSONB DEFAULT '[]'::jsonb,
-    location_id VARCHAR(50),
-    guitar_details JSONB,
-    customer_name VARCHAR(100) NOT NULL,
-    customer_email VARCHAR(100) NOT NULL,
-    customer_phone VARCHAR(20) NOT NULL,
-    scheduled_at TIMESTAMPTZ NOT NULL,
-    estimated_end_at TIMESTAMPTZ,
-    status appointment_status_enum NOT NULL DEFAULT 'pending',
-    payment_status VARCHAR(50) NOT NULL DEFAULT 'pending',
-    payment_method VARCHAR(50),
-    payment_proof_url TEXT,
-    notes TEXT,
-    reason TEXT,
-    confirmation_notes TEXT,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
-    FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE SET NULL,
-    CHECK (estimated_end_at IS NULL OR estimated_end_at > scheduled_at)
-);
-
-CREATE INDEX idx_appointments_user_id ON appointments(user_id);
-CREATE INDEX idx_appointments_order_id ON appointments(order_id);
-CREATE INDEX idx_appointments_type ON appointments(appointment_type);
-CREATE INDEX idx_appointments_services_gin ON appointments USING GIN (services);
-CREATE INDEX idx_appointments_scheduled_at ON appointments(scheduled_at);
-CREATE INDEX idx_appointments_status ON appointments(status);
-CREATE INDEX idx_appointments_payment_status ON appointments(payment_status);
-CREATE INDEX idx_appointments_payment_method ON appointments(payment_method) WHERE payment_method IS NOT NULL;
-CREATE INDEX idx_appointments_deleted_at ON appointments(deleted_at) WHERE deleted_at IS NOT NULL;
--- Composite index for calendar/scheduling queries
-CREATE INDEX idx_appointments_schedule_status ON appointments(scheduled_at, status);
-
-
--- =============================================
--- 17A. UNAVAILABLE DATES
--- =============================================
-
-CREATE TABLE unavailable_dates (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    date DATE NOT NULL UNIQUE,
-    reason VARCHAR(255),
-    is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
-    created_by UUID,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE SET NULL
-);
-
-CREATE INDEX idx_unavailable_dates_date ON unavailable_dates(date);
-CREATE INDEX idx_unavailable_dates_created_by ON unavailable_dates(created_by);
-CREATE INDEX idx_unavailable_dates_deleted_at ON unavailable_dates(deleted_at) WHERE deleted_at IS NOT NULL;
-
-
--- =============================================
--- 17B. REFUND REQUESTS
--- =============================================
-
-CREATE TYPE refund_status_enum AS ENUM ('pending', 'approved', 'rejected', 'processed');
-
-CREATE TABLE refund_requests (
-    refund_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    appointment_id UUID NOT NULL REFERENCES appointments(appointment_id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-    payment_method VARCHAR(50) NOT NULL,
-    payment_reference VARCHAR(255),
-    amount NUMERIC(12, 2) CHECK (amount >= 0),
-    reason TEXT,
-    status refund_status_enum NOT NULL DEFAULT 'pending',
-    reviewed_by UUID REFERENCES users(user_id) ON DELETE SET NULL,
-    reviewed_at TIMESTAMPTZ,
-    reviewed_notes TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_refund_requests_appointment ON refund_requests(appointment_id);
-CREATE INDEX idx_refund_requests_user_id ON refund_requests(user_id);
-CREATE INDEX idx_refund_requests_status ON refund_requests(status);
-CREATE INDEX idx_refund_requests_created_at ON refund_requests(created_at DESC);
-
-
--- =============================================
--- 18. PROJECTS
--- =============================================
-
-CREATE TABLE projects (
-    project_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    order_id UUID NOT NULL UNIQUE,
-    title VARCHAR(200) NOT NULL,
-    status project_status_enum NOT NULL DEFAULT 'not_started',
-    progress SMALLINT NOT NULL DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
-    estimated_completion_date DATE,
-    notes TEXT,
-    fulfillment_method VARCHAR(50),
-    fulfillment_status VARCHAR(50),
-    fulfillment_notes TEXT,
-    fulfillment_selected_at TIMESTAMPTZ,
-    fulfillment_address_id UUID,
-    fulfillment_address_snapshot JSONB,
-    pickup_appointment_id UUID,
-    -- Hold columns
-    hold_reason TEXT,
-    hold_option VARCHAR(50) CHECK (hold_option IN ('resume_later', 'hold_before_next_step')),
-    hold_at_step VARCHAR(200),
-    hold_requested_at TIMESTAMPTZ,
-    hold_approved_by UUID REFERENCES users(user_id) ON DELETE SET NULL,
-    hold_approved_at TIMESTAMPTZ,
-    resumed_at TIMESTAMPTZ,
-    -- Cancel columns
-    cancel_option VARCHAR(50) CHECK (cancel_option IN ('ship_to_address', 'pickup_at_shop', 'ship_unfinished', 'pickup_unfinished')),
-    cancel_reason TEXT,
-    cancel_address_id UUID REFERENCES addresses(address_id) ON DELETE SET NULL,
-    cancel_address_snapshot JSONB,
-    cancel_requested_at TIMESTAMPTZ,
-    cancel_approved_by UUID REFERENCES users(user_id) ON DELETE SET NULL,
-    cancel_approved_at TIMESTAMPTZ,
-    -- Fulfillment tracking
-    shipped_at TIMESTAMPTZ,
-    ready_for_pickup_at TIMESTAMPTZ,
-    picked_up_at TIMESTAMPTZ,
-    delivered_at TIMESTAMPTZ,
-    delivered_by_user_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
-    delivery_confirmation_method VARCHAR(20) CHECK (delivery_confirmation_method IS NULL OR delivery_confirmation_method IN ('customer', 'admin', 'staff')),
-    -- Claim / Custom Build
-    custom_build_id VARCHAR(30) UNIQUE,
-    claimed_by UUID REFERENCES users(user_id) ON DELETE SET NULL,
-    claimed_at TIMESTAMPTZ,
-    -- Soft delete / audit
-    deleted_at TIMESTAMPTZ,
-    deleted_by UUID,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
-    FOREIGN KEY (pickup_appointment_id) REFERENCES appointments(appointment_id) ON DELETE SET NULL,
-    FOREIGN KEY (fulfillment_address_id) REFERENCES addresses(address_id) ON DELETE SET NULL,
-    FOREIGN KEY (deleted_by) REFERENCES users(user_id) ON DELETE SET NULL
-);
-
-CREATE INDEX idx_projects_order_id ON projects(order_id);
-CREATE INDEX idx_projects_status ON projects(status);
-CREATE INDEX idx_projects_fulfillment_method ON projects(fulfillment_method);
-CREATE INDEX idx_projects_deleted_at ON projects(deleted_at) WHERE deleted_at IS NOT NULL;
--- Composite index for project dashboard filtering by status + progress
-CREATE INDEX idx_projects_status_progress ON projects(status, progress);
-
--- Composite indexes for optimized project search, filter, and sort
-CREATE INDEX idx_projects_status_created ON projects(status, created_at DESC);
-CREATE INDEX idx_projects_created_at ON projects(created_at DESC);
-CREATE INDEX idx_projects_updated_at ON projects(updated_at DESC);
-CREATE INDEX idx_projects_progress ON projects(progress);
-CREATE INDEX idx_projects_estimated_completion_date ON projects(estimated_completion_date);
-CREATE INDEX idx_projects_title ON projects(title);
-CREATE INDEX idx_projects_notes ON projects(notes);
-
--- Indexes for related tables used in joins
-CREATE INDEX idx_orders_user_id ON users(user_id);
-CREATE INDEX idx_project_subtasks_assigned_user_id ON project_subtasks(assigned_user_id);
-CREATE INDEX idx_project_subtasks_title ON project_subtasks(title);
-
-
--- =============================================
--- 19. PROJECT TASKS
--- =============================================
-
-CREATE TABLE project_tasks (
-    task_id BIGSERIAL PRIMARY KEY,
-    project_id UUID NOT NULL,
-    task_name VARCHAR(200) NOT NULL,
-    description TEXT,
-    status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'blocked')),
-    sort_order SMALLINT NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
-    completed_at TIMESTAMPTZ,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE
-);
-
-CREATE INDEX idx_project_tasks_project_id ON project_tasks(project_id);
-CREATE INDEX idx_project_tasks_status ON project_tasks(status);
-CREATE INDEX idx_project_tasks_deleted_at ON project_tasks(deleted_at) WHERE deleted_at IS NOT NULL;
-
-
--- =============================================
--- 20. BUILDER GUITAR TYPES
--- =============================================
-
-CREATE TABLE builder_guitar_types (
-    guitar_type_code VARCHAR(50) PRIMARY KEY,
-    display_name VARCHAR(100) NOT NULL UNIQUE,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    sort_order SMALLINT NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_builder_guitar_types_deleted_at ON builder_guitar_types(deleted_at) WHERE deleted_at IS NOT NULL;
-
-INSERT INTO builder_guitar_types (guitar_type_code, display_name, sort_order) VALUES
-('electric', 'Electric', 1),
-('bass', 'Bass', 2),
-('acoustic', 'Acoustic', 3),
-('ukulele', 'Ukulele', 4)
-ON CONFLICT (guitar_type_code) DO NOTHING;
-
-
--- =============================================
--- 21. BUILDER PART CATEGORIES
--- =============================================
-
-CREATE TABLE builder_part_categories (
-    part_category_code VARCHAR(100) PRIMARY KEY,
-    display_name VARCHAR(120) NOT NULL UNIQUE,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    sort_order SMALLINT NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_builder_part_categories_deleted_at ON builder_part_categories(deleted_at) WHERE deleted_at IS NOT NULL;
-
-INSERT INTO builder_part_categories (part_category_code, display_name, sort_order) VALUES
-('body', 'Body', 1),
-('neck', 'Neck', 2),
-('fretboard', 'Fretboard', 3),
-('bridge', 'Bridge', 4),
-('pickups', 'Pickups', 5),
-('electronics', 'Electronics', 6),
-('hardware', 'Hardware', 7),
-('tuners', 'Tuners', 8),
-('strings', 'Strings', 9),
-('finish', 'Finish', 10),
-('wood_type', 'Wood Type', 11),
-('pickguard', 'Pickguard', 12),
-('misc', 'Misc', 99)
-ON CONFLICT (part_category_code) DO NOTHING;
-
-
--- =============================================
--- 22. BUILDER TYPE-CATEGORY MAP
--- =============================================
-
-CREATE TABLE builder_type_categories (
-    guitar_type_code VARCHAR(50) NOT NULL,
-    part_category_code VARCHAR(100) NOT NULL,
-    is_required BOOLEAN NOT NULL DEFAULT FALSE,
-    sort_order SMALLINT NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (guitar_type_code, part_category_code),
-    FOREIGN KEY (guitar_type_code) REFERENCES builder_guitar_types(guitar_type_code) ON DELETE CASCADE,
-    FOREIGN KEY (part_category_code) REFERENCES builder_part_categories(part_category_code) ON DELETE CASCADE
-);
-
-CREATE INDEX idx_builder_type_categories_category ON builder_type_categories(part_category_code);
-
-INSERT INTO builder_type_categories (guitar_type_code, part_category_code, is_required, sort_order) VALUES
-('electric', 'body', true, 1),
-('electric', 'neck', true, 2),
-('electric', 'pickups', true, 3),
-('electric', 'bridge', true, 4),
-('bass', 'body', true, 1),
-('bass', 'neck', true, 2),
-('bass', 'pickups', true, 3),
-('bass', 'bridge', true, 4),
-('acoustic', 'body', true, 1),
-('acoustic', 'neck', true, 2),
-('acoustic', 'fretboard', true, 3),
-('ukulele', 'body', true, 1),
-('ukulele', 'neck', true, 2),
-('ukulele', 'fretboard', true, 3)
-ON CONFLICT (guitar_type_code, part_category_code) DO NOTHING;
-
-
--- =============================================
--- 23. BUILDER MODEL IMAGES
--- =============================================
-
-CREATE TABLE builder_model_images (
-    model_image_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    guitar_type_code VARCHAR(50) NOT NULL REFERENCES builder_guitar_types(guitar_type_code) ON DELETE CASCADE,
-    model_key VARCHAR(100) NOT NULL,
-    display_name VARCHAR(120) NOT NULL,
-    image_url TEXT,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (guitar_type_code, model_key)
-);
-
-CREATE INDEX idx_builder_model_images_guitar_type ON builder_model_images(guitar_type_code);
-CREATE INDEX idx_builder_model_images_deleted_at ON builder_model_images(deleted_at) WHERE deleted_at IS NOT NULL;
-
-INSERT INTO builder_model_images (guitar_type_code, model_key, display_name) VALUES
-('electric', 'strat', 'Strat'),
-('electric', 'solo', 'Solo'),
-('electric', 'dc', 'DC'),
-('electric', 'delos', 'Delos'),
-('bass', 'vader', 'Vader'),
-('bass', 'pb', 'Precision'),
-('bass', 'jb', 'Jazz')
-ON CONFLICT (guitar_type_code, model_key) DO NOTHING;
-
-
--- =============================================
--- 24. GUITAR BUILDER PARTS
--- =============================================
-
-CREATE TABLE guitar_builder_parts (
-    part_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(150) NOT NULL,
-    description TEXT,
-    guitar_type VARCHAR(50) NOT NULL DEFAULT 'electric',
-    part_category VARCHAR(100) NOT NULL DEFAULT 'misc',
-    folder_key VARCHAR(120),
-    type_mapping VARCHAR(100) NOT NULL,
-    price NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (price >= 0),
-    stock INT NOT NULL DEFAULT 0 CHECK (stock >= 0),
-    product_id UUID REFERENCES products(product_id) ON DELETE SET NULL,
-    image_url TEXT,
-    metadata JSONB DEFAULT '{}'::jsonb,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    FOREIGN KEY (guitar_type) REFERENCES builder_guitar_types(guitar_type_code) ON DELETE RESTRICT,
-    FOREIGN KEY (part_category) REFERENCES builder_part_categories(part_category_code) ON DELETE RESTRICT
-);
-
-CREATE INDEX idx_guitar_builder_parts_type ON guitar_builder_parts(type_mapping);
-CREATE INDEX idx_guitar_builder_parts_active ON guitar_builder_parts(is_active);
-CREATE INDEX idx_guitar_builder_parts_guitar_type ON guitar_builder_parts(guitar_type);
-CREATE INDEX idx_guitar_builder_parts_part_category ON guitar_builder_parts(part_category);
-CREATE INDEX idx_guitar_builder_parts_folder_key ON guitar_builder_parts(folder_key);
-CREATE INDEX idx_guitar_builder_parts_lookup ON guitar_builder_parts(guitar_type, part_category, is_active);
-CREATE INDEX idx_guitar_builder_parts_product_id ON guitar_builder_parts(product_id) WHERE product_id IS NOT NULL;
-CREATE INDEX idx_guitar_builder_parts_deleted_at ON guitar_builder_parts(deleted_at) WHERE deleted_at IS NOT NULL;
-
-
--- =============================================
--- 25. PROJECT TEAM MEMBERS
--- =============================================
-
-CREATE TABLE project_team_members (
-    project_id UUID NOT NULL,
-    user_id UUID NOT NULL,
-    assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    PRIMARY KEY (project_id, user_id),
-    FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
-
-CREATE INDEX idx_project_team_members_user_id ON project_team_members(user_id);
-
-
--- =============================================
--- 26. PROJECT MILESTONES
--- =============================================
-
-CREATE TABLE project_milestones (
-    milestone_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    description TEXT,
-    order_index INT NOT NULL DEFAULT 0 CHECK (order_index >= 0),
-    status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'blocked')),
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE
-);
-
-CREATE INDEX idx_project_milestones_project_id ON project_milestones(project_id);
-CREATE INDEX idx_project_milestones_status ON project_milestones(status);
-CREATE INDEX idx_project_milestones_deleted_at ON project_milestones(deleted_at) WHERE deleted_at IS NOT NULL;
-
-
--- =============================================
--- 27. PROJECT SUBTASKS
--- =============================================
-
-CREATE TABLE project_subtasks (
-    subtask_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    milestone_id UUID NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    is_customer_updatable BOOLEAN NOT NULL DEFAULT FALSE,
-    assigned_user_id UUID,
-    status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed')),
-    completed_at TIMESTAMPTZ,
-    completed_by UUID,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (milestone_id) REFERENCES project_milestones(milestone_id) ON DELETE CASCADE,
-    FOREIGN KEY (assigned_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
-    FOREIGN KEY (completed_by) REFERENCES users(user_id) ON DELETE SET NULL
-);
-
-CREATE INDEX idx_project_subtasks_milestone_id ON project_subtasks(milestone_id);
-CREATE INDEX idx_project_subtasks_assigned_user_id ON project_subtasks(assigned_user_id);
-CREATE INDEX idx_project_subtasks_status ON project_subtasks(status);
-CREATE INDEX idx_project_subtasks_deleted_at ON project_subtasks(deleted_at) WHERE deleted_at IS NOT NULL;
-
-
--- =============================================
--- 27B. PROJECT INSTALLMENT SCHEDULES
--- =============================================
--- Tracks installment payment schedules for projects with installment plans.
-
-CREATE TABLE project_installment_schedules (
-    schedule_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
-    installment_number INT NOT NULL CHECK (installment_number > 0),
-    amount NUMERIC(12, 2) NOT NULL CHECK (amount >= 0),
-    due_date DATE NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'overdue', 'cancelled')),
-    paid_at TIMESTAMPTZ,
-    payment_id UUID REFERENCES payments(payment_id) ON DELETE SET NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE(project_id, installment_number)
-);
-
-CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_project ON project_installment_schedules(project_id);
-CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_status ON project_installment_schedules(status);
-CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_due_date ON project_installment_schedules(due_date);
-
-
--- =============================================
--- 27B. FULFILLMENT REQUESTS
--- =============================================
--- Tracks fulfillment lifecycle for custom builds (pickup or delivery)
-
-CREATE TABLE IF NOT EXISTS fulfillment_requests (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    order_id UUID NOT NULL REFERENCES orders(order_id) ON DELETE CASCADE,
-    project_id UUID NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-    fulfillment_method VARCHAR(50) NOT NULL,
-    status VARCHAR(50) NOT NULL DEFAULT 'requested',
-    delivery_address_id UUID REFERENCES addresses(address_id) ON DELETE SET NULL,
-    delivery_address_snapshot JSONB,
-    pickup_appointment_id UUID REFERENCES appointments(appointment_id) ON DELETE SET NULL,
-    pickup_scheduled_at TIMESTAMPTZ,
-    notes TEXT,
-    admin_notes TEXT,
-    requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    started_at TIMESTAMPTZ,
-    ready_for_pickup_at TIMESTAMPTZ,
-    out_for_delivery_at TIMESTAMPTZ,
-    delivered_at TIMESTAMPTZ,
-    delivered_by_user_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
-    delivery_confirmation_method VARCHAR(20) CHECK (delivery_confirmation_method IS NULL OR delivery_confirmation_method IN ('customer', 'admin', 'staff')),
-    pickup_id_verified BOOLEAN NOT NULL DEFAULT FALSE,
-    pickup_id_verified_by UUID REFERENCES users(user_id) ON DELETE SET NULL,
-    pickup_id_verified_at TIMESTAMPTZ,
-    completed_at TIMESTAMPTZ,
-    cancelled_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_fulfillment_requests_order_id ON fulfillment_requests(order_id);
-CREATE INDEX IF NOT EXISTS idx_fulfillment_requests_project_id ON fulfillment_requests(project_id);
-CREATE INDEX IF NOT EXISTS idx_fulfillment_requests_user_id ON fulfillment_requests(user_id);
-CREATE INDEX IF NOT EXISTS idx_fulfillment_requests_status ON fulfillment_requests(status);
-
-
--- =============================================
--- 27C. DEFAULT WORKFLOW TEMPLATES
--- =============================================
--- Stores the editable default workflow for customization projects.
--- Changes here only affect future projects, not existing ones.
-
-CREATE TABLE default_workflow_steps (
-    step_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    step_name VARCHAR(200) NOT NULL,
-    sort_order SMALLINT NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_default_workflow_steps_sort ON default_workflow_steps(sort_order);
-
-CREATE TABLE default_workflow_tasks (
-    task_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    step_id UUID NOT NULL REFERENCES default_workflow_steps(step_id) ON DELETE CASCADE,
-    task_name VARCHAR(200) NOT NULL,
-    sort_order SMALLINT NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_default_workflow_tasks_step ON default_workflow_tasks(step_id);
-CREATE INDEX idx_default_workflow_tasks_sort ON default_workflow_tasks(step_id, sort_order);
-
--- Seed the default customization workflow
-INSERT INTO default_workflow_steps (step_id, step_name, sort_order) VALUES
-    (gen_random_uuid(), 'Body', 1),
-    (gen_random_uuid(), 'Neck', 2),
-    (gen_random_uuid(), 'Parts Fitting', 3),
-    (gen_random_uuid(), 'Paint Processing', 4),
-    (gen_random_uuid(), 'Assembly & Setup', 5),
-    (gen_random_uuid(), 'Release', 6);
-
--- Seed tasks for each step (using subqueries to get step_ids)
-DO $$
-DECLARE
-    v_body_id UUID;
-    v_neck_id UUID;
-    v_paint_id UUID;
-    v_release_id UUID;
+ALTER TYPE public.user_role_enum OWNER TO postgres;
+
+--
+-- TOC entry 316 (class 1255 OID 21306)
+-- Name: audit_logs_fill_search_text(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.audit_logs_fill_search_text() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
 BEGIN
-    SELECT step_id INTO v_body_id FROM default_workflow_steps WHERE step_name = 'Body';
-    SELECT step_id INTO v_neck_id FROM default_workflow_steps WHERE step_name = 'Neck';
-    SELECT step_id INTO v_paint_id FROM default_workflow_steps WHERE step_name = 'Paint Processing';
-    SELECT step_id INTO v_release_id FROM default_workflow_steps WHERE step_name = 'Release';
+  IF NEW.search_text IS NULL THEN
+    NEW.search_text := audit_search_text(
+      NEW.action, NEW.entity_type, NEW.entity_id,
+      NEW.previous_status, NEW.new_status,
+      NEW.context, NEW.changes, NEW.details
+    );
+  END IF;
+  RETURN NEW;
+END;
+$$;
 
-    -- Body tasks
-    INSERT INTO default_workflow_tasks (task_id, step_id, task_name, sort_order) VALUES
-        (gen_random_uuid(), v_body_id, 'Shape Carving', 1),
-        (gen_random_uuid(), v_body_id, 'Pickup Cavity', 2),
-        (gen_random_uuid(), v_body_id, 'Electronics Cavity', 3),
-        (gen_random_uuid(), v_body_id, 'Neck Pocket', 4);
+ALTER FUNCTION public.audit_logs_fill_search_text() OWNER TO postgres;
 
-    -- Neck tasks
-    INSERT INTO default_workflow_tasks (task_id, step_id, task_name, sort_order) VALUES
-        (gen_random_uuid(), v_neck_id, 'Shape Carving', 1),
-        (gen_random_uuid(), v_neck_id, 'Install Frets', 2),
-        (gen_random_uuid(), v_neck_id, 'Drill Tuning Peg Holes', 3);
+--
+-- TOC entry 356 (class 1255 OID 21291)
+-- Name: audit_search_text(text, text, uuid, text, text, jsonb, jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: postgres
+--
 
-    -- Paint Processing tasks
-    INSERT INTO default_workflow_tasks (task_id, step_id, task_name, sort_order) VALUES
-        (gen_random_uuid(), v_paint_id, 'Sanding', 1),
-        (gen_random_uuid(), v_paint_id, 'Primer', 2),
-        (gen_random_uuid(), v_paint_id, 'Base Color', 3),
-        (gen_random_uuid(), v_paint_id, 'Top Coat', 4),
-        (gen_random_uuid(), v_paint_id, 'Buffing', 5),
-        (gen_random_uuid(), v_paint_id, 'Polishing', 6);
-
-    -- Release tasks
-    INSERT INTO default_workflow_tasks (task_id, step_id, task_name, sort_order) VALUES
-        (gen_random_uuid(), v_release_id, 'Delivery', 1);
-END $$;
-
-
--- =============================================
--- 28. NOTIFICATIONS
--- =============================================
--- Consolidated notification table: also handles low_stock_alerts
--- via notification_type = 'low_stock' and related_entity_type = 'inventory'.
-
-CREATE TABLE notifications (
-    notification_id BIGSERIAL PRIMARY KEY,
-    user_id UUID NOT NULL,
-    title VARCHAR(200) NOT NULL,
-    message TEXT NOT NULL,
-    notification_type notification_type_enum NOT NULL DEFAULT 'system',
-    related_entity_id UUID,
-    related_entity_type VARCHAR(50),
-    is_read BOOLEAN NOT NULL DEFAULT FALSE,
-    read_at TIMESTAMPTZ,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    expires_at TIMESTAMPTZ,
-
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
-
-CREATE INDEX idx_notifications_user_id ON notifications(user_id);
-CREATE INDEX idx_notifications_is_read ON notifications(user_id, is_read);
-CREATE INDEX idx_notifications_created_at ON notifications(created_at DESC);
-CREATE INDEX idx_notifications_deleted_at ON notifications(deleted_at) WHERE deleted_at IS NOT NULL;
--- Composite index for unread notification queries
-CREATE INDEX idx_notifications_user_unread ON notifications(user_id, is_read, created_at DESC) WHERE is_read = FALSE;
-
-
--- =============================================
--- 29. OTP CODES
--- =============================================
-
-CREATE TABLE otp_codes (
-    otp_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL,
-    code VARCHAR(6) NOT NULL,
-    purpose VARCHAR(20) NOT NULL CHECK (purpose IN ('signup', 'login', 'password_reset', '2fa')),
-    expires_at TIMESTAMPTZ NOT NULL,
-    is_used BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    UNIQUE(user_id, purpose, code)
-);
-
-CREATE INDEX idx_otp_codes_user_id ON otp_codes(user_id);
-CREATE INDEX idx_otp_codes_expires_at ON otp_codes(expires_at);
-CREATE INDEX idx_otp_codes_is_used ON otp_codes(is_used);
-
-
--- =============================================
--- 30. OTP ATTEMPTS
--- =============================================
--- Kept as a separate table for OTP rate-limiting and brute-force detection.
--- Audit trail for OTP events is also captured in audit_logs.
-
-CREATE TABLE otp_attempts (
-    attempt_id BIGSERIAL PRIMARY KEY,
-    otp_id UUID NOT NULL,
-    ip_address INET,
-    user_agent TEXT,
-    success BOOLEAN NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (otp_id) REFERENCES otp_codes(otp_id) ON DELETE CASCADE
-);
-
-CREATE INDEX idx_otp_attempts_otp_id ON otp_attempts(otp_id);
-CREATE INDEX idx_otp_attempts_success ON otp_attempts(success);
-CREATE INDEX idx_otp_attempts_created_at ON otp_attempts(created_at DESC);
-
-
--- =============================================
--- 31. PASSWORD RESET TOKENS
--- =============================================
-
-CREATE TABLE password_reset_tokens (
-    token_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL,
-    token_hash TEXT NOT NULL UNIQUE,
-    expires_at TIMESTAMPTZ NOT NULL,
-    used_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
-
-CREATE INDEX idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
-CREATE INDEX idx_password_reset_tokens_expires_at ON password_reset_tokens(expires_at);
-
-
--- =============================================
--- 32. ROLES (RBAC)
--- =============================================
-
-CREATE TABLE roles (
-    role_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(50) NOT NULL UNIQUE,
-    description TEXT,
-    level INT NOT NULL DEFAULT 0 CHECK (level >= 0),
-    parent_role_id UUID,
-    is_system BOOLEAN NOT NULL DEFAULT FALSE,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (parent_role_id) REFERENCES roles(role_id) ON DELETE SET NULL
-);
-
-CREATE INDEX idx_roles_name ON roles(name);
-CREATE INDEX idx_roles_level ON roles(level);
-CREATE INDEX idx_roles_parent ON roles(parent_role_id);
-CREATE INDEX idx_roles_deleted_at ON roles(deleted_at) WHERE deleted_at IS NOT NULL;
-
-
--- =============================================
--- 33. PERMISSIONS (RBAC)
--- =============================================
-
-CREATE TABLE permissions (
-    permission_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(100) NOT NULL UNIQUE,
-    description TEXT,
-    category VARCHAR(50),
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_permissions_name ON permissions(name);
-CREATE INDEX idx_permissions_category ON permissions(category);
-CREATE INDEX idx_permissions_deleted_at ON permissions(deleted_at) WHERE deleted_at IS NOT NULL;
-
-
--- =============================================
--- 34. ROLE PERMISSIONS (RBAC)
--- =============================================
-
-CREATE TABLE role_permissions (
-    role_id UUID NOT NULL,
-    permission_id UUID NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (role_id) REFERENCES roles(role_id) ON DELETE CASCADE,
-    FOREIGN KEY (permission_id) REFERENCES permissions(permission_id) ON DELETE CASCADE,
-    UNIQUE(role_id, permission_id)
-);
-
-CREATE INDEX idx_role_permissions_role ON role_permissions(role_id);
-CREATE INDEX idx_role_permissions_permission ON role_permissions(permission_id);
-
-
--- =============================================
--- 35. USER ROLES (RBAC)
--- =============================================
-
-CREATE TABLE user_roles (
-    user_id UUID NOT NULL,
-    role_id UUID NOT NULL,
-    assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    assigned_by UUID,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    expires_at TIMESTAMPTZ,
-
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (role_id) REFERENCES roles(role_id) ON DELETE CASCADE,
-    FOREIGN KEY (assigned_by) REFERENCES users(user_id) ON DELETE SET NULL,
-    UNIQUE(user_id, role_id)
-);
-
-CREATE INDEX idx_user_roles_user ON user_roles(user_id);
-CREATE INDEX idx_user_roles_role ON user_roles(role_id);
-CREATE INDEX idx_user_roles_expires ON user_roles(expires_at);
-
-
--- =============================================
--- SEED DEFAULT ROLES
--- =============================================
-
-INSERT INTO roles (role_id, name, description, level, is_system) VALUES
-    (gen_random_uuid(), 'super_admin', 'Full system access with all permissions', 100, true),
-    (gen_random_uuid(), 'admin', 'Administrative access to manage system', 80, true),
-    (gen_random_uuid(), 'staff', 'Staff access for day-to-day operations', 50, true),
-    (gen_random_uuid(), 'customer', 'Regular customer access', 10, true)
-ON CONFLICT (name) DO NOTHING;
-
-
--- =============================================
--- SEED DEFAULT PERMISSIONS
--- =============================================
-
-INSERT INTO permissions (permission_id, name, description, category) VALUES
-    (gen_random_uuid(), 'manage_users', 'Create, update, delete users', 'users'),
-    (gen_random_uuid(), 'assign_roles', 'Assign roles to users', 'users'),
-    (gen_random_uuid(), 'view_users', 'View user information', 'users'),
-    (gen_random_uuid(), 'manage_products', 'Create, update, delete products', 'products'),
-    (gen_random_uuid(), 'view_products', 'View product catalog', 'products'),
-    (gen_random_uuid(), 'manage_orders', 'Create, update, delete orders', 'orders'),
-    (gen_random_uuid(), 'view_orders', 'View order details', 'orders'),
-    (gen_random_uuid(), 'cancel_orders', 'Cancel orders', 'orders'),
-    (gen_random_uuid(), 'manage_services', 'Create, update, delete services', 'services'),
-    (gen_random_uuid(), 'view_services', 'View service list', 'services'),
-    (gen_random_uuid(), 'manage_appointments', 'Create, update, delete appointments', 'appointments'),
-    (gen_random_uuid(), 'view_appointments', 'View appointment details', 'appointments'),
-    (gen_random_uuid(), 'approve_appointments', 'Approve or reject appointments', 'appointments'),
-    (gen_random_uuid(), 'manage_payments', 'View and manage payments', 'payments'),
-    (gen_random_uuid(), 'verify_payments', 'Verify payment submissions', 'payments'),
-    (gen_random_uuid(), 'refund_payments', 'Process payment refunds', 'payments'),
-    (gen_random_uuid(), 'manage_cart', 'Manage shopping cart', 'cart'),
-    (gen_random_uuid(), 'checkout', 'Process checkout and orders', 'cart'),
-    (gen_random_uuid(), 'manage_customizations', 'Create, update, delete customizations', 'customizations'),
-    (gen_random_uuid(), 'view_customizations', 'View customization designs', 'customizations'),
-    (gen_random_uuid(), 'view_reports', 'Access reports and analytics', 'reports'),
-    (gen_random_uuid(), 'export_data', 'Export data from system', 'reports'),
-    (gen_random_uuid(), 'manage_settings', 'Manage system settings', 'system'),
-    (gen_random_uuid(), 'manage_roles', 'Create and manage roles', 'system'),
-    (gen_random_uuid(), 'manage_permissions', 'Manage permissions', 'system')
-ON CONFLICT (name) DO NOTHING;
-
-
--- =============================================
--- SEED ROLE-PERMISSION ASSIGNMENTS
--- =============================================
-
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT r.role_id, p.permission_id
-FROM roles r
-CROSS JOIN permissions p
-WHERE r.name = 'super_admin'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT r.role_id, p.permission_id
-FROM roles r
-CROSS JOIN permissions p
-WHERE r.name = 'admin'
-  AND p.name NOT IN ('manage_roles', 'manage_permissions')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT r.role_id, p.permission_id
-FROM roles r
-CROSS JOIN permissions p
-WHERE r.name = 'staff'
-  AND p.name IN ('view_products', 'manage_orders', 'view_orders', 'cancel_orders',
-                 'view_services', 'manage_appointments', 'view_appointments', 'approve_appointments',
-                 'manage_payments', 'verify_payments', 'view_customizations')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT r.role_id, p.permission_id
-FROM roles r
-CROSS JOIN permissions p
-WHERE r.name = 'customer'
-  AND p.name IN ('view_products', 'view_services', 'view_appointments',
-                 'manage_cart', 'checkout', 'view_customizations', 'view_orders')
-ON CONFLICT DO NOTHING;
-
-
--- =============================================
--- MIGRATE EXISTING USERS TO RBAC
--- =============================================
-
-INSERT INTO user_roles (user_id, role_id)
-SELECT u.user_id, r.role_id
-FROM users u
-JOIN roles r ON r.name = CASE
-    WHEN u.role = 'super_admin' THEN 'super_admin'
-    WHEN u.role = 'admin' THEN 'admin'
-    WHEN u.role = 'staff' THEN 'staff'
-    ELSE 'customer'
-END
-WHERE u.role IS NOT NULL
-ON CONFLICT DO NOTHING;
-
-
--- =============================================
--- SEED DEFAULT ADMIN ACCOUNT
--- =============================================
--- Default admin credentials (CHANGE IN PRODUCTION):
---   Email:    admin@cosmoscraft.com
---   Password: Admin@123
-
-INSERT INTO users (email, password_hash, first_name, last_name, role, is_verified, is_active)
-SELECT 'admin@cosmoscraft.com',
-       '$2a$12$zHbXqVUUztevqzUsyOVbKevIEiL1mMwe4BDN1dL9nQHJ0RxSbqOom', -- bcrypt hash of 'Admin@123'
-       'Admin',
-       'User',
-       'admin'::user_role_enum,
-       TRUE,
-       TRUE
-WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@cosmoscraft.com');
-
--- Assign admin role to the default admin user
-INSERT INTO user_roles (user_id, role_id)
-SELECT u.user_id, r.role_id
-FROM users u
-JOIN roles r ON r.name = 'admin'
-WHERE u.email = 'admin@cosmoscraft.com'
-  AND NOT EXISTS (
-    SELECT 1 FROM user_roles ur
-    WHERE ur.user_id = u.user_id AND ur.role_id = r.role_id
+CREATE FUNCTION public.audit_search_text(p_action text, p_entity_type text, p_entity_id uuid, p_previous_status text, p_new_status text, p_context jsonb, p_changes jsonb, p_details jsonb) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  SELECT left(
+    btrim(
+      regexp_replace(
+        regexp_replace(
+          lower(concat_ws(' ',
+            coalesce(p_action, ''),
+            coalesce(p_entity_type, ''),
+            coalesce(p_entity_id::text, ''),
+            coalesce(p_previous_status, ''),
+            coalesce(p_new_status, ''),
+            coalesce(p_context::text, ''),
+            coalesce(p_changes::text, ''),
+            coalesce(p_details::text, '')
+          )),
+          '[{}[\]",:]+', ' ', 'g'
+        ),
+        '\s+', ' ', 'g'
+      )
+    ),
+    8000
   );
+$$;
 
+ALTER FUNCTION public.audit_search_text(p_action text, p_entity_type text, p_entity_id uuid, p_previous_status text, p_new_status text, p_context jsonb, p_changes jsonb, p_details jsonb) OWNER TO postgres;
 
--- =============================================
--- INVENTORY & POS MODULE (TABLES 36-40)
--- =============================================
+--
+-- TOC entry 341 (class 1255 OID 18893)
+-- Name: ensure_payment_for_verification_status(); Type: FUNCTION; Schema: public; Owner: postgres
+--
 
--- =============================================
--- ENUMS FOR INVENTORY & POS
--- =============================================
-
-CREATE TYPE inventory_change_type_enum AS ENUM ('stock_in', 'stock_out', 'adjustment', 'sale', 'return');
-CREATE TYPE pos_payment_method_enum AS ENUM ('cash', 'gcash', 'bank_transfer');
-CREATE TYPE pos_sale_status_enum AS ENUM ('pending', 'completed', 'cancelled', 'refunded');
-
-
--- =============================================
--- 36. INVENTORY LOGS
--- =============================================
--- Tracks all inventory movements with reference to source transactions
-
-CREATE TABLE inventory_logs (
-    log_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    product_id UUID NOT NULL,
-    change_type inventory_change_type_enum NOT NULL,
-    quantity INT NOT NULL CHECK (quantity != 0),
-    reference_type VARCHAR(50),
-    reference_id UUID,
-    notes TEXT,
-    created_by UUID,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE,
-    FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE SET NULL
-);
-
-CREATE INDEX idx_inventory_logs_product_id ON inventory_logs(product_id);
-CREATE INDEX idx_inventory_logs_reference ON inventory_logs(reference_type, reference_id);
-CREATE INDEX idx_inventory_logs_created_at ON inventory_logs(created_at DESC);
-CREATE INDEX idx_inventory_logs_change_type ON inventory_logs(change_type);
-
-
--- =============================================
--- 37. POS SALES (Point of Sale Transactions)
--- =============================================
--- Represents a walk-in customer transaction
-
-CREATE TABLE pos_sales (
-    sale_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    sale_number VARCHAR(30) NOT NULL UNIQUE,
-    staff_id UUID NOT NULL,
-    customer_name VARCHAR(150),
-    customer_phone VARCHAR(15),
-    subtotal NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (subtotal >= 0),
-    discount_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (discount_amount >= 0),
-    tax_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (tax_amount >= 0),
-    total_amount NUMERIC(12, 2) NOT NULL CHECK (total_amount >= 0),
-    payment_method pos_payment_method_enum NOT NULL,
-    payment_status payment_status_enum NOT NULL DEFAULT 'pending',
-    status pos_sale_status_enum NOT NULL DEFAULT 'pending',
-    reference_number VARCHAR(100),
-    notes TEXT,
-    completed_at TIMESTAMPTZ,
-    cancelled_at TIMESTAMPTZ,
-    cancelled_by UUID,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (staff_id) REFERENCES users(user_id) ON DELETE RESTRICT,
-    FOREIGN KEY (cancelled_by) REFERENCES users(user_id) ON DELETE SET NULL
-);
-
-CREATE INDEX idx_pos_sales_sale_number ON pos_sales(sale_number);
-CREATE INDEX idx_pos_sales_staff_id ON pos_sales(staff_id);
-CREATE INDEX idx_pos_sales_status ON pos_sales(status);
-CREATE INDEX idx_pos_sales_payment_status ON pos_sales(payment_status);
-CREATE INDEX idx_pos_sales_created_at ON pos_sales(created_at DESC);
-CREATE INDEX idx_pos_sales_completed_at ON pos_sales(completed_at DESC);
-CREATE INDEX idx_pos_sales_deleted_at ON pos_sales(deleted_at) WHERE deleted_at IS NOT NULL;
-
-
--- =============================================
--- 38. POS SALE ITEMS
--- =============================================
--- Individual line items in a POS sale
-
-CREATE TABLE pos_sale_items (
-    item_id BIGSERIAL PRIMARY KEY,
-    sale_id UUID NOT NULL,
-    product_id UUID,
-    service_id INT,
-    item_name VARCHAR(200) NOT NULL,
-    quantity INT NOT NULL CHECK (quantity > 0),
-    unit_price NUMERIC(12, 2) NOT NULL CHECK (unit_price >= 0),
-    discount_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (discount_amount >= 0),
-    subtotal NUMERIC(12, 2) NOT NULL CHECK (subtotal >= 0),
-    notes TEXT,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (sale_id) REFERENCES pos_sales(sale_id) ON DELETE CASCADE,
-    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE SET NULL,
-    FOREIGN KEY (service_id) REFERENCES services(service_id) ON DELETE SET NULL,
-    CHECK ((product_id IS NOT NULL) OR (service_id IS NOT NULL))
-);
-
-CREATE INDEX idx_pos_sale_items_sale_id ON pos_sale_items(sale_id);
-CREATE INDEX idx_pos_sale_items_product_id ON pos_sale_items(product_id);
-CREATE INDEX idx_pos_sale_items_service_id ON pos_sale_items(service_id);
-CREATE INDEX idx_pos_sale_items_deleted_at ON pos_sale_items(deleted_at) WHERE deleted_at IS NOT NULL;
-
-
--- =============================================
--- 39. POS PAYMENTS
--- =============================================
--- Payment tracking for POS sales
-
-CREATE TABLE pos_payments (
-    payment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    sale_id UUID NOT NULL UNIQUE,
-    amount NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
-    currency VARCHAR(3) NOT NULL DEFAULT 'PHP',
-    payment_method pos_payment_method_enum NOT NULL,
-    status payment_status_enum NOT NULL DEFAULT 'pending',
-    reference_number VARCHAR(100),
-    notes TEXT,
-    verified_at TIMESTAMPTZ,
-    verified_by UUID,
-    deleted_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (sale_id) REFERENCES pos_sales(sale_id) ON DELETE CASCADE,
-    FOREIGN KEY (verified_by) REFERENCES users(user_id) ON DELETE SET NULL
-);
-
-CREATE INDEX idx_pos_payments_sale_id ON pos_payments(sale_id);
-CREATE INDEX idx_pos_payments_status ON pos_payments(status);
-CREATE INDEX idx_pos_payments_created_at ON pos_payments(created_at DESC);
-CREATE INDEX idx_pos_payments_deleted_at ON pos_payments(deleted_at) WHERE deleted_at IS NOT NULL;
-
-
--- =============================================
--- 40. LOW STOCK ALERTS
--- =============================================
--- Low stock alerts are now handled via the notifications table
--- with notification_type = 'low_stock'. This table is kept for
--- backward compatibility but new alerts should use notifications.
--- TODO: Migrate existing data and remove this table in a future release.
-
-CREATE TABLE low_stock_alerts (
-    alert_id BIGSERIAL PRIMARY KEY,
-    product_id UUID NOT NULL,
-    current_stock INT NOT NULL,
-    threshold INT NOT NULL,
-    is_read BOOLEAN NOT NULL DEFAULT FALSE,
-    read_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE
-);
-
-CREATE INDEX idx_low_stock_alerts_product_id ON low_stock_alerts(product_id);
-CREATE INDEX idx_low_stock_alerts_is_read ON low_stock_alerts(is_read);
-CREATE INDEX idx_low_stock_alerts_created_at ON low_stock_alerts(created_at DESC);
-
-
--- =============================================
--- ADD INVENTORY/POS PERMISSIONS TO RBAC
--- =============================================
-
-INSERT INTO permissions (permission_id, name, description, category) VALUES
-    (gen_random_uuid(), 'manage_inventory', 'Create, update, manage product inventory', 'inventory'),
-    (gen_random_uuid(), 'view_inventory', 'View inventory and stock levels', 'inventory'),
-    (gen_random_uuid(), 'adjust_stock', 'Add/remove stock and adjust inventory', 'inventory'),
-    (gen_random_uuid(), 'view_inventory_logs', 'View inventory transaction logs', 'inventory'),
-    (gen_random_uuid(), 'manage_pos', 'Create, manage POS sales', 'pos'),
-    (gen_random_uuid(), 'view_pos', 'View POS sales and transactions', 'pos'),
-    (gen_random_uuid(), 'void_pos_sale', 'Void/cancel POS transactions', 'pos'),
-    (gen_random_uuid(), 'verify_pos_payment', 'Verify and authorize POS payments', 'pos')
-ON CONFLICT (name) DO NOTHING;
-
-
--- =============================================
--- ASSIGN INVENTORY/POS PERMISSIONS TO ROLES
--- =============================================
-
--- Staff: Limited inventory view, full POS access, verify payments
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT r.role_id, p.permission_id
-FROM roles r
-CROSS JOIN permissions p
-WHERE r.name = 'staff'
-  AND p.name IN ('view_inventory', 'adjust_stock', 'manage_pos', 'view_pos', 'verify_pos_payment')
-ON CONFLICT DO NOTHING;
-
--- Admin: Full inventory and POS management
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT r.role_id, p.permission_id
-FROM roles r
-CROSS JOIN permissions p
-WHERE r.name = 'admin'
-  AND p.name IN ('manage_inventory', 'view_inventory', 'adjust_stock', 'view_inventory_logs',
-                 'manage_pos', 'view_pos', 'void_pos_sale', 'verify_pos_payment')
-ON CONFLICT DO NOTHING;
-
--- Super Admin: All permissions (already has all)
-
--- =============================================
--- SCHEMA HARDENING / PRODUCTION CONVENTIONS
--- =============================================
-
--- Keep updated_at consistent across mutable tables.
-CREATE OR REPLACE FUNCTION set_updated_at()
-RETURNS TRIGGER AS $$
+CREATE FUNCTION public.ensure_payment_for_verification_status() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
 BEGIN
-    NEW.updated_at = now();
+    IF NEW.status = 'pending'::payment_status_enum AND (
+        NULLIF(BTRIM(COALESCE(NEW.reference_number, '')), '') IS NOT NULL OR
+        NULLIF(BTRIM(COALESCE(NEW.proof_url, '')), '') IS NOT NULL
+    ) THEN
+        NEW.status := 'for_verification'::payment_status_enum;
+    END IF;
+
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
-DROP TRIGGER IF EXISTS trg_users_set_updated_at ON users;
-CREATE TRIGGER trg_users_set_updated_at
-BEFORE UPDATE ON users
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
+ALTER FUNCTION public.ensure_payment_for_verification_status() OWNER TO postgres;
 
-DROP TRIGGER IF EXISTS trg_user_identities_set_updated_at ON user_identities;
-CREATE TRIGGER trg_user_identities_set_updated_at
-BEFORE UPDATE ON user_identities
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
+--
+-- TOC entry 380 (class 1255 OID 18894)
+-- Name: normalize_guitar_builder_part(); Type: FUNCTION; Schema: public; Owner: postgres
+--
 
-DROP TRIGGER IF EXISTS trg_addresses_set_updated_at ON addresses;
-CREATE TRIGGER trg_addresses_set_updated_at
-BEFORE UPDATE ON addresses
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_categories_set_updated_at ON categories;
-CREATE TRIGGER trg_categories_set_updated_at
-BEFORE UPDATE ON categories
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_products_set_updated_at ON products;
-CREATE TRIGGER trg_products_set_updated_at
-BEFORE UPDATE ON products
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_inventory_set_updated_at ON inventory;
-CREATE TRIGGER trg_inventory_set_updated_at
-BEFORE UPDATE ON inventory
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_product_images_set_updated_at ON product_images;
-CREATE TRIGGER trg_product_images_set_updated_at
-BEFORE UPDATE ON product_images
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_carts_set_updated_at ON carts;
-CREATE TRIGGER trg_carts_set_updated_at
-BEFORE UPDATE ON carts
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_cart_items_set_updated_at ON cart_items;
-CREATE TRIGGER trg_cart_items_set_updated_at
-BEFORE UPDATE ON cart_items
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_customizations_set_updated_at ON customizations;
-CREATE TRIGGER trg_customizations_set_updated_at
-BEFORE UPDATE ON customizations
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_customization_parts_set_updated_at ON customization_parts;
-CREATE TRIGGER trg_customization_parts_set_updated_at
-BEFORE UPDATE ON customization_parts
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_orders_set_updated_at ON orders;
-CREATE TRIGGER trg_orders_set_updated_at
-BEFORE UPDATE ON orders
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_order_items_set_updated_at ON order_items;
-CREATE TRIGGER trg_order_items_set_updated_at
-BEFORE UPDATE ON order_items
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_payments_set_updated_at ON payments;
-CREATE TRIGGER trg_payments_set_updated_at
-BEFORE UPDATE ON payments
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_payment_config_set_updated_at ON payment_config;
-CREATE TRIGGER trg_payment_config_set_updated_at
-BEFORE UPDATE ON payment_config
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_services_set_updated_at ON services;
-CREATE TRIGGER trg_services_set_updated_at
-BEFORE UPDATE ON services
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_appointments_set_updated_at ON appointments;
-CREATE TRIGGER trg_appointments_set_updated_at
-BEFORE UPDATE ON appointments
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_unavailable_dates_set_updated_at ON unavailable_dates;
-CREATE TRIGGER trg_unavailable_dates_set_updated_at
-BEFORE UPDATE ON unavailable_dates
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_projects_set_updated_at ON projects;
-CREATE TRIGGER trg_projects_set_updated_at
-BEFORE UPDATE ON projects
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_project_tasks_set_updated_at ON project_tasks;
-CREATE TRIGGER trg_project_tasks_set_updated_at
-BEFORE UPDATE ON project_tasks
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_builder_guitar_types_set_updated_at ON builder_guitar_types;
-CREATE TRIGGER trg_builder_guitar_types_set_updated_at
-BEFORE UPDATE ON builder_guitar_types
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_builder_part_categories_set_updated_at ON builder_part_categories;
-CREATE TRIGGER trg_builder_part_categories_set_updated_at
-BEFORE UPDATE ON builder_part_categories
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_builder_model_images_set_updated_at ON builder_model_images;
-CREATE TRIGGER trg_builder_model_images_set_updated_at
-BEFORE UPDATE ON builder_model_images
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_guitar_builder_parts_set_updated_at ON guitar_builder_parts;
-CREATE TRIGGER trg_guitar_builder_parts_set_updated_at
-BEFORE UPDATE ON guitar_builder_parts
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_project_milestones_set_updated_at ON project_milestones;
-CREATE TRIGGER trg_project_milestones_set_updated_at
-BEFORE UPDATE ON project_milestones
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_project_subtasks_set_updated_at ON project_subtasks;
-CREATE TRIGGER trg_project_subtasks_set_updated_at
-BEFORE UPDATE ON project_subtasks
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_default_workflow_steps_set_updated_at ON default_workflow_steps;
-CREATE TRIGGER trg_default_workflow_steps_set_updated_at
-BEFORE UPDATE ON default_workflow_steps
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_default_workflow_tasks_set_updated_at ON default_workflow_tasks;
-CREATE TRIGGER trg_default_workflow_tasks_set_updated_at
-BEFORE UPDATE ON default_workflow_tasks
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_roles_set_updated_at ON roles;
-CREATE TRIGGER trg_roles_set_updated_at
-BEFORE UPDATE ON roles
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_permissions_set_updated_at ON permissions;
-CREATE TRIGGER trg_permissions_set_updated_at
-BEFORE UPDATE ON permissions
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_pos_sales_set_updated_at ON pos_sales;
-CREATE TRIGGER trg_pos_sales_set_updated_at
-BEFORE UPDATE ON pos_sales
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_pos_sale_items_set_updated_at ON pos_sale_items;
-CREATE TRIGGER trg_pos_sale_items_set_updated_at
-BEFORE UPDATE ON pos_sale_items
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
-DROP TRIGGER IF EXISTS trg_pos_payments_set_updated_at ON pos_payments;
-CREATE TRIGGER trg_pos_payments_set_updated_at
-BEFORE UPDATE ON pos_payments
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
-
--- Backward compatibility: keep supporting inserts that only send type_mapping.
-CREATE OR REPLACE FUNCTION normalize_guitar_builder_part()
-RETURNS TRIGGER AS $$
+CREATE FUNCTION public.normalize_guitar_builder_part() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
 BEGIN
     NEW.guitar_type = lower(NEW.guitar_type);
     NEW.part_category = lower(NEW.part_category);
+    NEW.model_key = NULLIF(lower(btrim(NEW.model_key)), '');
 
     IF NEW.type_mapping IS NOT NULL AND NEW.type_mapping <> '' THEN
         IF NEW.part_category = 'misc' AND NEW.type_mapping IN (
@@ -1951,85 +365,39 @@ BEGIN
     END IF;
 
     IF NEW.folder_key IS NULL OR btrim(NEW.folder_key) = '' THEN
-        NEW.folder_key = lower(NEW.guitar_type::text || '/' || NEW.part_category::text);
+        NEW.folder_key = lower(NEW.guitar_type::text || '/' || COALESCE(NEW.model_key || '/', '') || NEW.part_category::text);
     END IF;
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
-DROP TRIGGER IF EXISTS trg_guitar_builder_parts_normalize ON guitar_builder_parts;
-CREATE TRIGGER trg_guitar_builder_parts_normalize
-BEFORE INSERT OR UPDATE ON guitar_builder_parts
-FOR EACH ROW
-EXECUTE FUNCTION normalize_guitar_builder_part();
+ALTER FUNCTION public.normalize_guitar_builder_part() OWNER TO postgres;
 
--- One default shipping address per user.
-CREATE UNIQUE INDEX IF NOT EXISTS uq_addresses_one_default_per_user
-ON addresses(user_id)
-WHERE is_default;
+--
+-- TOC entry 312 (class 1255 OID 18895)
+-- Name: set_updated_at(); Type: FUNCTION; Schema: public; Owner: postgres
+--
 
--- One primary image per product.
-CREATE UNIQUE INDEX IF NOT EXISTS uq_product_images_one_primary_per_product
-ON product_images(product_id)
-WHERE is_primary;
-
--- Currency should be ISO-like uppercase 3-letter code.
-DO $$
+CREATE FUNCTION public.set_updated_at() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
 BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'chk_payments_currency_iso'
-    ) THEN
-        ALTER TABLE payments
-        ADD CONSTRAINT chk_payments_currency_iso
-        CHECK (currency ~ '^[A-Z]{3}$');
-    END IF;
-END $$;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'chk_pos_payments_currency_iso'
-    ) THEN
-        ALTER TABLE pos_payments
-        ADD CONSTRAINT chk_pos_payments_currency_iso
-        CHECK (currency ~ '^[A-Z]{3}$');
-    END IF;
-END $$;
-
-
--- =============================================
--- PAYMENT VERIFICATION WORKFLOW TABLES
--- =============================================
-
--- Payment Audit Log for tracking admin actions
--- Uses the consolidated audit_logs table instead of a separate table.
--- See audit_logs table (section 4) with entity_type = 'payment'.
-
--- =============================================
--- PAYMENT WORKFLOW TRIGGERS
--- =============================================
-
-CREATE OR REPLACE FUNCTION ensure_payment_for_verification_status()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF NEW.status = 'pending'::payment_status_enum AND (
-        NULLIF(BTRIM(COALESCE(NEW.reference_number, '')), '') IS NOT NULL OR
-        NULLIF(BTRIM(COALESCE(NEW.proof_url, '')), '') IS NOT NULL
-    ) THEN
-        NEW.status := 'for_verification'::payment_status_enum;
-    END IF;
-
+    NEW.updated_at = now();
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
-CREATE OR REPLACE FUNCTION sync_order_payment_status_from_payment()
-RETURNS TRIGGER AS $$
+ALTER FUNCTION public.set_updated_at() OWNER TO postgres;
+
+--
+-- TOC entry 347 (class 1255 OID 18896)
+-- Name: sync_order_payment_status_from_payment(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.sync_order_payment_status_from_payment() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
 DECLARE
     next_order_status order_payment_status_enum;
     next_reference_number TEXT;
@@ -2070,16 +438,6300 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
-DROP TRIGGER IF EXISTS trg_payments_force_for_verification ON payments;
-CREATE TRIGGER trg_payments_force_for_verification
-BEFORE INSERT OR UPDATE OF status, reference_number, proof_url ON payments
-FOR EACH ROW
-EXECUTE FUNCTION ensure_payment_for_verification_status();
+ALTER FUNCTION public.sync_order_payment_status_from_payment() OWNER TO postgres;
 
-DROP TRIGGER IF EXISTS trg_sync_orders_from_payments ON payments;
-CREATE TRIGGER trg_sync_orders_from_payments
-AFTER INSERT OR UPDATE OF status, reference_number, proof_url ON payments
-FOR EACH ROW
-EXECUTE FUNCTION sync_order_payment_status_from_payment();
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- TOC entry 221 (class 1259 OID 18897)
+-- Name: addresses; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.addresses (
+    address_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    label character varying(50) DEFAULT 'Home'::character varying NOT NULL,
+    line1 character varying(150) NOT NULL,
+    line2 character varying(150),
+    city character varying(80) NOT NULL,
+    province character varying(80),
+    postal_code character varying(20) NOT NULL,
+    country character(2) NOT NULL,
+    is_default boolean DEFAULT false NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    barangay character varying(80) DEFAULT ''::character varying NOT NULL,
+    CONSTRAINT addresses_country_check CHECK ((country ~ '^[A-Z]{2}$'::text))
+);
+
+ALTER TABLE public.addresses OWNER TO postgres;
+
+--
+-- TOC entry 296 (class 1259 OID 21128)
+-- Name: appointment_refunds; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.appointment_refunds (
+    refund_request_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    appointment_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    amount_requested numeric(12,2) NOT NULL,
+    original_payment jsonb NOT NULL,
+    refund_method character varying(100) NOT NULL,
+    account_holder character varying(200),
+    account_number character varying(100),
+    reason text,
+    refund_reference character varying(255),
+    proof_url text,
+    admin_notes text,
+    reviewed_by uuid,
+    reviewed_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    destination_type text DEFAULT 'account'::text NOT NULL,
+    qr_code_url text,
+    CONSTRAINT appointment_refunds_amount_requested_check CHECK ((amount_requested > (0)::numeric)),
+    CONSTRAINT appointment_refunds_destination_check CHECK (((destination_type = 'original'::text) OR ((destination_type = 'account'::text) AND (account_holder IS NOT NULL) AND (account_number IS NOT NULL)) OR ((destination_type = 'qr'::text) AND (qr_code_url ~~ 'https://%'::text) AND (account_holder IS NULL) AND (account_number IS NULL)))),
+    CONSTRAINT appointment_refunds_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'refunded'::text, 'rejected'::text])))
+);
+
+ALTER TABLE public.appointment_refunds OWNER TO postgres;
+
+--
+-- TOC entry 222 (class 1259 OID 18921)
+-- Name: appointments; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.appointments (
+    appointment_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid,
+    appointment_type character varying(50) DEFAULT 'service_in_shop'::character varying NOT NULL,
+    order_id uuid,
+    services jsonb DEFAULT '[]'::jsonb,
+    location_id character varying(50),
+    guitar_details jsonb,
+    customer_name character varying(100) NOT NULL,
+    customer_email character varying(100) NOT NULL,
+    customer_phone character varying(20) NOT NULL,
+    scheduled_at timestamp with time zone NOT NULL,
+    estimated_end_at timestamp with time zone,
+    status public.appointment_status_enum DEFAULT 'pending'::public.appointment_status_enum NOT NULL,
+    payment_status character varying(50) DEFAULT 'pending'::character varying NOT NULL,
+    payment_method character varying(50),
+    payment_proof_url text,
+    notes text,
+    confirmation_notes text,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    reference_code character varying(20),
+    reason text,
+    rescheduled_from uuid,
+    approved_payment_amount numeric(12,2),
+    CONSTRAINT appointments_check CHECK (((estimated_end_at IS NULL) OR (estimated_end_at > scheduled_at)))
+);
+
+ALTER TABLE public.appointments OWNER TO postgres;
+
+--
+-- TOC entry 223 (class 1259 OID 18944)
+-- Name: audit_logs; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.audit_logs (
+    audit_id bigint NOT NULL,
+    user_id uuid,
+    entity_type character varying(50) NOT NULL,
+    entity_id uuid,
+    action character varying(50) NOT NULL,
+    previous_status character varying(50),
+    new_status character varying(50),
+    details jsonb DEFAULT '{}'::jsonb,
+    ip_address inet,
+    user_agent text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    context jsonb DEFAULT '{}'::jsonb NOT NULL,
+    changes jsonb DEFAULT '{}'::jsonb NOT NULL,
+    search_text text
+);
+
+ALTER TABLE public.audit_logs OWNER TO postgres;
+
+--
+-- TOC entry 4903 (class 0 OID 0)
+-- Dependencies: 223
+-- Name: COLUMN audit_logs.context; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN public.audit_logs.context IS 'Normalised business context captured when the event occurred (order/project/appointment/payment/customer/stock identifiers).';
+
+--
+-- TOC entry 4904 (class 0 OID 0)
+-- Dependencies: 223
+-- Name: COLUMN audit_logs.changes; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN public.audit_logs.changes IS 'Field level before/after values, e.g. {"status":{"from":"pending","to":"verified"}}.';
+
+--
+-- TOC entry 4905 (class 0 OID 0)
+-- Dependencies: 223
+-- Name: COLUMN audit_logs.search_text; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN public.audit_logs.search_text IS 'Flattened text used by server-side audit search.';
+
+--
+-- TOC entry 224 (class 1259 OID 18955)
+-- Name: audit_logs_audit_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.audit_logs_audit_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.audit_logs_audit_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 4906 (class 0 OID 0)
+-- Dependencies: 224
+-- Name: audit_logs_audit_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.audit_logs_audit_id_seq OWNED BY public.audit_logs.audit_id;
+
+--
+-- TOC entry 298 (class 1259 OID 21521)
+-- Name: branch_locations; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.branch_locations (
+    branch_id text NOT NULL,
+    name text NOT NULL,
+    address text NOT NULL,
+    hours text NOT NULL,
+    address_details jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.branch_locations OWNER TO postgres;
+
+--
+-- TOC entry 297 (class 1259 OID 21418)
+-- Name: branch_settings; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.branch_settings (
+    id integer DEFAULT 1 NOT NULL,
+    branch_id text NOT NULL,
+    name text NOT NULL,
+    address text NOT NULL,
+    hours text NOT NULL,
+    address_details jsonb,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT branch_settings_id_check CHECK ((id = 1))
+);
+
+ALTER TABLE public.branch_settings OWNER TO postgres;
+
+--
+-- TOC entry 225 (class 1259 OID 18956)
+-- Name: builder_guitar_types; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.builder_guitar_types (
+    guitar_type_code character varying(50) NOT NULL,
+    display_name character varying(100) NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    sort_order smallint DEFAULT 0 NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT builder_guitar_types_sort_order_check CHECK ((sort_order >= 0))
+);
+
+ALTER TABLE public.builder_guitar_types OWNER TO postgres;
+
+--
+-- TOC entry 226 (class 1259 OID 18970)
+-- Name: builder_model_images; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.builder_model_images (
+    model_image_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    guitar_type_code character varying(50) NOT NULL,
+    model_key character varying(100) NOT NULL,
+    display_name character varying(120) NOT NULL,
+    image_url text,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.builder_model_images OWNER TO postgres;
+
+--
+-- TOC entry 227 (class 1259 OID 18984)
+-- Name: builder_part_categories; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.builder_part_categories (
+    part_category_code character varying(100) NOT NULL,
+    display_name character varying(120) NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    sort_order smallint DEFAULT 0 NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT builder_part_categories_sort_order_check CHECK ((sort_order >= 0))
+);
+
+ALTER TABLE public.builder_part_categories OWNER TO postgres;
+
+--
+-- TOC entry 228 (class 1259 OID 18998)
+-- Name: builder_type_categories; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.builder_type_categories (
+    guitar_type_code character varying(50) NOT NULL,
+    part_category_code character varying(100) NOT NULL,
+    is_required boolean DEFAULT false NOT NULL,
+    sort_order smallint DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT builder_type_categories_sort_order_check CHECK ((sort_order >= 0))
+);
+
+ALTER TABLE public.builder_type_categories OWNER TO postgres;
+
+--
+-- TOC entry 229 (class 1259 OID 19010)
+-- Name: cart_items; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.cart_items (
+    cart_item_id bigint NOT NULL,
+    cart_id uuid NOT NULL,
+    product_id uuid,
+    customization_id uuid,
+    quantity integer NOT NULL,
+    unit_price numeric(12,2) NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT cart_items_check CHECK (((product_id IS NOT NULL) OR (customization_id IS NOT NULL))),
+    CONSTRAINT cart_items_quantity_check CHECK ((quantity > 0)),
+    CONSTRAINT cart_items_unit_price_check CHECK ((unit_price >= (0)::numeric))
+);
+
+ALTER TABLE public.cart_items OWNER TO postgres;
+
+--
+-- TOC entry 230 (class 1259 OID 19024)
+-- Name: cart_items_cart_item_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.cart_items_cart_item_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.cart_items_cart_item_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 4907 (class 0 OID 0)
+-- Dependencies: 230
+-- Name: cart_items_cart_item_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.cart_items_cart_item_id_seq OWNED BY public.cart_items.cart_item_id;
+
+--
+-- TOC entry 231 (class 1259 OID 19025)
+-- Name: carts; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.carts (
+    cart_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    subtotal numeric(12,2) DEFAULT 0 NOT NULL,
+    tax_amount numeric(12,2) DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT carts_subtotal_check CHECK ((subtotal >= (0)::numeric)),
+    CONSTRAINT carts_tax_amount_check CHECK ((tax_amount >= (0)::numeric))
+);
+
+ALTER TABLE public.carts OWNER TO postgres;
+
+--
+-- TOC entry 232 (class 1259 OID 19041)
+-- Name: categories; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.categories (
+    category_id integer NOT NULL,
+    name character varying(100) NOT NULL,
+    description text,
+    sort_order smallint DEFAULT 0 NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT categories_sort_order_check CHECK ((sort_order >= 0))
+);
+
+ALTER TABLE public.categories OWNER TO postgres;
+
+--
+-- TOC entry 233 (class 1259 OID 19057)
+-- Name: categories_category_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.categories_category_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.categories_category_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 4908 (class 0 OID 0)
+-- Dependencies: 233
+-- Name: categories_category_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.categories_category_id_seq OWNED BY public.categories.category_id;
+
+--
+-- TOC entry 234 (class 1259 OID 19058)
+-- Name: category_parent_links_backup; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.category_parent_links_backup (
+    category_id integer NOT NULL,
+    legacy_parent_category_id integer NOT NULL
+);
+
+ALTER TABLE public.category_parent_links_backup OWNER TO postgres;
+
+--
+-- TOC entry 235 (class 1259 OID 19063)
+-- Name: contact_settings; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.contact_settings (
+    id integer DEFAULT 1 NOT NULL,
+    email character varying(254) DEFAULT 'cosmosguitars@gmail.com'::character varying NOT NULL,
+    phone character varying(64) DEFAULT '+095213121581'::character varying NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.contact_settings OWNER TO postgres;
+
+--
+-- TOC entry 236 (class 1259 OID 19074)
+-- Name: current_build_claims; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.current_build_claims (
+    claim_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    project_id uuid NOT NULL,
+    customer_id uuid NOT NULL,
+    order_id uuid NOT NULL,
+    progress_at_cancellation smallint DEFAULT 0 NOT NULL,
+    current_build_stage character varying(255),
+    build_state_snapshot jsonb,
+    amount_paid numeric(12,2) DEFAULT 0 NOT NULL,
+    estimated_build_value numeric(12,2) DEFAULT 0 NOT NULL,
+    claim_method character varying(30),
+    claim_status character varying(50) DEFAULT 'pending_customer_selection'::character varying NOT NULL,
+    delivery_address jsonb,
+    recipient_name character varying(200),
+    recipient_contact character varying(50),
+    delivery_instructions text,
+    courier_service character varying(100),
+    courier_reference character varying(100),
+    delivery_fee numeric(12,2),
+    estimated_delivery_date date,
+    pickup_location text,
+    pickup_instructions text,
+    pickup_schedule timestamp with time zone,
+    pickup_contact character varying(200),
+    admin_confirmed_by uuid,
+    admin_confirmed_at timestamp with time zone,
+    admin_confirmation_notes text,
+    current_state_photos jsonb DEFAULT '[]'::jsonb,
+    received_at timestamp with time zone,
+    received_confirmed_by uuid,
+    pickup_staff_id uuid,
+    pickup_proof_photo text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone,
+    CONSTRAINT current_build_claims_claim_method_check CHECK (((claim_method IS NULL) OR ((claim_method)::text = ANY (ARRAY[('courier'::character varying)::text, ('pickup'::character varying)::text])))),
+    CONSTRAINT current_build_claims_claim_status_check CHECK (((claim_status)::text = ANY (ARRAY[('not_required'::character varying)::text, ('pending_customer_selection'::character varying)::text, ('pending_admin_confirmation'::character varying)::text, ('ready_for_delivery'::character varying)::text, ('courier_arranged'::character varying)::text, ('out_for_delivery'::character varying)::text, ('ready_for_pickup'::character varying)::text, ('picked_up'::character varying)::text, ('delivered'::character varying)::text, ('received'::character varying)::text])))
+);
+
+ALTER TABLE public.current_build_claims OWNER TO postgres;
+
+--
+-- TOC entry 237 (class 1259 OID 19099)
+-- Name: customization_feedback; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.customization_feedback (
+    feedback_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    order_id uuid NOT NULL,
+    project_id uuid,
+    user_id uuid NOT NULL,
+    overall_rating smallint NOT NULL,
+    build_quality_rating smallint NOT NULL,
+    communication_rating smallint NOT NULL,
+    accuracy_rating smallint NOT NULL,
+    comment text NOT NULL,
+    images jsonb DEFAULT '[]'::jsonb,
+    status character varying(30) DEFAULT 'approved'::character varying NOT NULL,
+    admin_notes text,
+    moderated_by uuid,
+    moderated_at timestamp with time zone,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT customization_feedback_accuracy_rating_check CHECK (((accuracy_rating >= 1) AND (accuracy_rating <= 5))),
+    CONSTRAINT customization_feedback_build_quality_rating_check CHECK (((build_quality_rating >= 1) AND (build_quality_rating <= 5))),
+    CONSTRAINT customization_feedback_communication_rating_check CHECK (((communication_rating >= 1) AND (communication_rating <= 5))),
+    CONSTRAINT customization_feedback_overall_rating_check CHECK (((overall_rating >= 1) AND (overall_rating <= 5))),
+    CONSTRAINT customization_feedback_status_check CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('approved'::character varying)::text, ('rejected'::character varying)::text, ('flagged'::character varying)::text])))
+);
+
+ALTER TABLE public.customization_feedback OWNER TO postgres;
+
+--
+-- TOC entry 238 (class 1259 OID 19125)
+-- Name: customization_parts; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.customization_parts (
+    part_id bigint NOT NULL,
+    customization_id uuid NOT NULL,
+    product_id uuid,
+    part_name character varying(150) NOT NULL,
+    quantity smallint NOT NULL,
+    price numeric(12,2) NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT customization_parts_price_check CHECK ((price >= (0)::numeric)),
+    CONSTRAINT customization_parts_quantity_check CHECK ((quantity > 0))
+);
+
+ALTER TABLE public.customization_parts OWNER TO postgres;
+
+--
+-- TOC entry 239 (class 1259 OID 19139)
+-- Name: customization_parts_part_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.customization_parts_part_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.customization_parts_part_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 4909 (class 0 OID 0)
+-- Dependencies: 239
+-- Name: customization_parts_part_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.customization_parts_part_id_seq OWNED BY public.customization_parts.part_id;
+
+--
+-- TOC entry 240 (class 1259 OID 19140)
+-- Name: customizations; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.customizations (
+    customization_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid,
+    name character varying(150),
+    guitar_type public.guitar_type_enum NOT NULL,
+    body_wood character varying(100),
+    neck_wood character varying(100),
+    fingerboard_wood character varying(100),
+    bridge_type character varying(50),
+    pickups character varying(200),
+    color character varying(100),
+    finish_type character varying(50),
+    total_price numeric(12,2) NOT NULL,
+    is_saved boolean DEFAULT true NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    config_json jsonb DEFAULT '{}'::jsonb,
+    stickers jsonb DEFAULT '[]'::jsonb,
+    preview_image text,
+    body_model character varying(80),
+    is_locked boolean DEFAULT false NOT NULL,
+    CONSTRAINT customizations_total_price_check CHECK ((total_price >= (0)::numeric))
+);
+
+ALTER TABLE public.customizations OWNER TO postgres;
+
+--
+-- TOC entry 241 (class 1259 OID 19158)
+-- Name: default_workflow_steps; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.default_workflow_steps (
+    step_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    step_name character varying(200) NOT NULL,
+    sort_order smallint DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT default_workflow_steps_sort_order_check CHECK ((sort_order >= 0))
+);
+
+ALTER TABLE public.default_workflow_steps OWNER TO postgres;
+
+--
+-- TOC entry 242 (class 1259 OID 19171)
+-- Name: default_workflow_tasks; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.default_workflow_tasks (
+    task_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    step_id uuid NOT NULL,
+    task_name character varying(200) NOT NULL,
+    sort_order smallint DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT default_workflow_tasks_sort_order_check CHECK ((sort_order >= 0))
+);
+
+ALTER TABLE public.default_workflow_tasks OWNER TO postgres;
+
+--
+-- TOC entry 243 (class 1259 OID 19185)
+-- Name: discount_codes; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.discount_codes (
+    discount_code_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    code character varying(40) NOT NULL,
+    discount_type character varying(12) NOT NULL,
+    discount_value numeric(12,2) NOT NULL,
+    expires_at date NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT discount_codes_discount_type_check CHECK (((discount_type)::text = ANY (ARRAY[('percentage'::character varying)::text, ('fixed'::character varying)::text]))),
+    CONSTRAINT discount_codes_discount_value_check CHECK ((discount_value > (0)::numeric))
+);
+
+ALTER TABLE public.discount_codes OWNER TO postgres;
+
+--
+-- TOC entry 244 (class 1259 OID 19202)
+-- Name: fulfillment_requests; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.fulfillment_requests (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    order_id uuid NOT NULL,
+    project_id uuid,
+    user_id uuid NOT NULL,
+    fulfillment_method character varying(50) NOT NULL,
+    status character varying(50) DEFAULT 'requested'::character varying NOT NULL,
+    delivery_address_id uuid,
+    delivery_address_snapshot jsonb,
+    pickup_appointment_id uuid,
+    pickup_scheduled_at timestamp with time zone,
+    notes text,
+    admin_notes text,
+    requested_at timestamp with time zone DEFAULT now() NOT NULL,
+    started_at timestamp with time zone,
+    ready_for_pickup_at timestamp with time zone,
+    out_for_delivery_at timestamp with time zone,
+    completed_at timestamp with time zone,
+    cancelled_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    delivered_at timestamp with time zone,
+    delivered_by_user_id uuid,
+    delivery_confirmation_method character varying(20),
+    pickup_id_verified boolean DEFAULT false NOT NULL,
+    pickup_id_verified_by uuid,
+    pickup_id_verified_at timestamp with time zone,
+    CONSTRAINT fulfillment_requests_fulfillment_method_check CHECK (((fulfillment_method)::text = ANY (ARRAY[('pickup'::character varying)::text, ('delivery'::character varying)::text, ('pickup_appointment'::character varying)::text, ('shop_delivery'::character varying)::text]))),
+    CONSTRAINT fulfillment_requests_status_check CHECK (((status)::text = ANY (ARRAY[('not_requested'::character varying)::text, ('requested'::character varying)::text, ('processing'::character varying)::text, ('ready_for_pickup'::character varying)::text, ('out_for_delivery'::character varying)::text, ('completed'::character varying)::text, ('cancelled'::character varying)::text])))
+);
+
+ALTER TABLE public.fulfillment_requests OWNER TO postgres;
+
+--
+-- TOC entry 245 (class 1259 OID 19222)
+-- Name: guitar_builder_parts; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.guitar_builder_parts (
+    part_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name character varying(150) NOT NULL,
+    description text,
+    guitar_type character varying(50) DEFAULT 'electric'::character varying NOT NULL,
+    part_category character varying(100) DEFAULT 'misc'::character varying NOT NULL,
+    folder_key character varying(120),
+    type_mapping character varying(100) NOT NULL,
+    price numeric(12,2) DEFAULT 0 NOT NULL,
+    stock integer DEFAULT 0 NOT NULL,
+    image_url text,
+    metadata jsonb DEFAULT '{}'::jsonb,
+    is_active boolean DEFAULT true NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    product_id uuid,
+    model_key character varying(100),
+    CONSTRAINT guitar_builder_parts_price_check CHECK ((price >= (0)::numeric)),
+    CONSTRAINT guitar_builder_parts_stock_check CHECK ((stock >= 0))
+);
+
+ALTER TABLE public.guitar_builder_parts OWNER TO postgres;
+
+--
+-- TOC entry 246 (class 1259 OID 19248)
+-- Name: inventory; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.inventory (
+    inventory_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    product_id uuid NOT NULL,
+    cost_price numeric(12,2) DEFAULT 0 NOT NULL,
+    stock integer DEFAULT 0 NOT NULL,
+    low_stock_threshold numeric(5,2) DEFAULT 10 NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    max_stock integer,
+    CONSTRAINT inventory_cost_price_check CHECK ((cost_price >= (0)::numeric)),
+    CONSTRAINT inventory_low_stock_threshold_check CHECK (((low_stock_threshold >= (0)::numeric) AND (low_stock_threshold <= (100)::numeric))),
+    CONSTRAINT inventory_max_stock_check CHECK (((max_stock IS NULL) OR (max_stock > 0))),
+    CONSTRAINT inventory_stock_check CHECK ((stock >= 0))
+);
+
+ALTER TABLE public.inventory OWNER TO postgres;
+
+--
+-- TOC entry 247 (class 1259 OID 19268)
+-- Name: inventory_logs; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.inventory_logs (
+    log_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    product_id uuid NOT NULL,
+    change_type public.inventory_change_type_enum NOT NULL,
+    quantity integer NOT NULL,
+    reference_type character varying(50),
+    reference_id uuid,
+    notes text,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT inventory_logs_quantity_check CHECK ((quantity <> 0))
+);
+
+ALTER TABLE public.inventory_logs OWNER TO postgres;
+
+--
+-- TOC entry 248 (class 1259 OID 19281)
+-- Name: low_stock_alerts; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.low_stock_alerts (
+    alert_id bigint NOT NULL,
+    product_id uuid NOT NULL,
+    current_stock integer NOT NULL,
+    threshold integer NOT NULL,
+    is_read boolean DEFAULT false NOT NULL,
+    read_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.low_stock_alerts OWNER TO postgres;
+
+--
+-- TOC entry 249 (class 1259 OID 19292)
+-- Name: low_stock_alerts_alert_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.low_stock_alerts_alert_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.low_stock_alerts_alert_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 4910 (class 0 OID 0)
+-- Dependencies: 249
+-- Name: low_stock_alerts_alert_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.low_stock_alerts_alert_id_seq OWNED BY public.low_stock_alerts.alert_id;
+
+--
+-- TOC entry 250 (class 1259 OID 19293)
+-- Name: notifications; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.notifications (
+    notification_id bigint NOT NULL,
+    user_id uuid NOT NULL,
+    title character varying(200) NOT NULL,
+    message text NOT NULL,
+    notification_type public.notification_type_enum DEFAULT 'system'::public.notification_type_enum NOT NULL,
+    related_entity_id uuid,
+    related_entity_type character varying(50),
+    is_read boolean DEFAULT false NOT NULL,
+    read_at timestamp with time zone,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone,
+    notification_status character varying(20) DEFAULT 'unread'::character varying NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    target_role character varying(50),
+    metadata jsonb DEFAULT '{}'::jsonb,
+    CONSTRAINT notifications_notification_status_check CHECK (((notification_status)::text = ANY (ARRAY[('unread'::character varying)::text, ('read'::character varying)::text, ('archived'::character varying)::text])))
+);
+
+ALTER TABLE public.notifications OWNER TO postgres;
+
+--
+-- TOC entry 251 (class 1259 OID 19314)
+-- Name: notifications_notification_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.notifications_notification_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.notifications_notification_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 4911 (class 0 OID 0)
+-- Dependencies: 251
+-- Name: notifications_notification_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.notifications_notification_id_seq OWNED BY public.notifications.notification_id;
+
+--
+-- TOC entry 252 (class 1259 OID 19315)
+-- Name: oauth_codes; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.oauth_codes (
+    id integer NOT NULL,
+    provider text NOT NULL,
+    code_hash text NOT NULL,
+    created_at timestamp with time zone DEFAULT now(),
+    status text DEFAULT 'processing'::text,
+    provider_user_id text,
+    user_id text,
+    access_token text,
+    error_message text,
+    processed_at timestamp with time zone,
+    oauth_user_id text
+);
+
+ALTER TABLE public.oauth_codes OWNER TO postgres;
+
+--
+-- TOC entry 253 (class 1259 OID 19325)
+-- Name: oauth_codes_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.oauth_codes_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.oauth_codes_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 4912 (class 0 OID 0)
+-- Dependencies: 253
+-- Name: oauth_codes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.oauth_codes_id_seq OWNED BY public.oauth_codes.id;
+
+--
+-- TOC entry 254 (class 1259 OID 19326)
+-- Name: order_items; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.order_items (
+    order_item_id bigint NOT NULL,
+    order_id uuid NOT NULL,
+    product_id uuid,
+    customization_id uuid,
+    product_name character varying(150),
+    quantity integer NOT NULL,
+    unit_price numeric(12,2) NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    product_sku character varying(50),
+    CONSTRAINT order_items_quantity_check CHECK ((quantity > 0)),
+    CONSTRAINT order_items_unit_price_check CHECK ((unit_price >= (0)::numeric))
+);
+
+ALTER TABLE public.order_items OWNER TO postgres;
+
+--
+-- TOC entry 255 (class 1259 OID 19339)
+-- Name: order_items_order_item_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.order_items_order_item_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.order_items_order_item_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 4913 (class 0 OID 0)
+-- Dependencies: 255
+-- Name: order_items_order_item_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.order_items_order_item_id_seq OWNED BY public.order_items.order_item_id;
+
+--
+-- TOC entry 256 (class 1259 OID 19340)
+-- Name: order_number_counters; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.order_number_counters (
+    prefix character varying(2) NOT NULL,
+    date date DEFAULT CURRENT_DATE NOT NULL,
+    last_number integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.order_number_counters OWNER TO postgres;
+
+--
+-- TOC entry 257 (class 1259 OID 19352)
+-- Name: orders; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.orders (
+    order_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    order_number character varying(30) NOT NULL,
+    user_id uuid,
+    shipping_address_id uuid,
+    subtotal numeric(12,2) NOT NULL,
+    tax_amount numeric(12,2) DEFAULT 0 NOT NULL,
+    shipping_cost numeric(12,2) DEFAULT 0 NOT NULL,
+    discount_amount numeric(12,2) DEFAULT 0 NOT NULL,
+    total_amount numeric(12,2) NOT NULL,
+    status public.order_status_enum DEFAULT 'pending'::public.order_status_enum NOT NULL,
+    payment_status public.order_payment_status_enum DEFAULT 'pending'::public.order_payment_status_enum NOT NULL,
+    payment_reference_number character varying(100),
+    proof_submitted_at timestamp with time zone,
+    reviewed_by uuid,
+    reviewed_at timestamp with time zone,
+    rejection_reason text,
+    admin_notes text,
+    notes text,
+    tracking_number character varying(100),
+    courier_name character varying(100),
+    shipped_at timestamp with time zone,
+    out_for_delivery_at timestamp with time zone,
+    delivered_at timestamp with time zone,
+    rider_name character varying(100),
+    rider_contact character varying(50),
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    order_type character varying(20) DEFAULT 'product'::character varying NOT NULL,
+    payment_plan character varying(20),
+    initial_payment_percentage numeric(5,2),
+    installment_tenure_months integer,
+    initial_payment_amount numeric(12,2),
+    monthly_installment_amount numeric(12,2),
+    received_at timestamp with time zone,
+    customization_status character varying(50),
+    customization_hold_reason text,
+    customization_hold_requested_at timestamp with time zone,
+    customization_hold_approved_by uuid,
+    customization_hold_approved_at timestamp with time zone,
+    customization_resumed_at timestamp with time zone,
+    delivered_by_user_id uuid,
+    delivery_confirmation_method character varying(20),
+    discount_code character varying(40),
+    additional_shipping_fee numeric(12,2),
+    CONSTRAINT chk_orders_order_type CHECK (((order_type)::text = ANY (ARRAY[('product'::character varying)::text, ('customization'::character varying)::text, ('service'::character varying)::text]))),
+    CONSTRAINT orders_additional_shipping_fee_check CHECK ((additional_shipping_fee >= (0)::numeric)),
+    CONSTRAINT orders_customization_status_check CHECK (((customization_status IS NULL) OR ((customization_status)::text = ANY (ARRAY[('payment_pending'::character varying)::text, ('active'::character varying)::text, ('on_hold'::character varying)::text, ('payment_required'::character varying)::text, ('fulfillment_pending'::character varying)::text, ('fulfillment_in_progress'::character varying)::text, ('fulfilled'::character varying)::text, ('cancellation_requested'::character varying)::text, ('resolution_in_progress'::character varying)::text, ('cancelled'::character varying)::text])))),
+    CONSTRAINT orders_discount_amount_check CHECK ((discount_amount >= (0)::numeric)),
+    CONSTRAINT orders_initial_payment_amount_check CHECK ((initial_payment_amount >= (0)::numeric)),
+    CONSTRAINT orders_initial_payment_percentage_check CHECK (((initial_payment_percentage >= (0)::numeric) AND (initial_payment_percentage <= (1)::numeric))),
+    CONSTRAINT orders_installment_tenure_months_check CHECK ((installment_tenure_months >= 1)),
+    CONSTRAINT orders_monthly_installment_amount_check CHECK ((monthly_installment_amount >= (0)::numeric)),
+    CONSTRAINT orders_payment_plan_check CHECK (((payment_plan)::text = ANY (ARRAY[('full_payment'::character varying)::text, ('installment'::character varying)::text]))),
+    CONSTRAINT orders_shipping_cost_check CHECK ((shipping_cost >= (0)::numeric)),
+    CONSTRAINT orders_subtotal_check CHECK ((subtotal >= (0)::numeric)),
+    CONSTRAINT orders_tax_amount_check CHECK ((tax_amount >= (0)::numeric)),
+    CONSTRAINT orders_total_amount_check CHECK ((total_amount >= (0)::numeric))
+);
+
+ALTER TABLE public.orders OWNER TO postgres;
+
+--
+-- TOC entry 258 (class 1259 OID 19390)
+-- Name: otp_attempts; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.otp_attempts (
+    attempt_id bigint NOT NULL,
+    otp_id uuid NOT NULL,
+    ip_address inet,
+    user_agent text,
+    success boolean NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.otp_attempts OWNER TO postgres;
+
+--
+-- TOC entry 259 (class 1259 OID 19400)
+-- Name: otp_attempts_attempt_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.otp_attempts_attempt_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.otp_attempts_attempt_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 4914 (class 0 OID 0)
+-- Dependencies: 259
+-- Name: otp_attempts_attempt_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.otp_attempts_attempt_id_seq OWNED BY public.otp_attempts.attempt_id;
+
+--
+-- TOC entry 260 (class 1259 OID 19401)
+-- Name: otp_codes; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.otp_codes (
+    otp_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    code character varying(6) NOT NULL,
+    purpose character varying(20) NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    is_used boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT otp_codes_purpose_check CHECK (((purpose)::text = ANY (ARRAY[('signup'::character varying)::text, ('login'::character varying)::text, ('password_reset'::character varying)::text, ('2fa'::character varying)::text])))
+);
+
+ALTER TABLE public.otp_codes OWNER TO postgres;
+
+--
+-- TOC entry 261 (class 1259 OID 19415)
+-- Name: password_reset_tokens; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.password_reset_tokens (
+    token_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    token_hash text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    used_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.password_reset_tokens OWNER TO postgres;
+
+--
+-- TOC entry 262 (class 1259 OID 19427)
+-- Name: payment_config; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.payment_config (
+    config_id integer NOT NULL,
+    payment_method public.payment_method_enum NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    gcash_number character varying(20),
+    gcash_qr_code text,
+    bank_name character varying(100),
+    bank_account_name character varying(150),
+    bank_account_number character varying(50),
+    bank_branch character varying(100),
+    instructions text,
+    display_name character varying(100),
+    sort_order smallint DEFAULT 0 NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.payment_config OWNER TO postgres;
+
+--
+-- TOC entry 263 (class 1259 OID 19442)
+-- Name: payment_config_config_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.payment_config_config_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.payment_config_config_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 4915 (class 0 OID 0)
+-- Dependencies: 263
+-- Name: payment_config_config_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.payment_config_config_id_seq OWNED BY public.payment_config.config_id;
+
+--
+-- TOC entry 264 (class 1259 OID 19443)
+-- Name: payment_settings; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.payment_settings (
+    id integer DEFAULT 1 NOT NULL,
+    bank_name character varying(255) DEFAULT ''::character varying NOT NULL,
+    account_name character varying(255) DEFAULT ''::character varying NOT NULL,
+    account_number character varying(255) DEFAULT ''::character varying NOT NULL,
+    gcash_number character varying(255) DEFAULT ''::character varying NOT NULL,
+    maya_number character varying(255) DEFAULT ''::character varying NOT NULL,
+    qr_image_url text DEFAULT ''::text NOT NULL,
+    notes text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    pickup_storage_fee numeric(12,2) DEFAULT 0 NOT NULL,
+    bank_transfer_qr_image_url text DEFAULT ''::text NOT NULL,
+    bank_transfer_display_mode character varying(20) DEFAULT 'details'::character varying NOT NULL,
+    no_show_grace_minutes integer DEFAULT 30 NOT NULL,
+    CONSTRAINT payment_settings_no_show_grace_minutes_check CHECK (((no_show_grace_minutes >= 0) AND (no_show_grace_minutes <= 1440)))
+);
+
+ALTER TABLE public.payment_settings OWNER TO postgres;
+
+--
+-- TOC entry 265 (class 1259 OID 19468)
+-- Name: payments; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.payments (
+    payment_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    order_id uuid NOT NULL,
+    user_id uuid,
+    amount numeric(12,2) NOT NULL,
+    currency character varying(3) DEFAULT 'PHP'::character varying NOT NULL,
+    method public.payment_method_enum NOT NULL,
+    status public.payment_status_enum DEFAULT 'pending'::public.payment_status_enum NOT NULL,
+    reference_number character varying(100),
+    proof_url text,
+    payment_instructions jsonb,
+    verified_by uuid,
+    verified_at timestamp with time zone,
+    rejection_reason text,
+    metadata jsonb,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT chk_payments_currency_iso CHECK (((currency)::text ~ '^[A-Z]{3}$'::text)),
+    CONSTRAINT payments_amount_check CHECK ((amount > (0)::numeric))
+);
+
+ALTER TABLE public.payments OWNER TO postgres;
+
+--
+-- TOC entry 266 (class 1259 OID 19488)
+-- Name: permissions; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.permissions (
+    permission_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name character varying(100) NOT NULL,
+    description text,
+    category character varying(50),
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.permissions OWNER TO postgres;
+
+--
+-- TOC entry 267 (class 1259 OID 19500)
+-- Name: pos_payments; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.pos_payments (
+    payment_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    sale_id uuid NOT NULL,
+    amount numeric(12,2) NOT NULL,
+    currency character varying(3) DEFAULT 'PHP'::character varying NOT NULL,
+    payment_method public.pos_payment_method_enum NOT NULL,
+    status public.payment_status_enum DEFAULT 'pending'::public.payment_status_enum NOT NULL,
+    reference_number character varying(100),
+    notes text,
+    verified_at timestamp with time zone,
+    verified_by uuid,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT chk_pos_payments_currency_iso CHECK (((currency)::text ~ '^[A-Z]{3}$'::text)),
+    CONSTRAINT pos_payments_amount_check CHECK ((amount > (0)::numeric))
+);
+
+ALTER TABLE public.pos_payments OWNER TO postgres;
+
+--
+-- TOC entry 268 (class 1259 OID 19520)
+-- Name: pos_returns; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.pos_returns (
+    return_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    sale_id uuid NOT NULL,
+    item_id bigint,
+    product_id uuid,
+    quantity integer NOT NULL,
+    item_condition character varying(20) NOT NULL,
+    inventory_before integer,
+    inventory_after integer,
+    restocked boolean DEFAULT false NOT NULL,
+    reason text,
+    processed_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT pos_returns_item_condition_check CHECK (((item_condition)::text = ANY (ARRAY[('resalable'::character varying)::text, ('damaged'::character varying)::text]))),
+    CONSTRAINT pos_returns_quantity_check CHECK ((quantity > 0))
+);
+
+ALTER TABLE public.pos_returns OWNER TO postgres;
+
+--
+-- TOC entry 269 (class 1259 OID 19536)
+-- Name: pos_sale_items; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.pos_sale_items (
+    item_id bigint NOT NULL,
+    sale_id uuid NOT NULL,
+    product_id uuid,
+    service_id integer,
+    item_name character varying(200) NOT NULL,
+    quantity integer NOT NULL,
+    unit_price numeric(12,2) NOT NULL,
+    discount_amount numeric(12,2) DEFAULT 0 NOT NULL,
+    subtotal numeric(12,2) NOT NULL,
+    notes text,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT pos_sale_items_check CHECK (((product_id IS NOT NULL) OR (service_id IS NOT NULL))),
+    CONSTRAINT pos_sale_items_discount_amount_check CHECK ((discount_amount >= (0)::numeric)),
+    CONSTRAINT pos_sale_items_quantity_check CHECK ((quantity > 0)),
+    CONSTRAINT pos_sale_items_subtotal_check CHECK ((subtotal >= (0)::numeric)),
+    CONSTRAINT pos_sale_items_unit_price_check CHECK ((unit_price >= (0)::numeric))
+);
+
+ALTER TABLE public.pos_sale_items OWNER TO postgres;
+
+--
+-- TOC entry 270 (class 1259 OID 19558)
+-- Name: pos_sale_items_item_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.pos_sale_items_item_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.pos_sale_items_item_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 4916 (class 0 OID 0)
+-- Dependencies: 270
+-- Name: pos_sale_items_item_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.pos_sale_items_item_id_seq OWNED BY public.pos_sale_items.item_id;
+
+--
+-- TOC entry 271 (class 1259 OID 19559)
+-- Name: pos_sales; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.pos_sales (
+    sale_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    sale_number character varying(30) NOT NULL,
+    staff_id uuid NOT NULL,
+    customer_name character varying(150),
+    customer_phone character varying(15),
+    subtotal numeric(12,2) DEFAULT 0 NOT NULL,
+    discount_amount numeric(12,2) DEFAULT 0 NOT NULL,
+    tax_amount numeric(12,2) DEFAULT 0 NOT NULL,
+    total_amount numeric(12,2) NOT NULL,
+    payment_method public.pos_payment_method_enum NOT NULL,
+    payment_status public.payment_status_enum DEFAULT 'pending'::public.payment_status_enum NOT NULL,
+    status public.pos_sale_status_enum DEFAULT 'pending'::public.pos_sale_status_enum NOT NULL,
+    reference_number character varying(100),
+    notes text,
+    completed_at timestamp with time zone,
+    cancelled_at timestamp with time zone,
+    cancelled_by uuid,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    voided_at timestamp with time zone,
+    voided_by uuid,
+    void_reason text,
+    returned_at timestamp with time zone,
+    returned_by uuid,
+    return_reason text,
+    refund_amount numeric(12,2) DEFAULT 0 NOT NULL,
+    CONSTRAINT pos_sales_discount_amount_check CHECK ((discount_amount >= (0)::numeric)),
+    CONSTRAINT pos_sales_refund_amount_check CHECK ((refund_amount >= (0)::numeric)),
+    CONSTRAINT pos_sales_subtotal_check CHECK ((subtotal >= (0)::numeric)),
+    CONSTRAINT pos_sales_tax_amount_check CHECK ((tax_amount >= (0)::numeric)),
+    CONSTRAINT pos_sales_total_amount_check CHECK ((total_amount >= (0)::numeric))
+);
+
+ALTER TABLE public.pos_sales OWNER TO postgres;
+
+--
+-- TOC entry 272 (class 1259 OID 19591)
+-- Name: product_images; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.product_images (
+    image_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    product_id uuid NOT NULL,
+    image_url text NOT NULL,
+    alt_text character varying(200),
+    sort_order smallint DEFAULT 0 NOT NULL,
+    is_primary boolean DEFAULT false NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT product_images_sort_order_check CHECK ((sort_order >= 0))
+);
+
+ALTER TABLE public.product_images OWNER TO postgres;
+
+--
+-- TOC entry 273 (class 1259 OID 19611)
+-- Name: product_reviews; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.product_reviews (
+    review_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    order_id uuid NOT NULL,
+    order_item_id bigint NOT NULL,
+    product_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    rating smallint NOT NULL,
+    title character varying(150),
+    comment text NOT NULL,
+    images jsonb DEFAULT '[]'::jsonb,
+    status character varying(30) DEFAULT 'approved'::character varying NOT NULL,
+    admin_notes text,
+    moderated_by uuid,
+    moderated_at timestamp with time zone,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT product_reviews_rating_check CHECK (((rating >= 1) AND (rating <= 5))),
+    CONSTRAINT product_reviews_status_check CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('approved'::character varying)::text, ('rejected'::character varying)::text, ('flagged'::character varying)::text])))
+);
+
+ALTER TABLE public.product_reviews OWNER TO postgres;
+
+--
+-- TOC entry 274 (class 1259 OID 19633)
+-- Name: products; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.products (
+    product_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name character varying(150) NOT NULL,
+    description text DEFAULT ''::text NOT NULL,
+    price numeric(12,2) NOT NULL,
+    brand character varying(100) DEFAULT ''::character varying NOT NULL,
+    category_id integer,
+    is_active boolean DEFAULT true NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    sku character varying(100) NOT NULL,
+    CONSTRAINT products_price_check CHECK ((price >= (0)::numeric))
+);
+
+ALTER TABLE public.products OWNER TO postgres;
+
+--
+-- TOC entry 275 (class 1259 OID 19655)
+-- Name: project_installment_schedules; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.project_installment_schedules (
+    schedule_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    project_id uuid NOT NULL,
+    installment_number integer NOT NULL,
+    amount numeric(12,2) NOT NULL,
+    due_date date NOT NULL,
+    status character varying(20) DEFAULT 'pending'::character varying NOT NULL,
+    paid_at timestamp with time zone,
+    payment_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    paid_in_advance boolean DEFAULT false NOT NULL,
+    CONSTRAINT project_installment_schedules_amount_check CHECK ((amount >= (0)::numeric)),
+    CONSTRAINT project_installment_schedules_installment_number_check CHECK ((installment_number > 0)),
+    CONSTRAINT project_installment_schedules_status_check CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('paid'::character varying)::text, ('overdue'::character varying)::text, ('cancelled'::character varying)::text])))
+);
+
+ALTER TABLE public.project_installment_schedules OWNER TO postgres;
+
+--
+-- TOC entry 276 (class 1259 OID 19675)
+-- Name: project_milestones; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.project_milestones (
+    milestone_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    project_id uuid NOT NULL,
+    title character varying(255) NOT NULL,
+    description text,
+    order_index integer DEFAULT 0 NOT NULL,
+    status character varying(50) DEFAULT 'pending'::character varying NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT project_milestones_order_index_check CHECK ((order_index >= 0)),
+    CONSTRAINT project_milestones_status_check CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('in_progress'::character varying)::text, ('completed'::character varying)::text, ('blocked'::character varying)::text])))
+);
+
+ALTER TABLE public.project_milestones OWNER TO postgres;
+
+--
+-- TOC entry 277 (class 1259 OID 19694)
+-- Name: project_subtasks; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.project_subtasks (
+    subtask_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    milestone_id uuid NOT NULL,
+    title character varying(255) NOT NULL,
+    is_customer_updatable boolean DEFAULT false NOT NULL,
+    assigned_user_id uuid,
+    status character varying(50) DEFAULT 'pending'::character varying NOT NULL,
+    completed_at timestamp with time zone,
+    completed_by uuid,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    progress integer DEFAULT 0 NOT NULL,
+    due_date date,
+    notes text,
+    CONSTRAINT project_subtasks_progress_check CHECK (((progress >= 0) AND (progress <= 100))),
+    CONSTRAINT project_subtasks_status_check CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'in_progress'::character varying, 'completed'::character varying])::text[])))
+);
+
+ALTER TABLE public.project_subtasks OWNER TO postgres;
+
+--
+-- TOC entry 278 (class 1259 OID 19710)
+-- Name: project_tasks; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.project_tasks (
+    task_id bigint NOT NULL,
+    project_id uuid NOT NULL,
+    task_name character varying(200) NOT NULL,
+    description text,
+    status character varying(50) DEFAULT 'pending'::character varying NOT NULL,
+    sort_order smallint DEFAULT 0 NOT NULL,
+    completed_at timestamp with time zone,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT project_tasks_sort_order_check CHECK ((sort_order >= 0)),
+    CONSTRAINT project_tasks_status_check CHECK (((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('in_progress'::character varying)::text, ('completed'::character varying)::text, ('blocked'::character varying)::text])))
+);
+
+ALTER TABLE public.project_tasks OWNER TO postgres;
+
+--
+-- TOC entry 279 (class 1259 OID 19728)
+-- Name: project_tasks_task_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.project_tasks_task_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.project_tasks_task_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 4917 (class 0 OID 0)
+-- Dependencies: 279
+-- Name: project_tasks_task_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.project_tasks_task_id_seq OWNED BY public.project_tasks.task_id;
+
+--
+-- TOC entry 280 (class 1259 OID 19729)
+-- Name: project_team_members; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.project_team_members (
+    project_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    assigned_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.project_team_members OWNER TO postgres;
+
+--
+-- TOC entry 281 (class 1259 OID 19736)
+-- Name: projects; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.projects (
+    project_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    order_id uuid NOT NULL,
+    title character varying(200) NOT NULL,
+    status public.project_status_enum DEFAULT 'not_started'::public.project_status_enum NOT NULL,
+    progress smallint DEFAULT 0 NOT NULL,
+    estimated_completion_date date,
+    notes text,
+    fulfillment_method character varying(50),
+    fulfillment_status character varying(50),
+    fulfillment_notes text,
+    fulfillment_selected_at timestamp with time zone,
+    pickup_appointment_id uuid,
+    deleted_at timestamp with time zone,
+    deleted_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    claimed_by uuid,
+    claimed_at timestamp with time zone,
+    custom_build_id character varying(20),
+    hold_reason text,
+    hold_option character varying(50),
+    hold_at_step character varying(200),
+    hold_requested_at timestamp with time zone,
+    hold_approved_by uuid,
+    hold_approved_at timestamp with time zone,
+    resumed_at timestamp with time zone,
+    cancel_option character varying(50),
+    cancel_reason text,
+    cancel_requested_at timestamp with time zone,
+    cancel_approved_by uuid,
+    cancel_approved_at timestamp with time zone,
+    shipped_at timestamp with time zone,
+    ready_for_pickup_at timestamp with time zone,
+    picked_up_at timestamp with time zone,
+    auto_hold_due_to_overdue boolean DEFAULT false NOT NULL,
+    auto_hold_triggered_at timestamp with time zone,
+    auto_resumed_at timestamp with time zone,
+    last_completed_stage character varying(255),
+    last_completed_stage_at timestamp with time zone,
+    cancelled_stage_snapshot character varying(255),
+    cancelled_stage_snapshot_at timestamp with time zone,
+    cancel_resolution character varying(50),
+    cancellation_settlement jsonb,
+    cancel_address_id uuid,
+    cancel_address_snapshot jsonb,
+    fulfillment_address_id uuid,
+    fulfillment_address_snapshot jsonb,
+    delivered_at timestamp with time zone,
+    delivered_by_user_id uuid,
+    delivery_confirmation_method character varying(20),
+    CONSTRAINT projects_cancel_option_check CHECK (((cancel_option IS NULL) OR ((cancel_option)::text = ANY ((ARRAY['ship_to_address'::character varying, 'pickup_at_shop'::character varying, 'ship_unfinished'::character varying, 'pickup_unfinished'::character varying])::text[])))),
+    CONSTRAINT projects_hold_option_check CHECK (((hold_option IS NULL) OR ((hold_option)::text = ANY (ARRAY[('resume_later'::character varying)::text, ('hold_before_next_step'::character varying)::text])))),
+    CONSTRAINT projects_progress_check CHECK (((progress >= 0) AND (progress <= 100)))
+);
+
+ALTER TABLE public.projects OWNER TO postgres;
+
+--
+-- TOC entry 282 (class 1259 OID 19758)
+-- Name: refresh_tokens; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.refresh_tokens (
+    token_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    token_hash text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    is_revoked boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT refresh_tokens_check CHECK ((expires_at > created_at))
+);
+
+ALTER TABLE public.refresh_tokens OWNER TO postgres;
+
+--
+-- TOC entry 300 (class 1259 OID 21616)
+-- Name: refund_private_destinations; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.refund_private_destinations (
+    refund_request_id uuid NOT NULL,
+    payment_destination jsonb NOT NULL
+);
+
+ALTER TABLE public.refund_private_destinations OWNER TO postgres;
+
+--
+-- TOC entry 299 (class 1259 OID 21589)
+-- Name: refund_private_files; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.refund_private_files (
+    refund_request_id uuid NOT NULL,
+    kind character varying(30) NOT NULL,
+    mime_type character varying(30) NOT NULL,
+    file_data bytea NOT NULL,
+    uploaded_by uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT refund_private_files_file_data_check CHECK (((octet_length(file_data) >= 1) AND (octet_length(file_data) <= 5242880))),
+    CONSTRAINT refund_private_files_kind_check CHECK ((((kind)::text = ANY ((ARRAY['qr'::character varying, 'proof'::character varying, 'inspection'::character varying])::text[])) OR ((kind)::text ~ '^(evidence|return)_[0-4]$'::text))),
+    CONSTRAINT refund_private_files_mime_type_check CHECK (((mime_type)::text = ANY ((ARRAY['image/png'::character varying, 'image/jpeg'::character varying, 'image/webp'::character varying])::text[])))
+);
+
+ALTER TABLE public.refund_private_files OWNER TO postgres;
+
+--
+-- TOC entry 283 (class 1259 OID 19773)
+-- Name: refund_request_counters; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.refund_request_counters (
+    prefix character varying(2) NOT NULL,
+    date date DEFAULT CURRENT_DATE NOT NULL,
+    last_number integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.refund_request_counters OWNER TO postgres;
+
+--
+-- TOC entry 284 (class 1259 OID 19785)
+-- Name: refund_request_images; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.refund_request_images (
+    refund_request_image_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    refund_request_id uuid NOT NULL,
+    image_url text NOT NULL,
+    alt_text character varying(200),
+    sort_order smallint DEFAULT 0 NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.refund_request_images OWNER TO postgres;
+
+--
+-- TOC entry 285 (class 1259 OID 19800)
+-- Name: refund_request_items; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.refund_request_items (
+    refund_request_item_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    refund_request_id uuid NOT NULL,
+    order_item_id bigint NOT NULL,
+    product_id uuid,
+    product_name character varying(150) NOT NULL,
+    quantity integer NOT NULL,
+    unit_price numeric(12,2) NOT NULL,
+    refund_amount numeric(12,2) NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT refund_request_items_quantity_check CHECK ((quantity > 0)),
+    CONSTRAINT refund_request_items_refund_amount_check CHECK ((refund_amount >= (0)::numeric)),
+    CONSTRAINT refund_request_items_unit_price_check CHECK ((unit_price >= (0)::numeric))
+);
+
+ALTER TABLE public.refund_request_items OWNER TO postgres;
+
+--
+-- TOC entry 286 (class 1259 OID 19818)
+-- Name: refund_requests; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.refund_requests (
+    refund_request_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    order_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    status character varying(50) DEFAULT 'pending'::character varying NOT NULL,
+    reason text NOT NULL,
+    customer_notes text,
+    admin_notes text,
+    reviewed_by uuid,
+    reviewed_at timestamp with time zone,
+    refunded_at timestamp with time zone,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    request_number character varying(20) NOT NULL,
+    project_id uuid,
+    payment_id uuid,
+    amount_requested numeric(12,2),
+    build_stage_at_request character varying(255),
+    requested_amount_locked boolean DEFAULT false NOT NULL,
+    refund_type character varying(30),
+    approved_amount numeric(12,2),
+    adjustment_amount numeric(12,2),
+    adjustment_reason text,
+    adjusted_by uuid,
+    adjusted_at timestamp with time zone,
+    refunded_amount numeric(12,2),
+    refund_method text,
+    refund_reference character varying(255),
+    refund_fee numeric(12,2) DEFAULT 0,
+    processed_by uuid,
+    approved_at timestamp with time zone,
+    processing_at timestamp with time zone,
+    cancelled_at timestamp with time zone,
+    withdrawn_at timestamp with time zone,
+    withdrawn_by uuid,
+    return_status character varying(30),
+    return_method character varying(30),
+    return_reference character varying(255),
+    return_confirmed_by uuid,
+    return_confirmed_at timestamp with time zone,
+    restocked_at timestamp with time zone,
+    restocked_by uuid,
+    rejection_reason text,
+    workflow_version smallint DEFAULT 1 NOT NULL,
+    preferred_method character varying(20),
+    refund_sent_at timestamp with time zone,
+    completed_at timestamp with time zone,
+    completed_by uuid,
+    sent_by uuid,
+    original_payment_method text,
+    original_payment_ids jsonb DEFAULT '[]'::jsonb NOT NULL,
+    manual_handling_required boolean DEFAULT true NOT NULL,
+    return_required boolean DEFAULT true NOT NULL,
+    return_instructions text,
+    allow_dropoff boolean DEFAULT false NOT NULL,
+    return_tracking text,
+    return_received_at timestamp with time zone,
+    return_inspected_at timestamp with time zone,
+    inspection_notes text,
+    history jsonb DEFAULT '[]'::jsonb NOT NULL,
+    CONSTRAINT refund_requests_preferred_method_check CHECK (((preferred_method)::text = ANY ((ARRAY['e_wallet'::character varying, 'e_bank'::character varying])::text[]))),
+    CONSTRAINT refund_requests_refund_type_check CHECK (((refund_type IS NULL) OR ((refund_type)::text = ANY (ARRAY[('money_refund'::character varying)::text, ('physical_release'::character varying)::text, ('no_refund'::character varying)::text])))),
+    CONSTRAINT refund_requests_return_method_check CHECK (((return_method IS NULL) OR ((return_method)::text = ANY (ARRAY[('courier'::character varying)::text, ('pickup'::character varying)::text])))),
+    CONSTRAINT refund_requests_return_status_check CHECK (((return_status IS NULL) OR ((return_status)::text = ANY (ARRAY[('not_required'::character varying)::text, ('return_pending'::character varying)::text, ('return_in_transit'::character varying)::text, ('returned'::character varying)::text, ('return_confirmed'::character varying)::text])))),
+    CONSTRAINT refund_requests_status_check CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'under_review'::character varying, 'awaiting_return'::character varying, 'return_submitted'::character varying, 'item_received'::character varying, 'return_inspected'::character varying, 'approved'::character varying, 'processing'::character varying, 'refund_sent'::character varying, 'completed'::character varying, 'rejected'::character varying, 'return_rejected'::character varying, 'refund_failed'::character varying, 'refunded'::character varying, 'pending_payment_verification'::character varying, 'withdrawn'::character varying, 'return_pending'::character varying, 'returned'::character varying, 'return_confirmed'::character varying])::text[])))
+);
+
+ALTER TABLE public.refund_requests OWNER TO postgres;
+
+--
+-- TOC entry 287 (class 1259 OID 19843)
+-- Name: refund_restock_log; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.refund_restock_log (
+    restock_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    refund_request_id uuid NOT NULL,
+    order_item_id bigint,
+    product_id uuid,
+    quantity numeric(12,2) NOT NULL,
+    restocked_at timestamp with time zone DEFAULT now() NOT NULL,
+    restocked_by uuid
+);
+
+ALTER TABLE public.refund_restock_log OWNER TO postgres;
+
+--
+-- TOC entry 288 (class 1259 OID 19852)
+-- Name: role_permissions; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.role_permissions (
+    role_id uuid NOT NULL,
+    permission_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.role_permissions OWNER TO postgres;
+
+--
+-- TOC entry 289 (class 1259 OID 19859)
+-- Name: roles; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.roles (
+    role_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name character varying(50) NOT NULL,
+    description text,
+    level integer DEFAULT 0 NOT NULL,
+    parent_role_id uuid,
+    is_system boolean DEFAULT false NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT roles_level_check CHECK ((level >= 0))
+);
+
+ALTER TABLE public.roles OWNER TO postgres;
+
+--
+-- TOC entry 290 (class 1259 OID 19876)
+-- Name: services; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.services (
+    service_id integer NOT NULL,
+    name character varying(150) NOT NULL,
+    description text,
+    price numeric(12,2) NOT NULL,
+    duration_minutes smallint NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    image_url text,
+    slug character varying(150),
+    CONSTRAINT services_duration_minutes_check CHECK ((duration_minutes > 0)),
+    CONSTRAINT services_price_check CHECK ((price >= (0)::numeric))
+);
+
+ALTER TABLE public.services OWNER TO postgres;
+
+--
+-- TOC entry 291 (class 1259 OID 19893)
+-- Name: services_service_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.services_service_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.services_service_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 4918 (class 0 OID 0)
+-- Dependencies: 291
+-- Name: services_service_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.services_service_id_seq OWNED BY public.services.service_id;
+
+--
+-- TOC entry 301 (class 1259 OID 21821)
+-- Name: terms_acknowledgments; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.terms_acknowledgments (
+    acknowledgment_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    terms_type text NOT NULL,
+    terms_version text NOT NULL,
+    context text NOT NULL,
+    acknowledged_at timestamp with time zone DEFAULT now() NOT NULL,
+    checkout_id uuid,
+    order_id uuid,
+    CONSTRAINT terms_acknowledgments_check CHECK ((((context = 'checkout'::text) AND (checkout_id IS NOT NULL) AND (terms_type <> 'account'::text)) OR ((context <> 'checkout'::text) AND (checkout_id IS NULL) AND (order_id IS NULL) AND (terms_type = 'account'::text)))),
+    CONSTRAINT terms_acknowledgments_context_check CHECK ((context = ANY (ARRAY['registration'::text, 'login'::text, 'checkout'::text]))),
+    CONSTRAINT terms_acknowledgments_terms_type_check CHECK ((terms_type = ANY (ARRAY['account'::text, 'orders'::text, 'customization'::text])))
+);
+
+ALTER TABLE public.terms_acknowledgments OWNER TO postgres;
+
+--
+-- TOC entry 292 (class 1259 OID 19894)
+-- Name: unavailable_dates; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.unavailable_dates (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    date date NOT NULL,
+    reason character varying(255),
+    is_recurring boolean DEFAULT false NOT NULL,
+    created_by uuid,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    is_open_override boolean DEFAULT false NOT NULL
+);
+
+ALTER TABLE public.unavailable_dates OWNER TO postgres;
+
+--
+-- TOC entry 293 (class 1259 OID 19906)
+-- Name: user_identities; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.user_identities (
+    identity_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    provider public.auth_provider_enum NOT NULL,
+    provider_user_id character varying(255) NOT NULL,
+    provider_email character varying(100),
+    access_token text,
+    refresh_token text,
+    token_expires_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.user_identities OWNER TO postgres;
+
+--
+-- TOC entry 294 (class 1259 OID 19920)
+-- Name: user_roles; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.user_roles (
+    user_id uuid NOT NULL,
+    role_id uuid NOT NULL,
+    assigned_at timestamp with time zone DEFAULT now() NOT NULL,
+    assigned_by uuid,
+    is_active boolean DEFAULT true NOT NULL,
+    expires_at timestamp with time zone
+);
+
+ALTER TABLE public.user_roles OWNER TO postgres;
+
+--
+-- TOC entry 295 (class 1259 OID 19929)
+-- Name: users; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.users (
+    user_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    email character varying(100) NOT NULL,
+    password_hash text,
+    first_name character varying(50) NOT NULL,
+    middle_name character varying(50),
+    last_name character varying(50) NOT NULL,
+    suffix character varying(10),
+    avatar_url text,
+    phone character varying(15),
+    role public.user_role_enum DEFAULT 'customer'::public.user_role_enum NOT NULL,
+    is_verified boolean DEFAULT false NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    login_attempts smallint DEFAULT 0 NOT NULL,
+    locked_until timestamp with time zone,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    terms_registration_pending boolean DEFAULT false NOT NULL,
+    CONSTRAINT users_login_attempts_check CHECK ((login_attempts >= 0))
+);
+
+ALTER TABLE public.users OWNER TO postgres;
+
+--
+-- TOC entry 3747 (class 2604 OID 19952)
+-- Name: audit_logs audit_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.audit_logs ALTER COLUMN audit_id SET DEFAULT nextval('public.audit_logs_audit_id_seq'::regclass);
+
+--
+-- TOC entry 3766 (class 2604 OID 19953)
+-- Name: cart_items cart_item_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cart_items ALTER COLUMN cart_item_id SET DEFAULT nextval('public.cart_items_cart_item_id_seq'::regclass);
+
+--
+-- TOC entry 3774 (class 2604 OID 19954)
+-- Name: categories category_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.categories ALTER COLUMN category_id SET DEFAULT nextval('public.categories_category_id_seq'::regclass);
+
+--
+-- TOC entry 3796 (class 2604 OID 19955)
+-- Name: customization_parts part_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.customization_parts ALTER COLUMN part_id SET DEFAULT nextval('public.customization_parts_part_id_seq'::regclass);
+
+--
+-- TOC entry 3841 (class 2604 OID 19956)
+-- Name: low_stock_alerts alert_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.low_stock_alerts ALTER COLUMN alert_id SET DEFAULT nextval('public.low_stock_alerts_alert_id_seq'::regclass);
+
+--
+-- TOC entry 3844 (class 2604 OID 19957)
+-- Name: notifications notification_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.notifications ALTER COLUMN notification_id SET DEFAULT nextval('public.notifications_notification_id_seq'::regclass);
+
+--
+-- TOC entry 3851 (class 2604 OID 19958)
+-- Name: oauth_codes id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.oauth_codes ALTER COLUMN id SET DEFAULT nextval('public.oauth_codes_id_seq'::regclass);
+
+--
+-- TOC entry 3854 (class 2604 OID 19959)
+-- Name: order_items order_item_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.order_items ALTER COLUMN order_item_id SET DEFAULT nextval('public.order_items_order_item_id_seq'::regclass);
+
+--
+-- TOC entry 3870 (class 2604 OID 19960)
+-- Name: otp_attempts attempt_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.otp_attempts ALTER COLUMN attempt_id SET DEFAULT nextval('public.otp_attempts_attempt_id_seq'::regclass);
+
+--
+-- TOC entry 3877 (class 2604 OID 19961)
+-- Name: payment_config config_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payment_config ALTER COLUMN config_id SET DEFAULT nextval('public.payment_config_config_id_seq'::regclass);
+
+--
+-- TOC entry 3912 (class 2604 OID 19962)
+-- Name: pos_sale_items item_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_sale_items ALTER COLUMN item_id SET DEFAULT nextval('public.pos_sale_items_item_id_seq'::regclass);
+
+--
+-- TOC entry 3957 (class 2604 OID 19963)
+-- Name: project_tasks task_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.project_tasks ALTER COLUMN task_id SET DEFAULT nextval('public.project_tasks_task_id_seq'::regclass);
+
+--
+-- TOC entry 4003 (class 2604 OID 19964)
+-- Name: services service_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.services ALTER COLUMN service_id SET DEFAULT nextval('public.services_service_id_seq'::regclass);
+
+--
+-- TOC entry 4145 (class 2606 OID 20069)
+-- Name: addresses addresses_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.addresses
+    ADD CONSTRAINT addresses_pkey PRIMARY KEY (address_id);
+
+--
+-- TOC entry 4561 (class 2606 OID 21153)
+-- Name: appointment_refunds appointment_refunds_appointment_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.appointment_refunds
+    ADD CONSTRAINT appointment_refunds_appointment_id_key UNIQUE (appointment_id);
+
+--
+-- TOC entry 4563 (class 2606 OID 21151)
+-- Name: appointment_refunds appointment_refunds_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.appointment_refunds
+    ADD CONSTRAINT appointment_refunds_pkey PRIMARY KEY (refund_request_id);
+
+--
+-- TOC entry 4152 (class 2606 OID 20071)
+-- Name: appointments appointments_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.appointments
+    ADD CONSTRAINT appointments_pkey PRIMARY KEY (appointment_id);
+
+--
+-- TOC entry 4167 (class 2606 OID 20073)
+-- Name: audit_logs audit_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.audit_logs
+    ADD CONSTRAINT audit_logs_pkey PRIMARY KEY (audit_id);
+
+--
+-- TOC entry 4570 (class 2606 OID 21536)
+-- Name: branch_locations branch_locations_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.branch_locations
+    ADD CONSTRAINT branch_locations_pkey PRIMARY KEY (branch_id);
+
+--
+-- TOC entry 4568 (class 2606 OID 21433)
+-- Name: branch_settings branch_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.branch_settings
+    ADD CONSTRAINT branch_settings_pkey PRIMARY KEY (id);
+
+--
+-- TOC entry 4178 (class 2606 OID 20075)
+-- Name: builder_guitar_types builder_guitar_types_display_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.builder_guitar_types
+    ADD CONSTRAINT builder_guitar_types_display_name_key UNIQUE (display_name);
+
+--
+-- TOC entry 4180 (class 2606 OID 20077)
+-- Name: builder_guitar_types builder_guitar_types_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.builder_guitar_types
+    ADD CONSTRAINT builder_guitar_types_pkey PRIMARY KEY (guitar_type_code);
+
+--
+-- TOC entry 4183 (class 2606 OID 20079)
+-- Name: builder_model_images builder_model_images_guitar_type_code_model_key_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.builder_model_images
+    ADD CONSTRAINT builder_model_images_guitar_type_code_model_key_key UNIQUE (guitar_type_code, model_key);
+
+--
+-- TOC entry 4185 (class 2606 OID 20081)
+-- Name: builder_model_images builder_model_images_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.builder_model_images
+    ADD CONSTRAINT builder_model_images_pkey PRIMARY KEY (model_image_id);
+
+--
+-- TOC entry 4189 (class 2606 OID 20083)
+-- Name: builder_part_categories builder_part_categories_display_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.builder_part_categories
+    ADD CONSTRAINT builder_part_categories_display_name_key UNIQUE (display_name);
+
+--
+-- TOC entry 4191 (class 2606 OID 20085)
+-- Name: builder_part_categories builder_part_categories_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.builder_part_categories
+    ADD CONSTRAINT builder_part_categories_pkey PRIMARY KEY (part_category_code);
+
+--
+-- TOC entry 4194 (class 2606 OID 20087)
+-- Name: builder_type_categories builder_type_categories_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.builder_type_categories
+    ADD CONSTRAINT builder_type_categories_pkey PRIMARY KEY (guitar_type_code, part_category_code);
+
+--
+-- TOC entry 4197 (class 2606 OID 20089)
+-- Name: cart_items cart_items_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT cart_items_pkey PRIMARY KEY (cart_item_id);
+
+--
+-- TOC entry 4203 (class 2606 OID 20091)
+-- Name: carts carts_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.carts
+    ADD CONSTRAINT carts_pkey PRIMARY KEY (cart_id);
+
+--
+-- TOC entry 4205 (class 2606 OID 20093)
+-- Name: carts carts_user_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.carts
+    ADD CONSTRAINT carts_user_id_key UNIQUE (user_id);
+
+--
+-- TOC entry 4208 (class 2606 OID 20095)
+-- Name: categories categories_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.categories
+    ADD CONSTRAINT categories_pkey PRIMARY KEY (category_id);
+
+--
+-- TOC entry 4211 (class 2606 OID 20097)
+-- Name: category_parent_links_backup category_parent_links_backup_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.category_parent_links_backup
+    ADD CONSTRAINT category_parent_links_backup_pkey PRIMARY KEY (category_id);
+
+--
+-- TOC entry 4213 (class 2606 OID 20099)
+-- Name: contact_settings contact_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.contact_settings
+    ADD CONSTRAINT contact_settings_pkey PRIMARY KEY (id);
+
+--
+-- TOC entry 4215 (class 2606 OID 20101)
+-- Name: current_build_claims current_build_claims_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.current_build_claims
+    ADD CONSTRAINT current_build_claims_pkey PRIMARY KEY (claim_id);
+
+--
+-- TOC entry 4223 (class 2606 OID 20103)
+-- Name: customization_feedback customization_feedback_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.customization_feedback
+    ADD CONSTRAINT customization_feedback_pkey PRIMARY KEY (feedback_id);
+
+--
+-- TOC entry 4232 (class 2606 OID 20105)
+-- Name: customization_parts customization_parts_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.customization_parts
+    ADD CONSTRAINT customization_parts_pkey PRIMARY KEY (part_id);
+
+--
+-- TOC entry 4236 (class 2606 OID 20107)
+-- Name: customizations customizations_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.customizations
+    ADD CONSTRAINT customizations_pkey PRIMARY KEY (customization_id);
+
+--
+-- TOC entry 4243 (class 2606 OID 20109)
+-- Name: default_workflow_steps default_workflow_steps_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.default_workflow_steps
+    ADD CONSTRAINT default_workflow_steps_pkey PRIMARY KEY (step_id);
+
+--
+-- TOC entry 4246 (class 2606 OID 20111)
+-- Name: default_workflow_tasks default_workflow_tasks_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.default_workflow_tasks
+    ADD CONSTRAINT default_workflow_tasks_pkey PRIMARY KEY (task_id);
+
+--
+-- TOC entry 4250 (class 2606 OID 20113)
+-- Name: discount_codes discount_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.discount_codes
+    ADD CONSTRAINT discount_codes_pkey PRIMARY KEY (discount_code_id);
+
+--
+-- TOC entry 4254 (class 2606 OID 20115)
+-- Name: fulfillment_requests fulfillment_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.fulfillment_requests
+    ADD CONSTRAINT fulfillment_requests_pkey PRIMARY KEY (id);
+
+--
+-- TOC entry 4261 (class 2606 OID 20117)
+-- Name: guitar_builder_parts guitar_builder_parts_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.guitar_builder_parts
+    ADD CONSTRAINT guitar_builder_parts_pkey PRIMARY KEY (part_id);
+
+--
+-- TOC entry 4284 (class 2606 OID 20119)
+-- Name: inventory_logs inventory_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.inventory_logs
+    ADD CONSTRAINT inventory_logs_pkey PRIMARY KEY (log_id);
+
+--
+-- TOC entry 4276 (class 2606 OID 20121)
+-- Name: inventory inventory_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.inventory
+    ADD CONSTRAINT inventory_pkey PRIMARY KEY (inventory_id);
+
+--
+-- TOC entry 4278 (class 2606 OID 20123)
+-- Name: inventory inventory_product_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.inventory
+    ADD CONSTRAINT inventory_product_id_key UNIQUE (product_id);
+
+--
+-- TOC entry 4289 (class 2606 OID 20125)
+-- Name: low_stock_alerts low_stock_alerts_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.low_stock_alerts
+    ADD CONSTRAINT low_stock_alerts_pkey PRIMARY KEY (alert_id);
+
+--
+-- TOC entry 4299 (class 2606 OID 20127)
+-- Name: notifications notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_pkey PRIMARY KEY (notification_id);
+
+--
+-- TOC entry 4304 (class 2606 OID 20129)
+-- Name: oauth_codes oauth_codes_code_hash_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.oauth_codes
+    ADD CONSTRAINT oauth_codes_code_hash_key UNIQUE (code_hash);
+
+--
+-- TOC entry 4306 (class 2606 OID 20131)
+-- Name: oauth_codes oauth_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.oauth_codes
+    ADD CONSTRAINT oauth_codes_pkey PRIMARY KEY (id);
+
+--
+-- TOC entry 4313 (class 2606 OID 20133)
+-- Name: order_items order_items_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.order_items
+    ADD CONSTRAINT order_items_pkey PRIMARY KEY (order_item_id);
+
+--
+-- TOC entry 4316 (class 2606 OID 20135)
+-- Name: order_number_counters order_number_counters_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.order_number_counters
+    ADD CONSTRAINT order_number_counters_pkey PRIMARY KEY (prefix);
+
+--
+-- TOC entry 4338 (class 2606 OID 20137)
+-- Name: orders orders_order_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT orders_order_number_key UNIQUE (order_number);
+
+--
+-- TOC entry 4340 (class 2606 OID 20139)
+-- Name: orders orders_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT orders_pkey PRIMARY KEY (order_id);
+
+--
+-- TOC entry 4345 (class 2606 OID 20141)
+-- Name: otp_attempts otp_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.otp_attempts
+    ADD CONSTRAINT otp_attempts_pkey PRIMARY KEY (attempt_id);
+
+--
+-- TOC entry 4350 (class 2606 OID 20143)
+-- Name: otp_codes otp_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.otp_codes
+    ADD CONSTRAINT otp_codes_pkey PRIMARY KEY (otp_id);
+
+--
+-- TOC entry 4352 (class 2606 OID 20145)
+-- Name: otp_codes otp_codes_user_id_purpose_code_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.otp_codes
+    ADD CONSTRAINT otp_codes_user_id_purpose_code_key UNIQUE (user_id, purpose, code);
+
+--
+-- TOC entry 4356 (class 2606 OID 20147)
+-- Name: password_reset_tokens password_reset_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.password_reset_tokens
+    ADD CONSTRAINT password_reset_tokens_pkey PRIMARY KEY (token_id);
+
+--
+-- TOC entry 4358 (class 2606 OID 20149)
+-- Name: password_reset_tokens password_reset_tokens_token_hash_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.password_reset_tokens
+    ADD CONSTRAINT password_reset_tokens_token_hash_key UNIQUE (token_hash);
+
+--
+-- TOC entry 4361 (class 2606 OID 20151)
+-- Name: payment_config payment_config_payment_method_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payment_config
+    ADD CONSTRAINT payment_config_payment_method_key UNIQUE (payment_method);
+
+--
+-- TOC entry 4363 (class 2606 OID 20153)
+-- Name: payment_config payment_config_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payment_config
+    ADD CONSTRAINT payment_config_pkey PRIMARY KEY (config_id);
+
+--
+-- TOC entry 4365 (class 2606 OID 20155)
+-- Name: payment_settings payment_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payment_settings
+    ADD CONSTRAINT payment_settings_pkey PRIMARY KEY (id);
+
+--
+-- TOC entry 4374 (class 2606 OID 20157)
+-- Name: payments payments_order_id_reference_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payments
+    ADD CONSTRAINT payments_order_id_reference_number_key UNIQUE (order_id, reference_number);
+
+--
+-- TOC entry 4376 (class 2606 OID 20159)
+-- Name: payments payments_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payments
+    ADD CONSTRAINT payments_pkey PRIMARY KEY (payment_id);
+
+--
+-- TOC entry 4381 (class 2606 OID 20161)
+-- Name: permissions permissions_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.permissions
+    ADD CONSTRAINT permissions_name_key UNIQUE (name);
+
+--
+-- TOC entry 4383 (class 2606 OID 20163)
+-- Name: permissions permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.permissions
+    ADD CONSTRAINT permissions_pkey PRIMARY KEY (permission_id);
+
+--
+-- TOC entry 4389 (class 2606 OID 20165)
+-- Name: pos_payments pos_payments_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_payments
+    ADD CONSTRAINT pos_payments_pkey PRIMARY KEY (payment_id);
+
+--
+-- TOC entry 4391 (class 2606 OID 20167)
+-- Name: pos_payments pos_payments_sale_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_payments
+    ADD CONSTRAINT pos_payments_sale_id_key UNIQUE (sale_id);
+
+--
+-- TOC entry 4396 (class 2606 OID 20169)
+-- Name: pos_returns pos_returns_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_returns
+    ADD CONSTRAINT pos_returns_pkey PRIMARY KEY (return_id);
+
+--
+-- TOC entry 4402 (class 2606 OID 20171)
+-- Name: pos_sale_items pos_sale_items_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_sale_items
+    ADD CONSTRAINT pos_sale_items_pkey PRIMARY KEY (item_id);
+
+--
+-- TOC entry 4411 (class 2606 OID 20173)
+-- Name: pos_sales pos_sales_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_sales
+    ADD CONSTRAINT pos_sales_pkey PRIMARY KEY (sale_id);
+
+--
+-- TOC entry 4413 (class 2606 OID 20175)
+-- Name: pos_sales pos_sales_sale_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_sales
+    ADD CONSTRAINT pos_sales_sale_number_key UNIQUE (sale_number);
+
+--
+-- TOC entry 4418 (class 2606 OID 20177)
+-- Name: product_images product_images_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.product_images
+    ADD CONSTRAINT product_images_pkey PRIMARY KEY (image_id);
+
+--
+-- TOC entry 4427 (class 2606 OID 20179)
+-- Name: product_reviews product_reviews_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.product_reviews
+    ADD CONSTRAINT product_reviews_pkey PRIMARY KEY (review_id);
+
+--
+-- TOC entry 4435 (class 2606 OID 20181)
+-- Name: products products_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.products
+    ADD CONSTRAINT products_pkey PRIMARY KEY (product_id);
+
+--
+-- TOC entry 4437 (class 2606 OID 20183)
+-- Name: products products_sku_unique; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.products
+    ADD CONSTRAINT products_sku_unique UNIQUE (sku);
+
+--
+-- TOC entry 4443 (class 2606 OID 20185)
+-- Name: project_installment_schedules project_installment_schedules_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.project_installment_schedules
+    ADD CONSTRAINT project_installment_schedules_pkey PRIMARY KEY (schedule_id);
+
+--
+-- TOC entry 4445 (class 2606 OID 20187)
+-- Name: project_installment_schedules project_installment_schedules_project_id_installment_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.project_installment_schedules
+    ADD CONSTRAINT project_installment_schedules_project_id_installment_number_key UNIQUE (project_id, installment_number);
+
+--
+-- TOC entry 4450 (class 2606 OID 20189)
+-- Name: project_milestones project_milestones_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.project_milestones
+    ADD CONSTRAINT project_milestones_pkey PRIMARY KEY (milestone_id);
+
+--
+-- TOC entry 4456 (class 2606 OID 20191)
+-- Name: project_subtasks project_subtasks_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.project_subtasks
+    ADD CONSTRAINT project_subtasks_pkey PRIMARY KEY (subtask_id);
+
+--
+-- TOC entry 4461 (class 2606 OID 20193)
+-- Name: project_tasks project_tasks_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.project_tasks
+    ADD CONSTRAINT project_tasks_pkey PRIMARY KEY (task_id);
+
+--
+-- TOC entry 4464 (class 2606 OID 20195)
+-- Name: project_team_members project_team_members_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.project_team_members
+    ADD CONSTRAINT project_team_members_pkey PRIMARY KEY (project_id, user_id);
+
+--
+-- TOC entry 4473 (class 2606 OID 20197)
+-- Name: projects projects_custom_build_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_custom_build_id_key UNIQUE (custom_build_id);
+
+--
+-- TOC entry 4475 (class 2606 OID 20199)
+-- Name: projects projects_order_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_order_id_key UNIQUE (order_id);
+
+--
+-- TOC entry 4477 (class 2606 OID 20201)
+-- Name: projects projects_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_pkey PRIMARY KEY (project_id);
+
+--
+-- TOC entry 4481 (class 2606 OID 20203)
+-- Name: refresh_tokens refresh_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refresh_tokens
+    ADD CONSTRAINT refresh_tokens_pkey PRIMARY KEY (token_id);
+
+--
+-- TOC entry 4483 (class 2606 OID 20205)
+-- Name: refresh_tokens refresh_tokens_token_hash_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refresh_tokens
+    ADD CONSTRAINT refresh_tokens_token_hash_key UNIQUE (token_hash);
+
+--
+-- TOC entry 4574 (class 2606 OID 21624)
+-- Name: refund_private_destinations refund_private_destinations_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_private_destinations
+    ADD CONSTRAINT refund_private_destinations_pkey PRIMARY KEY (refund_request_id);
+
+--
+-- TOC entry 4572 (class 2606 OID 21865)
+-- Name: refund_private_files refund_private_files_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_private_files
+    ADD CONSTRAINT refund_private_files_pkey PRIMARY KEY (refund_request_id, kind);
+
+--
+-- TOC entry 4486 (class 2606 OID 20207)
+-- Name: refund_request_counters refund_request_counters_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_request_counters
+    ADD CONSTRAINT refund_request_counters_pkey PRIMARY KEY (prefix);
+
+--
+-- TOC entry 4490 (class 2606 OID 20209)
+-- Name: refund_request_images refund_request_images_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_request_images
+    ADD CONSTRAINT refund_request_images_pkey PRIMARY KEY (refund_request_image_id);
+
+--
+-- TOC entry 4496 (class 2606 OID 20211)
+-- Name: refund_request_items refund_request_items_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_request_items
+    ADD CONSTRAINT refund_request_items_pkey PRIMARY KEY (refund_request_item_id);
+
+--
+-- TOC entry 4506 (class 2606 OID 20213)
+-- Name: refund_requests refund_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_requests
+    ADD CONSTRAINT refund_requests_pkey PRIMARY KEY (refund_request_id);
+
+--
+-- TOC entry 4508 (class 2606 OID 20215)
+-- Name: refund_requests refund_requests_request_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_requests
+    ADD CONSTRAINT refund_requests_request_number_key UNIQUE (request_number);
+
+--
+-- TOC entry 4514 (class 2606 OID 20217)
+-- Name: refund_restock_log refund_restock_log_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_restock_log
+    ADD CONSTRAINT refund_restock_log_pkey PRIMARY KEY (restock_id);
+
+--
+-- TOC entry 4516 (class 2606 OID 20219)
+-- Name: refund_restock_log refund_restock_log_refund_request_id_order_item_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_restock_log
+    ADD CONSTRAINT refund_restock_log_refund_request_id_order_item_id_key UNIQUE (refund_request_id, order_item_id);
+
+--
+-- TOC entry 4520 (class 2606 OID 20221)
+-- Name: role_permissions role_permissions_role_id_permission_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT role_permissions_role_id_permission_id_key UNIQUE (role_id, permission_id);
+
+--
+-- TOC entry 4526 (class 2606 OID 20223)
+-- Name: roles roles_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.roles
+    ADD CONSTRAINT roles_name_key UNIQUE (name);
+
+--
+-- TOC entry 4528 (class 2606 OID 20225)
+-- Name: roles roles_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.roles
+    ADD CONSTRAINT roles_pkey PRIMARY KEY (role_id);
+
+--
+-- TOC entry 4532 (class 2606 OID 20227)
+-- Name: services services_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.services
+    ADD CONSTRAINT services_pkey PRIMARY KEY (service_id);
+
+--
+-- TOC entry 4577 (class 2606 OID 21838)
+-- Name: terms_acknowledgments terms_acknowledgments_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.terms_acknowledgments
+    ADD CONSTRAINT terms_acknowledgments_pkey PRIMARY KEY (acknowledgment_id);
+
+--
+-- TOC entry 4538 (class 2606 OID 20229)
+-- Name: unavailable_dates unavailable_dates_date_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.unavailable_dates
+    ADD CONSTRAINT unavailable_dates_date_key UNIQUE (date);
+
+--
+-- TOC entry 4540 (class 2606 OID 20231)
+-- Name: unavailable_dates unavailable_dates_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.unavailable_dates
+    ADD CONSTRAINT unavailable_dates_pkey PRIMARY KEY (id);
+
+--
+-- TOC entry 4544 (class 2606 OID 20233)
+-- Name: user_identities user_identities_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_identities
+    ADD CONSTRAINT user_identities_pkey PRIMARY KEY (identity_id);
+
+--
+-- TOC entry 4546 (class 2606 OID 20235)
+-- Name: user_identities user_identities_provider_provider_user_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_identities
+    ADD CONSTRAINT user_identities_provider_provider_user_id_key UNIQUE (provider, provider_user_id);
+
+--
+-- TOC entry 4551 (class 2606 OID 20237)
+-- Name: user_roles user_roles_user_id_role_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_roles
+    ADD CONSTRAINT user_roles_user_id_role_id_key UNIQUE (user_id, role_id);
+
+--
+-- TOC entry 4557 (class 2606 OID 20239)
+-- Name: users users_email_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_email_key UNIQUE (email);
+
+--
+-- TOC entry 4559 (class 2606 OID 20241)
+-- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_pkey PRIMARY KEY (user_id);
+
+--
+-- TOC entry 4150 (class 1259 OID 21126)
+-- Name: appointments_one_successor; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX appointments_one_successor ON public.appointments USING btree (rescheduled_from) WHERE (rescheduled_from IS NOT NULL);
+
+--
+-- TOC entry 4146 (class 1259 OID 20242)
+-- Name: idx_addresses_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_addresses_deleted_at ON public.addresses USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4147 (class 1259 OID 20243)
+-- Name: idx_addresses_is_default; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_addresses_is_default ON public.addresses USING btree (user_id, is_default);
+
+--
+-- TOC entry 4148 (class 1259 OID 20244)
+-- Name: idx_addresses_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_addresses_user_id ON public.addresses USING btree (user_id);
+
+--
+-- TOC entry 4564 (class 1259 OID 21171)
+-- Name: idx_appointment_refunds_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_appointment_refunds_created_at ON public.appointment_refunds USING btree (created_at DESC);
+
+--
+-- TOC entry 4565 (class 1259 OID 21169)
+-- Name: idx_appointment_refunds_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_appointment_refunds_status ON public.appointment_refunds USING btree (status);
+
+--
+-- TOC entry 4566 (class 1259 OID 21170)
+-- Name: idx_appointment_refunds_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_appointment_refunds_user_id ON public.appointment_refunds USING btree (user_id);
+
+--
+-- TOC entry 4153 (class 1259 OID 20245)
+-- Name: idx_appointments_appointment_type; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_appointments_appointment_type ON public.appointments USING btree (appointment_type);
+
+--
+-- TOC entry 4154 (class 1259 OID 20246)
+-- Name: idx_appointments_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_appointments_deleted_at ON public.appointments USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4155 (class 1259 OID 20247)
+-- Name: idx_appointments_no_show_sweep; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_appointments_no_show_sweep ON public.appointments USING btree (status, scheduled_at) WHERE (status = 'confirmed'::public.appointment_status_enum);
+
+--
+-- TOC entry 4156 (class 1259 OID 20248)
+-- Name: idx_appointments_order_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_appointments_order_id ON public.appointments USING btree (order_id);
+
+--
+-- TOC entry 4157 (class 1259 OID 21127)
+-- Name: idx_appointments_payment_method; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_appointments_payment_method ON public.appointments USING btree (payment_method) WHERE (payment_method IS NOT NULL);
+
+--
+-- TOC entry 4158 (class 1259 OID 20249)
+-- Name: idx_appointments_payment_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_appointments_payment_status ON public.appointments USING btree (payment_status);
+
+--
+-- TOC entry 4159 (class 1259 OID 20250)
+-- Name: idx_appointments_schedule_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_appointments_schedule_status ON public.appointments USING btree (scheduled_at, status);
+
+--
+-- TOC entry 4160 (class 1259 OID 20251)
+-- Name: idx_appointments_scheduled_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_appointments_scheduled_at ON public.appointments USING btree (scheduled_at);
+
+--
+-- TOC entry 4161 (class 1259 OID 20252)
+-- Name: idx_appointments_services_gin; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_appointments_services_gin ON public.appointments USING gin (services);
+
+--
+-- TOC entry 4162 (class 1259 OID 20253)
+-- Name: idx_appointments_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_appointments_status ON public.appointments USING btree (status);
+
+--
+-- TOC entry 4163 (class 1259 OID 20254)
+-- Name: idx_appointments_type; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_appointments_type ON public.appointments USING btree (appointment_type);
+
+--
+-- TOC entry 4164 (class 1259 OID 20255)
+-- Name: idx_appointments_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_appointments_user_id ON public.appointments USING btree (user_id);
+
+--
+-- TOC entry 4168 (class 1259 OID 20256)
+-- Name: idx_audit_logs_action; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_audit_logs_action ON public.audit_logs USING btree (action);
+
+--
+-- TOC entry 4169 (class 1259 OID 21288)
+-- Name: idx_audit_logs_action_created; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_audit_logs_action_created ON public.audit_logs USING btree (action, created_at DESC);
+
+--
+-- TOC entry 4170 (class 1259 OID 21290)
+-- Name: idx_audit_logs_context_gin; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_audit_logs_context_gin ON public.audit_logs USING gin (context jsonb_path_ops);
+
+--
+-- TOC entry 4171 (class 1259 OID 20257)
+-- Name: idx_audit_logs_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_audit_logs_created_at ON public.audit_logs USING btree (created_at DESC);
+
+--
+-- TOC entry 4172 (class 1259 OID 20258)
+-- Name: idx_audit_logs_entity; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_audit_logs_entity ON public.audit_logs USING btree (entity_type, entity_id);
+
+--
+-- TOC entry 4173 (class 1259 OID 21289)
+-- Name: idx_audit_logs_entity_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_audit_logs_entity_id ON public.audit_logs USING btree (entity_id);
+
+--
+-- TOC entry 4174 (class 1259 OID 21287)
+-- Name: idx_audit_logs_entity_type_created; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_audit_logs_entity_type_created ON public.audit_logs USING btree (entity_type, created_at DESC);
+
+--
+-- TOC entry 4175 (class 1259 OID 21286)
+-- Name: idx_audit_logs_search_text; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_audit_logs_search_text ON public.audit_logs USING gin (search_text public.gin_trgm_ops);
+
+--
+-- TOC entry 4176 (class 1259 OID 20259)
+-- Name: idx_audit_logs_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_audit_logs_user_id ON public.audit_logs USING btree (user_id);
+
+--
+-- TOC entry 4181 (class 1259 OID 20260)
+-- Name: idx_builder_guitar_types_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_builder_guitar_types_deleted_at ON public.builder_guitar_types USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4186 (class 1259 OID 20261)
+-- Name: idx_builder_model_images_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_builder_model_images_deleted_at ON public.builder_model_images USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4187 (class 1259 OID 20262)
+-- Name: idx_builder_model_images_guitar_type; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_builder_model_images_guitar_type ON public.builder_model_images USING btree (guitar_type_code);
+
+--
+-- TOC entry 4192 (class 1259 OID 20263)
+-- Name: idx_builder_part_categories_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_builder_part_categories_deleted_at ON public.builder_part_categories USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4195 (class 1259 OID 20264)
+-- Name: idx_builder_type_categories_category; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_builder_type_categories_category ON public.builder_type_categories USING btree (part_category_code);
+
+--
+-- TOC entry 4198 (class 1259 OID 20265)
+-- Name: idx_cart_items_cart_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_cart_items_cart_id ON public.cart_items USING btree (cart_id);
+
+--
+-- TOC entry 4199 (class 1259 OID 20266)
+-- Name: idx_cart_items_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_cart_items_deleted_at ON public.cart_items USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4200 (class 1259 OID 20267)
+-- Name: idx_cart_items_product_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_cart_items_product_id ON public.cart_items USING btree (product_id);
+
+--
+-- TOC entry 4206 (class 1259 OID 20268)
+-- Name: idx_carts_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_carts_user_id ON public.carts USING btree (user_id);
+
+--
+-- TOC entry 4209 (class 1259 OID 20269)
+-- Name: idx_categories_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_categories_deleted_at ON public.categories USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4216 (class 1259 OID 20270)
+-- Name: idx_current_build_claims_claim_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_current_build_claims_claim_status ON public.current_build_claims USING btree (claim_status);
+
+--
+-- TOC entry 4217 (class 1259 OID 20271)
+-- Name: idx_current_build_claims_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_current_build_claims_created_at ON public.current_build_claims USING btree (created_at DESC);
+
+--
+-- TOC entry 4218 (class 1259 OID 20272)
+-- Name: idx_current_build_claims_customer_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_current_build_claims_customer_id ON public.current_build_claims USING btree (customer_id);
+
+--
+-- TOC entry 4219 (class 1259 OID 20273)
+-- Name: idx_current_build_claims_order_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_current_build_claims_order_id ON public.current_build_claims USING btree (order_id);
+
+--
+-- TOC entry 4220 (class 1259 OID 20274)
+-- Name: idx_current_build_claims_project_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_current_build_claims_project_id ON public.current_build_claims USING btree (project_id);
+
+--
+-- TOC entry 4221 (class 1259 OID 20275)
+-- Name: idx_current_build_claims_unique_project; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX idx_current_build_claims_unique_project ON public.current_build_claims USING btree (project_id) WHERE (deleted_at IS NULL);
+
+--
+-- TOC entry 4224 (class 1259 OID 20276)
+-- Name: idx_customization_feedback_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_customization_feedback_created_at ON public.customization_feedback USING btree (created_at DESC);
+
+--
+-- TOC entry 4225 (class 1259 OID 20277)
+-- Name: idx_customization_feedback_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_customization_feedback_deleted_at ON public.customization_feedback USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4226 (class 1259 OID 20278)
+-- Name: idx_customization_feedback_order_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_customization_feedback_order_id ON public.customization_feedback USING btree (order_id);
+
+--
+-- TOC entry 4227 (class 1259 OID 20279)
+-- Name: idx_customization_feedback_project_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_customization_feedback_project_id ON public.customization_feedback USING btree (project_id);
+
+--
+-- TOC entry 4228 (class 1259 OID 20280)
+-- Name: idx_customization_feedback_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_customization_feedback_status ON public.customization_feedback USING btree (status);
+
+--
+-- TOC entry 4229 (class 1259 OID 20281)
+-- Name: idx_customization_feedback_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_customization_feedback_user_id ON public.customization_feedback USING btree (user_id);
+
+--
+-- TOC entry 4233 (class 1259 OID 20282)
+-- Name: idx_customization_parts_customization_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_customization_parts_customization_id ON public.customization_parts USING btree (customization_id);
+
+--
+-- TOC entry 4234 (class 1259 OID 20283)
+-- Name: idx_customization_parts_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_customization_parts_deleted_at ON public.customization_parts USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4237 (class 1259 OID 20284)
+-- Name: idx_customizations_body_model; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_customizations_body_model ON public.customizations USING btree (body_model) WHERE (body_model IS NOT NULL);
+
+--
+-- TOC entry 4238 (class 1259 OID 20285)
+-- Name: idx_customizations_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_customizations_deleted_at ON public.customizations USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4239 (class 1259 OID 20286)
+-- Name: idx_customizations_guitar_type; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_customizations_guitar_type ON public.customizations USING btree (guitar_type);
+
+--
+-- TOC entry 4240 (class 1259 OID 20287)
+-- Name: idx_customizations_is_saved; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_customizations_is_saved ON public.customizations USING btree (is_saved);
+
+--
+-- TOC entry 4241 (class 1259 OID 20288)
+-- Name: idx_customizations_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_customizations_user_id ON public.customizations USING btree (user_id);
+
+--
+-- TOC entry 4244 (class 1259 OID 20289)
+-- Name: idx_default_workflow_steps_sort; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_default_workflow_steps_sort ON public.default_workflow_steps USING btree (sort_order);
+
+--
+-- TOC entry 4247 (class 1259 OID 20290)
+-- Name: idx_default_workflow_tasks_sort; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_default_workflow_tasks_sort ON public.default_workflow_tasks USING btree (step_id, sort_order);
+
+--
+-- TOC entry 4248 (class 1259 OID 20291)
+-- Name: idx_default_workflow_tasks_step; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_default_workflow_tasks_step ON public.default_workflow_tasks USING btree (step_id);
+
+--
+-- TOC entry 4251 (class 1259 OID 20292)
+-- Name: idx_discount_codes_active_expiry; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_discount_codes_active_expiry ON public.discount_codes USING btree (is_active, expires_at);
+
+--
+-- TOC entry 4252 (class 1259 OID 20293)
+-- Name: idx_discount_codes_code_unique; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX idx_discount_codes_code_unique ON public.discount_codes USING btree (upper((code)::text));
+
+--
+-- TOC entry 4255 (class 1259 OID 20294)
+-- Name: idx_fulfillment_requests_created; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_fulfillment_requests_created ON public.fulfillment_requests USING btree (created_at DESC);
+
+--
+-- TOC entry 4256 (class 1259 OID 20295)
+-- Name: idx_fulfillment_requests_project; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_fulfillment_requests_project ON public.fulfillment_requests USING btree (project_id);
+
+--
+-- TOC entry 4257 (class 1259 OID 20296)
+-- Name: idx_fulfillment_requests_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_fulfillment_requests_status ON public.fulfillment_requests USING btree (status);
+
+--
+-- TOC entry 4258 (class 1259 OID 20297)
+-- Name: idx_fulfillment_requests_user; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_fulfillment_requests_user ON public.fulfillment_requests USING btree (user_id);
+
+--
+-- TOC entry 4262 (class 1259 OID 20298)
+-- Name: idx_guitar_builder_parts_active; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_guitar_builder_parts_active ON public.guitar_builder_parts USING btree (is_active);
+
+--
+-- TOC entry 4263 (class 1259 OID 20299)
+-- Name: idx_guitar_builder_parts_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_guitar_builder_parts_deleted_at ON public.guitar_builder_parts USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4264 (class 1259 OID 20300)
+-- Name: idx_guitar_builder_parts_folder_key; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_guitar_builder_parts_folder_key ON public.guitar_builder_parts USING btree (folder_key);
+
+--
+-- TOC entry 4265 (class 1259 OID 20301)
+-- Name: idx_guitar_builder_parts_guitar_type; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_guitar_builder_parts_guitar_type ON public.guitar_builder_parts USING btree (guitar_type);
+
+--
+-- TOC entry 4266 (class 1259 OID 20302)
+-- Name: idx_guitar_builder_parts_lookup; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_guitar_builder_parts_lookup ON public.guitar_builder_parts USING btree (guitar_type, part_category, is_active);
+
+--
+-- TOC entry 4267 (class 1259 OID 20303)
+-- Name: idx_guitar_builder_parts_model_scope; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_guitar_builder_parts_model_scope ON public.guitar_builder_parts USING btree (guitar_type, model_key, is_active);
+
+--
+-- TOC entry 4268 (class 1259 OID 20304)
+-- Name: idx_guitar_builder_parts_part_category; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_guitar_builder_parts_part_category ON public.guitar_builder_parts USING btree (part_category);
+
+--
+-- TOC entry 4269 (class 1259 OID 20305)
+-- Name: idx_guitar_builder_parts_product_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX idx_guitar_builder_parts_product_id ON public.guitar_builder_parts USING btree (product_id) WHERE (product_id IS NOT NULL);
+
+--
+-- TOC entry 4270 (class 1259 OID 20306)
+-- Name: idx_guitar_builder_parts_product_id_lookup; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_guitar_builder_parts_product_id_lookup ON public.guitar_builder_parts USING btree (product_id);
+
+--
+-- TOC entry 4271 (class 1259 OID 20307)
+-- Name: idx_guitar_builder_parts_type; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_guitar_builder_parts_type ON public.guitar_builder_parts USING btree (type_mapping);
+
+--
+-- TOC entry 4272 (class 1259 OID 20308)
+-- Name: idx_inventory_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_inventory_deleted_at ON public.inventory USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4279 (class 1259 OID 20309)
+-- Name: idx_inventory_logs_change_type; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_inventory_logs_change_type ON public.inventory_logs USING btree (change_type);
+
+--
+-- TOC entry 4280 (class 1259 OID 20310)
+-- Name: idx_inventory_logs_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_inventory_logs_created_at ON public.inventory_logs USING btree (created_at DESC);
+
+--
+-- TOC entry 4281 (class 1259 OID 20311)
+-- Name: idx_inventory_logs_product_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_inventory_logs_product_id ON public.inventory_logs USING btree (product_id);
+
+--
+-- TOC entry 4282 (class 1259 OID 20312)
+-- Name: idx_inventory_logs_reference; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_inventory_logs_reference ON public.inventory_logs USING btree (reference_type, reference_id);
+
+--
+-- TOC entry 4273 (class 1259 OID 20313)
+-- Name: idx_inventory_product_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_inventory_product_id ON public.inventory USING btree (product_id);
+
+--
+-- TOC entry 4274 (class 1259 OID 20314)
+-- Name: idx_inventory_stock; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_inventory_stock ON public.inventory USING btree (stock);
+
+--
+-- TOC entry 4285 (class 1259 OID 20315)
+-- Name: idx_low_stock_alerts_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_low_stock_alerts_created_at ON public.low_stock_alerts USING btree (created_at DESC);
+
+--
+-- TOC entry 4286 (class 1259 OID 20316)
+-- Name: idx_low_stock_alerts_is_read; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_low_stock_alerts_is_read ON public.low_stock_alerts USING btree (is_read);
+
+--
+-- TOC entry 4287 (class 1259 OID 20317)
+-- Name: idx_low_stock_alerts_product_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_low_stock_alerts_product_id ON public.low_stock_alerts USING btree (product_id);
+
+--
+-- TOC entry 4290 (class 1259 OID 20318)
+-- Name: idx_notifications_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_notifications_created_at ON public.notifications USING btree (created_at DESC);
+
+--
+-- TOC entry 4291 (class 1259 OID 20319)
+-- Name: idx_notifications_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_notifications_deleted_at ON public.notifications USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4292 (class 1259 OID 20320)
+-- Name: idx_notifications_is_read; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_notifications_is_read ON public.notifications USING btree (user_id, is_read);
+
+--
+-- TOC entry 4293 (class 1259 OID 20321)
+-- Name: idx_notifications_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_notifications_status ON public.notifications USING btree (user_id, notification_status, created_at DESC);
+
+--
+-- TOC entry 4294 (class 1259 OID 20322)
+-- Name: idx_notifications_target_role; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_notifications_target_role ON public.notifications USING btree (target_role) WHERE (target_role IS NOT NULL);
+
+--
+-- TOC entry 4295 (class 1259 OID 20323)
+-- Name: idx_notifications_type; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_notifications_type ON public.notifications USING btree (notification_type, created_at DESC);
+
+--
+-- TOC entry 4296 (class 1259 OID 20324)
+-- Name: idx_notifications_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_notifications_user_id ON public.notifications USING btree (user_id);
+
+--
+-- TOC entry 4297 (class 1259 OID 20325)
+-- Name: idx_notifications_user_unread; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_notifications_user_unread ON public.notifications USING btree (user_id, is_read, created_at DESC) WHERE (is_read = false);
+
+--
+-- TOC entry 4300 (class 1259 OID 20326)
+-- Name: idx_oauth_codes_oauth_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_oauth_codes_oauth_user_id ON public.oauth_codes USING btree (oauth_user_id);
+
+--
+-- TOC entry 4301 (class 1259 OID 20327)
+-- Name: idx_oauth_codes_provider; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_oauth_codes_provider ON public.oauth_codes USING btree (provider);
+
+--
+-- TOC entry 4302 (class 1259 OID 20328)
+-- Name: idx_oauth_codes_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_oauth_codes_status ON public.oauth_codes USING btree (status);
+
+--
+-- TOC entry 4259 (class 1259 OID 20329)
+-- Name: idx_one_active_fulfillment_per_order; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX idx_one_active_fulfillment_per_order ON public.fulfillment_requests USING btree (order_id) WHERE ((status)::text <> 'cancelled'::text);
+
+--
+-- TOC entry 4307 (class 1259 OID 20330)
+-- Name: idx_order_items_customization_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_order_items_customization_id ON public.order_items USING btree (customization_id) WHERE (customization_id IS NOT NULL);
+
+--
+-- TOC entry 4308 (class 1259 OID 20331)
+-- Name: idx_order_items_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_order_items_deleted_at ON public.order_items USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4309 (class 1259 OID 20332)
+-- Name: idx_order_items_order_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_order_items_order_id ON public.order_items USING btree (order_id);
+
+--
+-- TOC entry 4310 (class 1259 OID 20333)
+-- Name: idx_order_items_product_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_order_items_product_id ON public.order_items USING btree (product_id);
+
+--
+-- TOC entry 4311 (class 1259 OID 20334)
+-- Name: idx_order_items_product_name; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_order_items_product_name ON public.order_items USING btree (product_name);
+
+--
+-- TOC entry 4314 (class 1259 OID 20335)
+-- Name: idx_order_number_counters_date; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_order_number_counters_date ON public.order_number_counters USING btree (date);
+
+--
+-- TOC entry 4317 (class 1259 OID 20336)
+-- Name: idx_orders_amount_created; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_amount_created ON public.orders USING btree (total_amount, created_at DESC);
+
+--
+-- TOC entry 4318 (class 1259 OID 20337)
+-- Name: idx_orders_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_created_at ON public.orders USING btree (created_at DESC);
+
+--
+-- TOC entry 4319 (class 1259 OID 20338)
+-- Name: idx_orders_customization_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_customization_status ON public.orders USING btree (customization_status) WHERE ((order_type)::text = 'customization'::text);
+
+--
+-- TOC entry 4320 (class 1259 OID 20339)
+-- Name: idx_orders_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_deleted_at ON public.orders USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4321 (class 1259 OID 20340)
+-- Name: idx_orders_delivered_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_delivered_at ON public.orders USING btree (delivered_at) WHERE (delivered_at IS NOT NULL);
+
+--
+-- TOC entry 4322 (class 1259 OID 20341)
+-- Name: idx_orders_order_number; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_order_number ON public.orders USING btree (order_number);
+
+--
+-- TOC entry 4323 (class 1259 OID 20342)
+-- Name: idx_orders_order_type; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_order_type ON public.orders USING btree (order_type);
+
+--
+-- TOC entry 4324 (class 1259 OID 20343)
+-- Name: idx_orders_payment_reference; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_payment_reference ON public.orders USING btree (payment_reference_number);
+
+--
+-- TOC entry 4325 (class 1259 OID 20344)
+-- Name: idx_orders_payment_review; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_payment_review ON public.orders USING btree (payment_status, reviewed_at) WHERE (payment_status = ANY (ARRAY['proof_submitted'::public.order_payment_status_enum, 'under_review'::public.order_payment_status_enum]));
+
+--
+-- TOC entry 4326 (class 1259 OID 20345)
+-- Name: idx_orders_payment_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_payment_status ON public.orders USING btree (payment_status);
+
+--
+-- TOC entry 4327 (class 1259 OID 20346)
+-- Name: idx_orders_payment_status_created; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_payment_status_created ON public.orders USING btree (payment_status, created_at DESC);
+
+--
+-- TOC entry 4328 (class 1259 OID 20347)
+-- Name: idx_orders_proof_submitted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_proof_submitted_at ON public.orders USING btree (proof_submitted_at) WHERE (proof_submitted_at IS NOT NULL);
+
+--
+-- TOC entry 4329 (class 1259 OID 20348)
+-- Name: idx_orders_received_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_received_at ON public.orders USING btree (received_at) WHERE (received_at IS NOT NULL);
+
+--
+-- TOC entry 4330 (class 1259 OID 20349)
+-- Name: idx_orders_reviewed_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_reviewed_at ON public.orders USING btree (reviewed_at) WHERE (reviewed_at IS NOT NULL);
+
+--
+-- TOC entry 4331 (class 1259 OID 20350)
+-- Name: idx_orders_shipped_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_shipped_at ON public.orders USING btree (shipped_at) WHERE (shipped_at IS NOT NULL);
+
+--
+-- TOC entry 4332 (class 1259 OID 20351)
+-- Name: idx_orders_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_status ON public.orders USING btree (status);
+
+--
+-- TOC entry 4333 (class 1259 OID 20352)
+-- Name: idx_orders_status_created; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_status_created ON public.orders USING btree (status, created_at DESC);
+
+--
+-- TOC entry 4334 (class 1259 OID 20353)
+-- Name: idx_orders_tracking_number; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_tracking_number ON public.orders USING btree (tracking_number);
+
+--
+-- TOC entry 4335 (class 1259 OID 20354)
+-- Name: idx_orders_type_status_created; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_type_status_created ON public.orders USING btree (order_type, status, created_at DESC);
+
+--
+-- TOC entry 4336 (class 1259 OID 20355)
+-- Name: idx_orders_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_orders_user_id ON public.orders USING btree (user_id);
+
+--
+-- TOC entry 4341 (class 1259 OID 20356)
+-- Name: idx_otp_attempts_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_otp_attempts_created_at ON public.otp_attempts USING btree (created_at DESC);
+
+--
+-- TOC entry 4342 (class 1259 OID 20357)
+-- Name: idx_otp_attempts_otp_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_otp_attempts_otp_id ON public.otp_attempts USING btree (otp_id);
+
+--
+-- TOC entry 4343 (class 1259 OID 20358)
+-- Name: idx_otp_attempts_success; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_otp_attempts_success ON public.otp_attempts USING btree (success);
+
+--
+-- TOC entry 4346 (class 1259 OID 20359)
+-- Name: idx_otp_codes_expires_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_otp_codes_expires_at ON public.otp_codes USING btree (expires_at);
+
+--
+-- TOC entry 4347 (class 1259 OID 20360)
+-- Name: idx_otp_codes_is_used; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_otp_codes_is_used ON public.otp_codes USING btree (is_used);
+
+--
+-- TOC entry 4348 (class 1259 OID 20361)
+-- Name: idx_otp_codes_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_otp_codes_user_id ON public.otp_codes USING btree (user_id);
+
+--
+-- TOC entry 4353 (class 1259 OID 20362)
+-- Name: idx_password_reset_tokens_expires_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_password_reset_tokens_expires_at ON public.password_reset_tokens USING btree (expires_at);
+
+--
+-- TOC entry 4354 (class 1259 OID 20363)
+-- Name: idx_password_reset_tokens_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_password_reset_tokens_user_id ON public.password_reset_tokens USING btree (user_id);
+
+--
+-- TOC entry 4359 (class 1259 OID 20364)
+-- Name: idx_payment_config_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_payment_config_deleted_at ON public.payment_config USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4366 (class 1259 OID 20365)
+-- Name: idx_payments_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_payments_created_at ON public.payments USING btree (created_at DESC);
+
+--
+-- TOC entry 4367 (class 1259 OID 20366)
+-- Name: idx_payments_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_payments_deleted_at ON public.payments USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4368 (class 1259 OID 20367)
+-- Name: idx_payments_method; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_payments_method ON public.payments USING btree (method);
+
+--
+-- TOC entry 4369 (class 1259 OID 20368)
+-- Name: idx_payments_order_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_payments_order_id ON public.payments USING btree (order_id);
+
+--
+-- TOC entry 4370 (class 1259 OID 20369)
+-- Name: idx_payments_reference_number; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_payments_reference_number ON public.payments USING btree (reference_number);
+
+--
+-- TOC entry 4371 (class 1259 OID 20370)
+-- Name: idx_payments_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_payments_status ON public.payments USING btree (status);
+
+--
+-- TOC entry 4372 (class 1259 OID 20371)
+-- Name: idx_payments_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_payments_user_id ON public.payments USING btree (user_id);
+
+--
+-- TOC entry 4377 (class 1259 OID 20372)
+-- Name: idx_permissions_category; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_permissions_category ON public.permissions USING btree (category);
+
+--
+-- TOC entry 4378 (class 1259 OID 20373)
+-- Name: idx_permissions_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_permissions_deleted_at ON public.permissions USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4379 (class 1259 OID 20374)
+-- Name: idx_permissions_name; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_permissions_name ON public.permissions USING btree (name);
+
+--
+-- TOC entry 4384 (class 1259 OID 20375)
+-- Name: idx_pos_payments_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pos_payments_created_at ON public.pos_payments USING btree (created_at DESC);
+
+--
+-- TOC entry 4385 (class 1259 OID 20376)
+-- Name: idx_pos_payments_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pos_payments_deleted_at ON public.pos_payments USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4386 (class 1259 OID 20377)
+-- Name: idx_pos_payments_sale_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pos_payments_sale_id ON public.pos_payments USING btree (sale_id);
+
+--
+-- TOC entry 4387 (class 1259 OID 20378)
+-- Name: idx_pos_payments_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pos_payments_status ON public.pos_payments USING btree (status);
+
+--
+-- TOC entry 4392 (class 1259 OID 20379)
+-- Name: idx_pos_returns_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pos_returns_created_at ON public.pos_returns USING btree (created_at DESC);
+
+--
+-- TOC entry 4393 (class 1259 OID 20380)
+-- Name: idx_pos_returns_product_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pos_returns_product_id ON public.pos_returns USING btree (product_id);
+
+--
+-- TOC entry 4394 (class 1259 OID 20381)
+-- Name: idx_pos_returns_sale_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pos_returns_sale_id ON public.pos_returns USING btree (sale_id);
+
+--
+-- TOC entry 4397 (class 1259 OID 20382)
+-- Name: idx_pos_sale_items_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pos_sale_items_deleted_at ON public.pos_sale_items USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4398 (class 1259 OID 20383)
+-- Name: idx_pos_sale_items_product_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pos_sale_items_product_id ON public.pos_sale_items USING btree (product_id);
+
+--
+-- TOC entry 4399 (class 1259 OID 20384)
+-- Name: idx_pos_sale_items_sale_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pos_sale_items_sale_id ON public.pos_sale_items USING btree (sale_id);
+
+--
+-- TOC entry 4400 (class 1259 OID 20385)
+-- Name: idx_pos_sale_items_service_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pos_sale_items_service_id ON public.pos_sale_items USING btree (service_id);
+
+--
+-- TOC entry 4403 (class 1259 OID 20386)
+-- Name: idx_pos_sales_completed_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pos_sales_completed_at ON public.pos_sales USING btree (completed_at DESC);
+
+--
+-- TOC entry 4404 (class 1259 OID 20387)
+-- Name: idx_pos_sales_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pos_sales_created_at ON public.pos_sales USING btree (created_at DESC);
+
+--
+-- TOC entry 4405 (class 1259 OID 20388)
+-- Name: idx_pos_sales_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pos_sales_deleted_at ON public.pos_sales USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4406 (class 1259 OID 20389)
+-- Name: idx_pos_sales_payment_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pos_sales_payment_status ON public.pos_sales USING btree (payment_status);
+
+--
+-- TOC entry 4407 (class 1259 OID 20390)
+-- Name: idx_pos_sales_sale_number; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pos_sales_sale_number ON public.pos_sales USING btree (sale_number);
+
+--
+-- TOC entry 4408 (class 1259 OID 20391)
+-- Name: idx_pos_sales_staff_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pos_sales_staff_id ON public.pos_sales USING btree (staff_id);
+
+--
+-- TOC entry 4409 (class 1259 OID 20392)
+-- Name: idx_pos_sales_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_pos_sales_status ON public.pos_sales USING btree (status);
+
+--
+-- TOC entry 4414 (class 1259 OID 20393)
+-- Name: idx_product_images_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_product_images_deleted_at ON public.product_images USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4415 (class 1259 OID 20394)
+-- Name: idx_product_images_is_primary; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_product_images_is_primary ON public.product_images USING btree (product_id, is_primary);
+
+--
+-- TOC entry 4416 (class 1259 OID 20395)
+-- Name: idx_product_images_product_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_product_images_product_id ON public.product_images USING btree (product_id);
+
+--
+-- TOC entry 4420 (class 1259 OID 20396)
+-- Name: idx_product_reviews_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_product_reviews_created_at ON public.product_reviews USING btree (created_at DESC);
+
+--
+-- TOC entry 4421 (class 1259 OID 20397)
+-- Name: idx_product_reviews_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_product_reviews_deleted_at ON public.product_reviews USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4422 (class 1259 OID 20398)
+-- Name: idx_product_reviews_order_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_product_reviews_order_id ON public.product_reviews USING btree (order_id);
+
+--
+-- TOC entry 4423 (class 1259 OID 20399)
+-- Name: idx_product_reviews_product_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_product_reviews_product_id ON public.product_reviews USING btree (product_id);
+
+--
+-- TOC entry 4424 (class 1259 OID 20400)
+-- Name: idx_product_reviews_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_product_reviews_status ON public.product_reviews USING btree (status);
+
+--
+-- TOC entry 4425 (class 1259 OID 20401)
+-- Name: idx_product_reviews_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_product_reviews_user_id ON public.product_reviews USING btree (user_id);
+
+--
+-- TOC entry 4429 (class 1259 OID 20402)
+-- Name: idx_products_brand; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_products_brand ON public.products USING btree (brand);
+
+--
+-- TOC entry 4430 (class 1259 OID 20403)
+-- Name: idx_products_category_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_products_category_id ON public.products USING btree (category_id);
+
+--
+-- TOC entry 4431 (class 1259 OID 20404)
+-- Name: idx_products_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_products_deleted_at ON public.products USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4432 (class 1259 OID 20405)
+-- Name: idx_products_is_active; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_products_is_active ON public.products USING btree (is_active);
+
+--
+-- TOC entry 4433 (class 1259 OID 20406)
+-- Name: idx_products_sku; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_products_sku ON public.products USING btree (sku);
+
+--
+-- TOC entry 4438 (class 1259 OID 20407)
+-- Name: idx_project_installment_schedules_due_date; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_project_installment_schedules_due_date ON public.project_installment_schedules USING btree (due_date);
+
+--
+-- TOC entry 4439 (class 1259 OID 20408)
+-- Name: idx_project_installment_schedules_overdue; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_project_installment_schedules_overdue ON public.project_installment_schedules USING btree (project_id, status, due_date) WHERE ((status)::text = 'overdue'::text);
+
+--
+-- TOC entry 4440 (class 1259 OID 20409)
+-- Name: idx_project_installment_schedules_project; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_project_installment_schedules_project ON public.project_installment_schedules USING btree (project_id);
+
+--
+-- TOC entry 4441 (class 1259 OID 20410)
+-- Name: idx_project_installment_schedules_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_project_installment_schedules_status ON public.project_installment_schedules USING btree (status);
+
+--
+-- TOC entry 4446 (class 1259 OID 20411)
+-- Name: idx_project_milestones_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_project_milestones_deleted_at ON public.project_milestones USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4447 (class 1259 OID 20412)
+-- Name: idx_project_milestones_project_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_project_milestones_project_id ON public.project_milestones USING btree (project_id);
+
+--
+-- TOC entry 4448 (class 1259 OID 20413)
+-- Name: idx_project_milestones_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_project_milestones_status ON public.project_milestones USING btree (status);
+
+--
+-- TOC entry 4451 (class 1259 OID 20414)
+-- Name: idx_project_subtasks_assigned_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_project_subtasks_assigned_user_id ON public.project_subtasks USING btree (assigned_user_id);
+
+--
+-- TOC entry 4452 (class 1259 OID 20415)
+-- Name: idx_project_subtasks_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_project_subtasks_deleted_at ON public.project_subtasks USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4453 (class 1259 OID 20416)
+-- Name: idx_project_subtasks_milestone_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_project_subtasks_milestone_id ON public.project_subtasks USING btree (milestone_id);
+
+--
+-- TOC entry 4454 (class 1259 OID 20417)
+-- Name: idx_project_subtasks_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_project_subtasks_status ON public.project_subtasks USING btree (status);
+
+--
+-- TOC entry 4457 (class 1259 OID 20418)
+-- Name: idx_project_tasks_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_project_tasks_deleted_at ON public.project_tasks USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4458 (class 1259 OID 20419)
+-- Name: idx_project_tasks_project_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_project_tasks_project_id ON public.project_tasks USING btree (project_id);
+
+--
+-- TOC entry 4459 (class 1259 OID 20420)
+-- Name: idx_project_tasks_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_project_tasks_status ON public.project_tasks USING btree (status);
+
+--
+-- TOC entry 4462 (class 1259 OID 20421)
+-- Name: idx_project_team_members_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_project_team_members_user_id ON public.project_team_members USING btree (user_id);
+
+--
+-- TOC entry 4465 (class 1259 OID 20422)
+-- Name: idx_projects_claimed_by; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_projects_claimed_by ON public.projects USING btree (claimed_by);
+
+--
+-- TOC entry 4466 (class 1259 OID 20423)
+-- Name: idx_projects_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_projects_deleted_at ON public.projects USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4467 (class 1259 OID 20424)
+-- Name: idx_projects_fulfillment_address_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_projects_fulfillment_address_id ON public.projects USING btree (fulfillment_address_id) WHERE (fulfillment_address_id IS NOT NULL);
+
+--
+-- TOC entry 4468 (class 1259 OID 20425)
+-- Name: idx_projects_fulfillment_method; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_projects_fulfillment_method ON public.projects USING btree (fulfillment_method);
+
+--
+-- TOC entry 4469 (class 1259 OID 20426)
+-- Name: idx_projects_order_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_projects_order_id ON public.projects USING btree (order_id);
+
+--
+-- TOC entry 4470 (class 1259 OID 20427)
+-- Name: idx_projects_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_projects_status ON public.projects USING btree (status);
+
+--
+-- TOC entry 4471 (class 1259 OID 20428)
+-- Name: idx_projects_status_progress; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_projects_status_progress ON public.projects USING btree (status, progress);
+
+--
+-- TOC entry 4478 (class 1259 OID 20429)
+-- Name: idx_refresh_tokens_expires_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refresh_tokens_expires_at ON public.refresh_tokens USING btree (expires_at);
+
+--
+-- TOC entry 4479 (class 1259 OID 20430)
+-- Name: idx_refresh_tokens_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refresh_tokens_user_id ON public.refresh_tokens USING btree (user_id);
+
+--
+-- TOC entry 4484 (class 1259 OID 20431)
+-- Name: idx_refund_request_counters_date; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refund_request_counters_date ON public.refund_request_counters USING btree (date);
+
+--
+-- TOC entry 4487 (class 1259 OID 20432)
+-- Name: idx_refund_request_images_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refund_request_images_deleted_at ON public.refund_request_images USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4488 (class 1259 OID 20433)
+-- Name: idx_refund_request_images_refund_request_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refund_request_images_refund_request_id ON public.refund_request_images USING btree (refund_request_id);
+
+--
+-- TOC entry 4491 (class 1259 OID 20434)
+-- Name: idx_refund_request_items_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refund_request_items_deleted_at ON public.refund_request_items USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4492 (class 1259 OID 20435)
+-- Name: idx_refund_request_items_order_item_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refund_request_items_order_item_id ON public.refund_request_items USING btree (order_item_id);
+
+--
+-- TOC entry 4493 (class 1259 OID 20436)
+-- Name: idx_refund_request_items_product_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refund_request_items_product_id ON public.refund_request_items USING btree (product_id);
+
+--
+-- TOC entry 4494 (class 1259 OID 20437)
+-- Name: idx_refund_request_items_refund_request_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refund_request_items_refund_request_id ON public.refund_request_items USING btree (refund_request_id);
+
+--
+-- TOC entry 4497 (class 1259 OID 20438)
+-- Name: idx_refund_requests_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refund_requests_created_at ON public.refund_requests USING btree (created_at DESC);
+
+--
+-- TOC entry 4498 (class 1259 OID 20439)
+-- Name: idx_refund_requests_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refund_requests_deleted_at ON public.refund_requests USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4499 (class 1259 OID 20440)
+-- Name: idx_refund_requests_order_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refund_requests_order_id ON public.refund_requests USING btree (order_id);
+
+--
+-- TOC entry 4500 (class 1259 OID 20441)
+-- Name: idx_refund_requests_payment_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refund_requests_payment_id ON public.refund_requests USING btree (payment_id);
+
+--
+-- TOC entry 4501 (class 1259 OID 20442)
+-- Name: idx_refund_requests_project_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refund_requests_project_id ON public.refund_requests USING btree (project_id);
+
+--
+-- TOC entry 4502 (class 1259 OID 20443)
+-- Name: idx_refund_requests_request_number; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refund_requests_request_number ON public.refund_requests USING btree (request_number);
+
+--
+-- TOC entry 4503 (class 1259 OID 20444)
+-- Name: idx_refund_requests_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refund_requests_status ON public.refund_requests USING btree (status);
+
+--
+-- TOC entry 4504 (class 1259 OID 20445)
+-- Name: idx_refund_requests_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refund_requests_user_id ON public.refund_requests USING btree (user_id);
+
+--
+-- TOC entry 4511 (class 1259 OID 20446)
+-- Name: idx_refund_restock_log_product; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refund_restock_log_product ON public.refund_restock_log USING btree (product_id);
+
+--
+-- TOC entry 4512 (class 1259 OID 20447)
+-- Name: idx_refund_restock_log_refund; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_refund_restock_log_refund ON public.refund_restock_log USING btree (refund_request_id);
+
+--
+-- TOC entry 4517 (class 1259 OID 20448)
+-- Name: idx_role_permissions_permission; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_role_permissions_permission ON public.role_permissions USING btree (permission_id);
+
+--
+-- TOC entry 4518 (class 1259 OID 20449)
+-- Name: idx_role_permissions_role; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_role_permissions_role ON public.role_permissions USING btree (role_id);
+
+--
+-- TOC entry 4521 (class 1259 OID 20450)
+-- Name: idx_roles_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_roles_deleted_at ON public.roles USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4522 (class 1259 OID 20451)
+-- Name: idx_roles_level; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_roles_level ON public.roles USING btree (level);
+
+--
+-- TOC entry 4523 (class 1259 OID 20452)
+-- Name: idx_roles_name; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_roles_name ON public.roles USING btree (name);
+
+--
+-- TOC entry 4524 (class 1259 OID 20453)
+-- Name: idx_roles_parent; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_roles_parent ON public.roles USING btree (parent_role_id);
+
+--
+-- TOC entry 4529 (class 1259 OID 20454)
+-- Name: idx_services_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_services_deleted_at ON public.services USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4530 (class 1259 OID 20455)
+-- Name: idx_services_is_active; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_services_is_active ON public.services USING btree (is_active);
+
+--
+-- TOC entry 4533 (class 1259 OID 20456)
+-- Name: idx_unavailable_dates_created_by; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_unavailable_dates_created_by ON public.unavailable_dates USING btree (created_by);
+
+--
+-- TOC entry 4534 (class 1259 OID 20457)
+-- Name: idx_unavailable_dates_date; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_unavailable_dates_date ON public.unavailable_dates USING btree (date);
+
+--
+-- TOC entry 4535 (class 1259 OID 20458)
+-- Name: idx_unavailable_dates_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_unavailable_dates_deleted_at ON public.unavailable_dates USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4536 (class 1259 OID 21200)
+-- Name: idx_unavailable_dates_open_override; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_unavailable_dates_open_override ON public.unavailable_dates USING btree (date) WHERE (is_open_override = true);
+
+--
+-- TOC entry 4541 (class 1259 OID 20459)
+-- Name: idx_user_identities_provider; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_user_identities_provider ON public.user_identities USING btree (provider);
+
+--
+-- TOC entry 4542 (class 1259 OID 20460)
+-- Name: idx_user_identities_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_user_identities_user_id ON public.user_identities USING btree (user_id);
+
+--
+-- TOC entry 4547 (class 1259 OID 20461)
+-- Name: idx_user_roles_expires; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_user_roles_expires ON public.user_roles USING btree (expires_at);
+
+--
+-- TOC entry 4548 (class 1259 OID 20462)
+-- Name: idx_user_roles_role; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_user_roles_role ON public.user_roles USING btree (role_id);
+
+--
+-- TOC entry 4549 (class 1259 OID 20463)
+-- Name: idx_user_roles_user; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_user_roles_user ON public.user_roles USING btree (user_id);
+
+--
+-- TOC entry 4552 (class 1259 OID 20464)
+-- Name: idx_users_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_users_created_at ON public.users USING btree (created_at DESC);
+
+--
+-- TOC entry 4553 (class 1259 OID 20465)
+-- Name: idx_users_deleted_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_users_deleted_at ON public.users USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
+
+--
+-- TOC entry 4554 (class 1259 OID 20466)
+-- Name: idx_users_email; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_users_email ON public.users USING btree (email);
+
+--
+-- TOC entry 4555 (class 1259 OID 20467)
+-- Name: idx_users_role; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_users_role ON public.users USING btree (role);
+
+--
+-- TOC entry 4575 (class 1259 OID 21849)
+-- Name: terms_account_version_unique; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX terms_account_version_unique ON public.terms_acknowledgments USING btree (user_id, terms_version) WHERE (terms_type = 'account'::text);
+
+--
+-- TOC entry 4578 (class 1259 OID 21850)
+-- Name: terms_checkout_version_unique; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX terms_checkout_version_unique ON public.terms_acknowledgments USING btree (user_id, checkout_id, terms_type, terms_version) WHERE (context = 'checkout'::text);
+
+--
+-- TOC entry 4579 (class 1259 OID 21851)
+-- Name: terms_order_index; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX terms_order_index ON public.terms_acknowledgments USING btree (order_id);
+
+--
+-- TOC entry 4149 (class 1259 OID 20468)
+-- Name: uq_addresses_one_default_per_user; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX uq_addresses_one_default_per_user ON public.addresses USING btree (user_id) WHERE is_default;
+
+--
+-- TOC entry 4165 (class 1259 OID 20469)
+-- Name: uq_appointments_reference_code; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX uq_appointments_reference_code ON public.appointments USING btree (reference_code);
+
+--
+-- TOC entry 4201 (class 1259 OID 20470)
+-- Name: uq_cart_normal_product; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX uq_cart_normal_product ON public.cart_items USING btree (cart_id, product_id) WHERE ((product_id IS NOT NULL) AND (customization_id IS NULL));
+
+--
+-- TOC entry 4230 (class 1259 OID 20471)
+-- Name: uq_customization_feedback_order; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX uq_customization_feedback_order ON public.customization_feedback USING btree (order_id) WHERE (deleted_at IS NULL);
+
+--
+-- TOC entry 4419 (class 1259 OID 20472)
+-- Name: uq_product_images_one_primary_per_product; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX uq_product_images_one_primary_per_product ON public.product_images USING btree (product_id) WHERE is_primary;
+
+--
+-- TOC entry 4428 (class 1259 OID 20473)
+-- Name: uq_product_reviews_order_item; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX uq_product_reviews_order_item ON public.product_reviews USING btree (order_item_id) WHERE (deleted_at IS NULL);
+
+--
+-- TOC entry 4509 (class 1259 OID 21863)
+-- Name: uq_refund_requests_active_order; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX uq_refund_requests_active_order ON public.refund_requests USING btree (order_id) WHERE ((deleted_at IS NULL) AND ((status)::text <> ALL ((ARRAY['rejected'::character varying, 'return_rejected'::character varying, 'refunded'::character varying, 'completed'::character varying, 'withdrawn'::character varying])::text[])));
+
+--
+-- TOC entry 4510 (class 1259 OID 20475)
+-- Name: uq_refund_requests_active_project; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX uq_refund_requests_active_project ON public.refund_requests USING btree (project_id) WHERE ((deleted_at IS NULL) AND (project_id IS NOT NULL) AND ((status)::text = ANY (ARRAY[('pending'::character varying)::text, ('approved'::character varying)::text, ('processing'::character varying)::text, ('return_pending'::character varying)::text, ('returned'::character varying)::text, ('pending_payment_verification'::character varying)::text])));
+
+--
+-- TOC entry 4710 (class 2620 OID 20476)
+-- Name: addresses trg_addresses_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_addresses_set_updated_at BEFORE UPDATE ON public.addresses FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4711 (class 2620 OID 20477)
+-- Name: appointments trg_appointments_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_appointments_set_updated_at BEFORE UPDATE ON public.appointments FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4712 (class 2620 OID 21324)
+-- Name: audit_logs trg_audit_logs_fill_search_text; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_audit_logs_fill_search_text BEFORE INSERT ON public.audit_logs FOR EACH ROW EXECUTE FUNCTION public.audit_logs_fill_search_text();
+
+--
+-- TOC entry 4713 (class 2620 OID 20478)
+-- Name: builder_guitar_types trg_builder_guitar_types_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_builder_guitar_types_set_updated_at BEFORE UPDATE ON public.builder_guitar_types FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4714 (class 2620 OID 20479)
+-- Name: builder_model_images trg_builder_model_images_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_builder_model_images_set_updated_at BEFORE UPDATE ON public.builder_model_images FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4715 (class 2620 OID 20480)
+-- Name: builder_part_categories trg_builder_part_categories_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_builder_part_categories_set_updated_at BEFORE UPDATE ON public.builder_part_categories FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4716 (class 2620 OID 20481)
+-- Name: cart_items trg_cart_items_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_cart_items_set_updated_at BEFORE UPDATE ON public.cart_items FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4717 (class 2620 OID 20482)
+-- Name: carts trg_carts_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_carts_set_updated_at BEFORE UPDATE ON public.carts FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4718 (class 2620 OID 20483)
+-- Name: categories trg_categories_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_categories_set_updated_at BEFORE UPDATE ON public.categories FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4719 (class 2620 OID 20484)
+-- Name: customization_parts trg_customization_parts_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_customization_parts_set_updated_at BEFORE UPDATE ON public.customization_parts FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4720 (class 2620 OID 20485)
+-- Name: customizations trg_customizations_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_customizations_set_updated_at BEFORE UPDATE ON public.customizations FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4721 (class 2620 OID 20486)
+-- Name: guitar_builder_parts trg_guitar_builder_parts_normalize; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_guitar_builder_parts_normalize BEFORE INSERT OR UPDATE ON public.guitar_builder_parts FOR EACH ROW EXECUTE FUNCTION public.normalize_guitar_builder_part();
+
+--
+-- TOC entry 4722 (class 2620 OID 20487)
+-- Name: guitar_builder_parts trg_guitar_builder_parts_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_guitar_builder_parts_set_updated_at BEFORE UPDATE ON public.guitar_builder_parts FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4723 (class 2620 OID 20488)
+-- Name: inventory trg_inventory_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_inventory_set_updated_at BEFORE UPDATE ON public.inventory FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4724 (class 2620 OID 20489)
+-- Name: order_items trg_order_items_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_order_items_set_updated_at BEFORE UPDATE ON public.order_items FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4725 (class 2620 OID 20490)
+-- Name: orders trg_orders_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_orders_set_updated_at BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4726 (class 2620 OID 20491)
+-- Name: payment_config trg_payment_config_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_payment_config_set_updated_at BEFORE UPDATE ON public.payment_config FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4727 (class 2620 OID 20492)
+-- Name: payments trg_payments_force_for_verification; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_payments_force_for_verification BEFORE INSERT OR UPDATE OF status, reference_number, proof_url ON public.payments FOR EACH ROW EXECUTE FUNCTION public.ensure_payment_for_verification_status();
+
+--
+-- TOC entry 4728 (class 2620 OID 20493)
+-- Name: payments trg_payments_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_payments_set_updated_at BEFORE UPDATE ON public.payments FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4730 (class 2620 OID 20494)
+-- Name: permissions trg_permissions_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_permissions_set_updated_at BEFORE UPDATE ON public.permissions FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4731 (class 2620 OID 20495)
+-- Name: pos_payments trg_pos_payments_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_pos_payments_set_updated_at BEFORE UPDATE ON public.pos_payments FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4732 (class 2620 OID 20496)
+-- Name: pos_sale_items trg_pos_sale_items_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_pos_sale_items_set_updated_at BEFORE UPDATE ON public.pos_sale_items FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4733 (class 2620 OID 20497)
+-- Name: pos_sales trg_pos_sales_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_pos_sales_set_updated_at BEFORE UPDATE ON public.pos_sales FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4734 (class 2620 OID 20498)
+-- Name: product_images trg_product_images_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_product_images_set_updated_at BEFORE UPDATE ON public.product_images FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4735 (class 2620 OID 20499)
+-- Name: products trg_products_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_products_set_updated_at BEFORE UPDATE ON public.products FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4736 (class 2620 OID 20500)
+-- Name: project_milestones trg_project_milestones_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_project_milestones_set_updated_at BEFORE UPDATE ON public.project_milestones FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4737 (class 2620 OID 20501)
+-- Name: project_subtasks trg_project_subtasks_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_project_subtasks_set_updated_at BEFORE UPDATE ON public.project_subtasks FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4738 (class 2620 OID 20502)
+-- Name: project_tasks trg_project_tasks_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_project_tasks_set_updated_at BEFORE UPDATE ON public.project_tasks FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4739 (class 2620 OID 20503)
+-- Name: projects trg_projects_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_projects_set_updated_at BEFORE UPDATE ON public.projects FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4740 (class 2620 OID 20504)
+-- Name: roles trg_roles_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_roles_set_updated_at BEFORE UPDATE ON public.roles FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4741 (class 2620 OID 20505)
+-- Name: services trg_services_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_services_set_updated_at BEFORE UPDATE ON public.services FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4729 (class 2620 OID 20506)
+-- Name: payments trg_sync_orders_from_payments; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_sync_orders_from_payments AFTER INSERT OR UPDATE OF status, reference_number, proof_url ON public.payments FOR EACH ROW EXECUTE FUNCTION public.sync_order_payment_status_from_payment();
+
+--
+-- TOC entry 4742 (class 2620 OID 20510)
+-- Name: unavailable_dates trg_unavailable_dates_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_unavailable_dates_set_updated_at BEFORE UPDATE ON public.unavailable_dates FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4743 (class 2620 OID 20519)
+-- Name: user_identities trg_user_identities_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_user_identities_set_updated_at BEFORE UPDATE ON public.user_identities FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4744 (class 2620 OID 20522)
+-- Name: users trg_users_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_users_set_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- TOC entry 4580 (class 2606 OID 20523)
+-- Name: addresses addresses_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.addresses
+    ADD CONSTRAINT addresses_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4702 (class 2606 OID 21154)
+-- Name: appointment_refunds appointment_refunds_appointment_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.appointment_refunds
+    ADD CONSTRAINT appointment_refunds_appointment_id_fkey FOREIGN KEY (appointment_id) REFERENCES public.appointments(appointment_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4703 (class 2606 OID 21164)
+-- Name: appointment_refunds appointment_refunds_reviewed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.appointment_refunds
+    ADD CONSTRAINT appointment_refunds_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4704 (class 2606 OID 21159)
+-- Name: appointment_refunds appointment_refunds_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.appointment_refunds
+    ADD CONSTRAINT appointment_refunds_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4581 (class 2606 OID 20528)
+-- Name: appointments appointments_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.appointments
+    ADD CONSTRAINT appointments_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(order_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4582 (class 2606 OID 21121)
+-- Name: appointments appointments_rescheduled_from_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.appointments
+    ADD CONSTRAINT appointments_rescheduled_from_fkey FOREIGN KEY (rescheduled_from) REFERENCES public.appointments(appointment_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4583 (class 2606 OID 20533)
+-- Name: appointments appointments_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.appointments
+    ADD CONSTRAINT appointments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4584 (class 2606 OID 20538)
+-- Name: audit_logs audit_logs_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.audit_logs
+    ADD CONSTRAINT audit_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4585 (class 2606 OID 20543)
+-- Name: builder_model_images builder_model_images_guitar_type_code_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.builder_model_images
+    ADD CONSTRAINT builder_model_images_guitar_type_code_fkey FOREIGN KEY (guitar_type_code) REFERENCES public.builder_guitar_types(guitar_type_code) ON DELETE CASCADE;
+
+--
+-- TOC entry 4586 (class 2606 OID 20548)
+-- Name: builder_type_categories builder_type_categories_guitar_type_code_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.builder_type_categories
+    ADD CONSTRAINT builder_type_categories_guitar_type_code_fkey FOREIGN KEY (guitar_type_code) REFERENCES public.builder_guitar_types(guitar_type_code) ON DELETE CASCADE;
+
+--
+-- TOC entry 4587 (class 2606 OID 20553)
+-- Name: builder_type_categories builder_type_categories_part_category_code_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.builder_type_categories
+    ADD CONSTRAINT builder_type_categories_part_category_code_fkey FOREIGN KEY (part_category_code) REFERENCES public.builder_part_categories(part_category_code) ON DELETE CASCADE;
+
+--
+-- TOC entry 4588 (class 2606 OID 20558)
+-- Name: cart_items cart_items_cart_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT cart_items_cart_id_fkey FOREIGN KEY (cart_id) REFERENCES public.carts(cart_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4589 (class 2606 OID 20563)
+-- Name: cart_items cart_items_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cart_items
+    ADD CONSTRAINT cart_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4590 (class 2606 OID 20568)
+-- Name: carts carts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.carts
+    ADD CONSTRAINT carts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4591 (class 2606 OID 20573)
+-- Name: current_build_claims current_build_claims_admin_confirmed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.current_build_claims
+    ADD CONSTRAINT current_build_claims_admin_confirmed_by_fkey FOREIGN KEY (admin_confirmed_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4592 (class 2606 OID 20578)
+-- Name: current_build_claims current_build_claims_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.current_build_claims
+    ADD CONSTRAINT current_build_claims_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4593 (class 2606 OID 20583)
+-- Name: current_build_claims current_build_claims_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.current_build_claims
+    ADD CONSTRAINT current_build_claims_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(order_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4594 (class 2606 OID 20588)
+-- Name: current_build_claims current_build_claims_pickup_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.current_build_claims
+    ADD CONSTRAINT current_build_claims_pickup_staff_id_fkey FOREIGN KEY (pickup_staff_id) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4595 (class 2606 OID 20593)
+-- Name: current_build_claims current_build_claims_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.current_build_claims
+    ADD CONSTRAINT current_build_claims_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(project_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4596 (class 2606 OID 20598)
+-- Name: current_build_claims current_build_claims_received_confirmed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.current_build_claims
+    ADD CONSTRAINT current_build_claims_received_confirmed_by_fkey FOREIGN KEY (received_confirmed_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4597 (class 2606 OID 20603)
+-- Name: customization_feedback customization_feedback_moderated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.customization_feedback
+    ADD CONSTRAINT customization_feedback_moderated_by_fkey FOREIGN KEY (moderated_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4598 (class 2606 OID 20608)
+-- Name: customization_feedback customization_feedback_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.customization_feedback
+    ADD CONSTRAINT customization_feedback_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(order_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4599 (class 2606 OID 20613)
+-- Name: customization_feedback customization_feedback_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.customization_feedback
+    ADD CONSTRAINT customization_feedback_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(project_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4600 (class 2606 OID 20618)
+-- Name: customization_feedback customization_feedback_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.customization_feedback
+    ADD CONSTRAINT customization_feedback_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4601 (class 2606 OID 20623)
+-- Name: customization_parts customization_parts_customization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.customization_parts
+    ADD CONSTRAINT customization_parts_customization_id_fkey FOREIGN KEY (customization_id) REFERENCES public.customizations(customization_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4602 (class 2606 OID 20628)
+-- Name: customization_parts customization_parts_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.customization_parts
+    ADD CONSTRAINT customization_parts_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4603 (class 2606 OID 20633)
+-- Name: customizations customizations_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.customizations
+    ADD CONSTRAINT customizations_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4604 (class 2606 OID 20638)
+-- Name: default_workflow_tasks default_workflow_tasks_step_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.default_workflow_tasks
+    ADD CONSTRAINT default_workflow_tasks_step_id_fkey FOREIGN KEY (step_id) REFERENCES public.default_workflow_steps(step_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4605 (class 2606 OID 20643)
+-- Name: discount_codes discount_codes_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.discount_codes
+    ADD CONSTRAINT discount_codes_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4606 (class 2606 OID 20648)
+-- Name: fulfillment_requests fulfillment_requests_delivered_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.fulfillment_requests
+    ADD CONSTRAINT fulfillment_requests_delivered_by_user_id_fkey FOREIGN KEY (delivered_by_user_id) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4607 (class 2606 OID 20653)
+-- Name: fulfillment_requests fulfillment_requests_delivery_address_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.fulfillment_requests
+    ADD CONSTRAINT fulfillment_requests_delivery_address_id_fkey FOREIGN KEY (delivery_address_id) REFERENCES public.addresses(address_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4608 (class 2606 OID 20658)
+-- Name: fulfillment_requests fulfillment_requests_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.fulfillment_requests
+    ADD CONSTRAINT fulfillment_requests_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(order_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4609 (class 2606 OID 20663)
+-- Name: fulfillment_requests fulfillment_requests_pickup_appointment_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.fulfillment_requests
+    ADD CONSTRAINT fulfillment_requests_pickup_appointment_id_fkey FOREIGN KEY (pickup_appointment_id) REFERENCES public.appointments(appointment_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4610 (class 2606 OID 21187)
+-- Name: fulfillment_requests fulfillment_requests_pickup_id_verified_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.fulfillment_requests
+    ADD CONSTRAINT fulfillment_requests_pickup_id_verified_by_fkey FOREIGN KEY (pickup_id_verified_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4611 (class 2606 OID 20668)
+-- Name: fulfillment_requests fulfillment_requests_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.fulfillment_requests
+    ADD CONSTRAINT fulfillment_requests_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(project_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4612 (class 2606 OID 20673)
+-- Name: fulfillment_requests fulfillment_requests_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.fulfillment_requests
+    ADD CONSTRAINT fulfillment_requests_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4613 (class 2606 OID 20678)
+-- Name: guitar_builder_parts guitar_builder_parts_guitar_type_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.guitar_builder_parts
+    ADD CONSTRAINT guitar_builder_parts_guitar_type_fkey FOREIGN KEY (guitar_type) REFERENCES public.builder_guitar_types(guitar_type_code) ON DELETE RESTRICT;
+
+--
+-- TOC entry 4614 (class 2606 OID 20683)
+-- Name: guitar_builder_parts guitar_builder_parts_part_category_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.guitar_builder_parts
+    ADD CONSTRAINT guitar_builder_parts_part_category_fkey FOREIGN KEY (part_category) REFERENCES public.builder_part_categories(part_category_code) ON DELETE RESTRICT;
+
+--
+-- TOC entry 4615 (class 2606 OID 20688)
+-- Name: guitar_builder_parts guitar_builder_parts_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.guitar_builder_parts
+    ADD CONSTRAINT guitar_builder_parts_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4617 (class 2606 OID 20693)
+-- Name: inventory_logs inventory_logs_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.inventory_logs
+    ADD CONSTRAINT inventory_logs_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4618 (class 2606 OID 20698)
+-- Name: inventory_logs inventory_logs_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.inventory_logs
+    ADD CONSTRAINT inventory_logs_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4616 (class 2606 OID 20703)
+-- Name: inventory inventory_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.inventory
+    ADD CONSTRAINT inventory_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4619 (class 2606 OID 20708)
+-- Name: low_stock_alerts low_stock_alerts_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.low_stock_alerts
+    ADD CONSTRAINT low_stock_alerts_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4620 (class 2606 OID 20713)
+-- Name: notifications notifications_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4621 (class 2606 OID 20718)
+-- Name: order_items order_items_customization_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.order_items
+    ADD CONSTRAINT order_items_customization_id_fkey FOREIGN KEY (customization_id) REFERENCES public.customizations(customization_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4622 (class 2606 OID 20723)
+-- Name: order_items order_items_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.order_items
+    ADD CONSTRAINT order_items_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(order_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4623 (class 2606 OID 20728)
+-- Name: order_items order_items_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.order_items
+    ADD CONSTRAINT order_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4624 (class 2606 OID 20733)
+-- Name: orders orders_customization_hold_approved_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT orders_customization_hold_approved_by_fkey FOREIGN KEY (customization_hold_approved_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4625 (class 2606 OID 20738)
+-- Name: orders orders_delivered_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT orders_delivered_by_user_id_fkey FOREIGN KEY (delivered_by_user_id) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4626 (class 2606 OID 20743)
+-- Name: orders orders_reviewed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT orders_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4627 (class 2606 OID 20748)
+-- Name: orders orders_shipping_address_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT orders_shipping_address_id_fkey FOREIGN KEY (shipping_address_id) REFERENCES public.addresses(address_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4628 (class 2606 OID 20753)
+-- Name: orders orders_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT orders_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4629 (class 2606 OID 20758)
+-- Name: otp_attempts otp_attempts_otp_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.otp_attempts
+    ADD CONSTRAINT otp_attempts_otp_id_fkey FOREIGN KEY (otp_id) REFERENCES public.otp_codes(otp_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4630 (class 2606 OID 20763)
+-- Name: otp_codes otp_codes_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.otp_codes
+    ADD CONSTRAINT otp_codes_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4631 (class 2606 OID 20768)
+-- Name: password_reset_tokens password_reset_tokens_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.password_reset_tokens
+    ADD CONSTRAINT password_reset_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4632 (class 2606 OID 20773)
+-- Name: payments payments_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payments
+    ADD CONSTRAINT payments_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(order_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4633 (class 2606 OID 20778)
+-- Name: payments payments_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payments
+    ADD CONSTRAINT payments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4634 (class 2606 OID 20783)
+-- Name: payments payments_verified_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.payments
+    ADD CONSTRAINT payments_verified_by_fkey FOREIGN KEY (verified_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4635 (class 2606 OID 20788)
+-- Name: pos_payments pos_payments_sale_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_payments
+    ADD CONSTRAINT pos_payments_sale_id_fkey FOREIGN KEY (sale_id) REFERENCES public.pos_sales(sale_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4636 (class 2606 OID 20793)
+-- Name: pos_payments pos_payments_verified_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_payments
+    ADD CONSTRAINT pos_payments_verified_by_fkey FOREIGN KEY (verified_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4637 (class 2606 OID 20798)
+-- Name: pos_returns pos_returns_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_returns
+    ADD CONSTRAINT pos_returns_item_id_fkey FOREIGN KEY (item_id) REFERENCES public.pos_sale_items(item_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4638 (class 2606 OID 20803)
+-- Name: pos_returns pos_returns_processed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_returns
+    ADD CONSTRAINT pos_returns_processed_by_fkey FOREIGN KEY (processed_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4639 (class 2606 OID 20808)
+-- Name: pos_returns pos_returns_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_returns
+    ADD CONSTRAINT pos_returns_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4640 (class 2606 OID 20813)
+-- Name: pos_returns pos_returns_sale_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_returns
+    ADD CONSTRAINT pos_returns_sale_id_fkey FOREIGN KEY (sale_id) REFERENCES public.pos_sales(sale_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4641 (class 2606 OID 20818)
+-- Name: pos_sale_items pos_sale_items_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_sale_items
+    ADD CONSTRAINT pos_sale_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4642 (class 2606 OID 20823)
+-- Name: pos_sale_items pos_sale_items_sale_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_sale_items
+    ADD CONSTRAINT pos_sale_items_sale_id_fkey FOREIGN KEY (sale_id) REFERENCES public.pos_sales(sale_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4643 (class 2606 OID 20828)
+-- Name: pos_sale_items pos_sale_items_service_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_sale_items
+    ADD CONSTRAINT pos_sale_items_service_id_fkey FOREIGN KEY (service_id) REFERENCES public.services(service_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4644 (class 2606 OID 20833)
+-- Name: pos_sales pos_sales_cancelled_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_sales
+    ADD CONSTRAINT pos_sales_cancelled_by_fkey FOREIGN KEY (cancelled_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4645 (class 2606 OID 20838)
+-- Name: pos_sales pos_sales_returned_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_sales
+    ADD CONSTRAINT pos_sales_returned_by_fkey FOREIGN KEY (returned_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4646 (class 2606 OID 20843)
+-- Name: pos_sales pos_sales_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_sales
+    ADD CONSTRAINT pos_sales_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES public.users(user_id) ON DELETE RESTRICT;
+
+--
+-- TOC entry 4647 (class 2606 OID 20848)
+-- Name: pos_sales pos_sales_voided_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.pos_sales
+    ADD CONSTRAINT pos_sales_voided_by_fkey FOREIGN KEY (voided_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4648 (class 2606 OID 20853)
+-- Name: product_images product_images_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.product_images
+    ADD CONSTRAINT product_images_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4649 (class 2606 OID 20858)
+-- Name: product_reviews product_reviews_moderated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.product_reviews
+    ADD CONSTRAINT product_reviews_moderated_by_fkey FOREIGN KEY (moderated_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4650 (class 2606 OID 20863)
+-- Name: product_reviews product_reviews_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.product_reviews
+    ADD CONSTRAINT product_reviews_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(order_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4651 (class 2606 OID 20868)
+-- Name: product_reviews product_reviews_order_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.product_reviews
+    ADD CONSTRAINT product_reviews_order_item_id_fkey FOREIGN KEY (order_item_id) REFERENCES public.order_items(order_item_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4652 (class 2606 OID 20873)
+-- Name: product_reviews product_reviews_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.product_reviews
+    ADD CONSTRAINT product_reviews_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4653 (class 2606 OID 20878)
+-- Name: product_reviews product_reviews_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.product_reviews
+    ADD CONSTRAINT product_reviews_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4654 (class 2606 OID 20883)
+-- Name: products products_category_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.products
+    ADD CONSTRAINT products_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.categories(category_id) ON DELETE RESTRICT;
+
+--
+-- TOC entry 4655 (class 2606 OID 20888)
+-- Name: project_installment_schedules project_installment_schedules_payment_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.project_installment_schedules
+    ADD CONSTRAINT project_installment_schedules_payment_id_fkey FOREIGN KEY (payment_id) REFERENCES public.payments(payment_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4656 (class 2606 OID 20893)
+-- Name: project_installment_schedules project_installment_schedules_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.project_installment_schedules
+    ADD CONSTRAINT project_installment_schedules_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(project_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4657 (class 2606 OID 20898)
+-- Name: project_milestones project_milestones_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.project_milestones
+    ADD CONSTRAINT project_milestones_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(project_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4658 (class 2606 OID 20903)
+-- Name: project_subtasks project_subtasks_assigned_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.project_subtasks
+    ADD CONSTRAINT project_subtasks_assigned_user_id_fkey FOREIGN KEY (assigned_user_id) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4659 (class 2606 OID 20908)
+-- Name: project_subtasks project_subtasks_completed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.project_subtasks
+    ADD CONSTRAINT project_subtasks_completed_by_fkey FOREIGN KEY (completed_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4660 (class 2606 OID 20913)
+-- Name: project_subtasks project_subtasks_milestone_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.project_subtasks
+    ADD CONSTRAINT project_subtasks_milestone_id_fkey FOREIGN KEY (milestone_id) REFERENCES public.project_milestones(milestone_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4661 (class 2606 OID 20918)
+-- Name: project_tasks project_tasks_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.project_tasks
+    ADD CONSTRAINT project_tasks_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(project_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4662 (class 2606 OID 20923)
+-- Name: project_team_members project_team_members_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.project_team_members
+    ADD CONSTRAINT project_team_members_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(project_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4663 (class 2606 OID 20928)
+-- Name: project_team_members project_team_members_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.project_team_members
+    ADD CONSTRAINT project_team_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4664 (class 2606 OID 20933)
+-- Name: projects projects_cancel_address_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_cancel_address_id_fkey FOREIGN KEY (cancel_address_id) REFERENCES public.addresses(address_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4665 (class 2606 OID 20938)
+-- Name: projects projects_cancel_approved_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_cancel_approved_by_fkey FOREIGN KEY (cancel_approved_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4666 (class 2606 OID 20943)
+-- Name: projects projects_claimed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_claimed_by_fkey FOREIGN KEY (claimed_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4667 (class 2606 OID 20948)
+-- Name: projects projects_deleted_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4668 (class 2606 OID 20953)
+-- Name: projects projects_delivered_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_delivered_by_user_id_fkey FOREIGN KEY (delivered_by_user_id) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4669 (class 2606 OID 20958)
+-- Name: projects projects_fulfillment_address_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_fulfillment_address_id_fkey FOREIGN KEY (fulfillment_address_id) REFERENCES public.addresses(address_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4670 (class 2606 OID 20963)
+-- Name: projects projects_hold_approved_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_hold_approved_by_fkey FOREIGN KEY (hold_approved_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4671 (class 2606 OID 20968)
+-- Name: projects projects_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(order_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4672 (class 2606 OID 20973)
+-- Name: projects projects_pickup_appointment_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_pickup_appointment_id_fkey FOREIGN KEY (pickup_appointment_id) REFERENCES public.appointments(appointment_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4673 (class 2606 OID 20978)
+-- Name: refresh_tokens refresh_tokens_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refresh_tokens
+    ADD CONSTRAINT refresh_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4707 (class 2606 OID 21625)
+-- Name: refund_private_destinations refund_private_destinations_refund_request_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_private_destinations
+    ADD CONSTRAINT refund_private_destinations_refund_request_id_fkey FOREIGN KEY (refund_request_id) REFERENCES public.refund_requests(refund_request_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4705 (class 2606 OID 21606)
+-- Name: refund_private_files refund_private_files_refund_request_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_private_files
+    ADD CONSTRAINT refund_private_files_refund_request_id_fkey FOREIGN KEY (refund_request_id) REFERENCES public.refund_requests(refund_request_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4706 (class 2606 OID 21611)
+-- Name: refund_private_files refund_private_files_uploaded_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_private_files
+    ADD CONSTRAINT refund_private_files_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public.users(user_id);
+
+--
+-- TOC entry 4674 (class 2606 OID 20983)
+-- Name: refund_request_images refund_request_images_refund_request_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_request_images
+    ADD CONSTRAINT refund_request_images_refund_request_id_fkey FOREIGN KEY (refund_request_id) REFERENCES public.refund_requests(refund_request_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4675 (class 2606 OID 20988)
+-- Name: refund_request_items refund_request_items_order_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_request_items
+    ADD CONSTRAINT refund_request_items_order_item_id_fkey FOREIGN KEY (order_item_id) REFERENCES public.order_items(order_item_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4676 (class 2606 OID 20993)
+-- Name: refund_request_items refund_request_items_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_request_items
+    ADD CONSTRAINT refund_request_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4677 (class 2606 OID 20998)
+-- Name: refund_request_items refund_request_items_refund_request_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_request_items
+    ADD CONSTRAINT refund_request_items_refund_request_id_fkey FOREIGN KEY (refund_request_id) REFERENCES public.refund_requests(refund_request_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4678 (class 2606 OID 21003)
+-- Name: refund_requests refund_requests_adjusted_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_requests
+    ADD CONSTRAINT refund_requests_adjusted_by_fkey FOREIGN KEY (adjusted_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4679 (class 2606 OID 21576)
+-- Name: refund_requests refund_requests_completed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_requests
+    ADD CONSTRAINT refund_requests_completed_by_fkey FOREIGN KEY (completed_by) REFERENCES public.users(user_id);
+
+--
+-- TOC entry 4680 (class 2606 OID 21008)
+-- Name: refund_requests refund_requests_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_requests
+    ADD CONSTRAINT refund_requests_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(order_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4681 (class 2606 OID 21013)
+-- Name: refund_requests refund_requests_payment_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_requests
+    ADD CONSTRAINT refund_requests_payment_id_fkey FOREIGN KEY (payment_id) REFERENCES public.payments(payment_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4682 (class 2606 OID 21018)
+-- Name: refund_requests refund_requests_processed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_requests
+    ADD CONSTRAINT refund_requests_processed_by_fkey FOREIGN KEY (processed_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4683 (class 2606 OID 21023)
+-- Name: refund_requests refund_requests_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_requests
+    ADD CONSTRAINT refund_requests_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(project_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4684 (class 2606 OID 21028)
+-- Name: refund_requests refund_requests_restocked_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_requests
+    ADD CONSTRAINT refund_requests_restocked_by_fkey FOREIGN KEY (restocked_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4685 (class 2606 OID 21033)
+-- Name: refund_requests refund_requests_return_confirmed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_requests
+    ADD CONSTRAINT refund_requests_return_confirmed_by_fkey FOREIGN KEY (return_confirmed_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4686 (class 2606 OID 21038)
+-- Name: refund_requests refund_requests_reviewed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_requests
+    ADD CONSTRAINT refund_requests_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4687 (class 2606 OID 21581)
+-- Name: refund_requests refund_requests_sent_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_requests
+    ADD CONSTRAINT refund_requests_sent_by_fkey FOREIGN KEY (sent_by) REFERENCES public.users(user_id);
+
+--
+-- TOC entry 4688 (class 2606 OID 21043)
+-- Name: refund_requests refund_requests_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_requests
+    ADD CONSTRAINT refund_requests_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4689 (class 2606 OID 21048)
+-- Name: refund_requests refund_requests_withdrawn_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_requests
+    ADD CONSTRAINT refund_requests_withdrawn_by_fkey FOREIGN KEY (withdrawn_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4690 (class 2606 OID 21053)
+-- Name: refund_restock_log refund_restock_log_order_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_restock_log
+    ADD CONSTRAINT refund_restock_log_order_item_id_fkey FOREIGN KEY (order_item_id) REFERENCES public.order_items(order_item_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4691 (class 2606 OID 21058)
+-- Name: refund_restock_log refund_restock_log_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_restock_log
+    ADD CONSTRAINT refund_restock_log_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(product_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4692 (class 2606 OID 21063)
+-- Name: refund_restock_log refund_restock_log_refund_request_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_restock_log
+    ADD CONSTRAINT refund_restock_log_refund_request_id_fkey FOREIGN KEY (refund_request_id) REFERENCES public.refund_requests(refund_request_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4693 (class 2606 OID 21068)
+-- Name: refund_restock_log refund_restock_log_restocked_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refund_restock_log
+    ADD CONSTRAINT refund_restock_log_restocked_by_fkey FOREIGN KEY (restocked_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4694 (class 2606 OID 21073)
+-- Name: role_permissions role_permissions_permission_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT role_permissions_permission_id_fkey FOREIGN KEY (permission_id) REFERENCES public.permissions(permission_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4695 (class 2606 OID 21078)
+-- Name: role_permissions role_permissions_role_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT role_permissions_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(role_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4696 (class 2606 OID 21083)
+-- Name: roles roles_parent_role_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.roles
+    ADD CONSTRAINT roles_parent_role_id_fkey FOREIGN KEY (parent_role_id) REFERENCES public.roles(role_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4708 (class 2606 OID 21844)
+-- Name: terms_acknowledgments terms_acknowledgments_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.terms_acknowledgments
+    ADD CONSTRAINT terms_acknowledgments_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(order_id);
+
+--
+-- TOC entry 4709 (class 2606 OID 21839)
+-- Name: terms_acknowledgments terms_acknowledgments_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.terms_acknowledgments
+    ADD CONSTRAINT terms_acknowledgments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id);
+
+--
+-- TOC entry 4697 (class 2606 OID 21088)
+-- Name: unavailable_dates unavailable_dates_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.unavailable_dates
+    ADD CONSTRAINT unavailable_dates_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4698 (class 2606 OID 21093)
+-- Name: user_identities user_identities_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_identities
+    ADD CONSTRAINT user_identities_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4699 (class 2606 OID 21098)
+-- Name: user_roles user_roles_assigned_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_roles
+    ADD CONSTRAINT user_roles_assigned_by_fkey FOREIGN KEY (assigned_by) REFERENCES public.users(user_id) ON DELETE SET NULL;
+
+--
+-- TOC entry 4700 (class 2606 OID 21103)
+-- Name: user_roles user_roles_role_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_roles
+    ADD CONSTRAINT user_roles_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(role_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4701 (class 2606 OID 21108)
+-- Name: user_roles user_roles_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.user_roles
+    ADD CONSTRAINT user_roles_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON DELETE CASCADE;
+
+--
+-- TOC entry 4893 (class 0 OID 21616)
+-- Dependencies: 300
+-- Name: refund_private_destinations; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.refund_private_destinations ENABLE ROW LEVEL SECURITY;
+
+--
+-- TOC entry 4892 (class 0 OID 21589)
+-- Dependencies: 299
+-- Name: refund_private_files; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.refund_private_files ENABLE ROW LEVEL SECURITY;
+
+--
+-- TOC entry 4900 (class 0 OID 0)
+-- Dependencies: 7
+-- Name: SCHEMA public; Type: ACL; Schema: -; Owner: postgres
+--
+
+REVOKE USAGE ON SCHEMA public FROM PUBLIC;
+
+-- Completed on 2026-10-11 20:23:28
+
+--
+-- PostgreSQL database dump complete
+--
+
+\unrestrict NbhJB4aaCLLI5JqimG3kfHyK4FAOpvtfvZY3OdFCef3mpWhlLZhf3ovKTyVg900
+
+-- COSMOSCRAFT DATABASE AUDIT TRIGGERS (migration 46)
+-- Database-owned audit history. Apply in a transaction before the new backend.
+-- No historical audit rows are changed. Every public application table receives
+-- a row trigger; audit_logs itself is excluded to avoid recursion.
+ALTER TABLE public.audit_logs DROP CONSTRAINT IF EXISTS audit_logs_action_check;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS context jsonb NOT NULL DEFAULT '{}';
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS changes jsonb NOT NULL DEFAULT '{}';
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS search_text text;
+
+-- Parts receipts previously existed only as audit events. Store business state
+-- independently, including the amount of stock that was actually deducted.
+CREATE TABLE IF NOT EXISTS public.project_part_receipts (
+  receipt_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id uuid NOT NULL REFERENCES public.projects(project_id) ON DELETE CASCADE,
+  part_key text NOT NULL,
+  part_name text NOT NULL,
+  received_quantity numeric NOT NULL DEFAULT 0 CHECK (received_quantity >= 0),
+  stock_deducted_quantity numeric NOT NULL DEFAULT 0 CHECK (stock_deducted_quantity >= 0),
+  received_at timestamptz,
+  received_by uuid REFERENCES public.users(user_id) ON DELETE SET NULL,
+  supplier text,
+  product_id uuid,
+  builder_part_id uuid,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (project_id, part_key)
+);
+
+CREATE TABLE IF NOT EXISTS public.project_procurement_requests (
+  request_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id uuid NOT NULL REFERENCES public.projects(project_id) ON DELETE CASCADE,
+  requested_by uuid REFERENCES public.users(user_id) ON DELETE SET NULL,
+  purchase_count integer NOT NULL CHECK (purchase_count > 0),
+  requested_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Backfill once, before attaching receipt triggers. ON CONFLICT preserves any
+-- receipts already maintained by the new backend when this migration is rerun.
+WITH events AS (
+  SELECT al.entity_id AS project_id, al.details->>'part_key' AS part_key,
+    al.details, al.created_at, al.audit_id
+  FROM public.audit_logs al JOIN public.projects p ON p.project_id = al.entity_id
+  WHERE al.entity_type = 'project'
+    AND al.action IN ('project_part_received', 'project_part_unreceived')
+    AND nullif(al.details->>'part_key', '') IS NOT NULL
+), totals AS (
+  SELECT project_id, part_key,
+    greatest(0, sum(CASE WHEN details->>'received_quantity' ~ '^-?[0-9]+(\.[0-9]+)?$'
+      THEN (details->>'received_quantity')::numeric ELSE 0 END)) AS received_quantity,
+    greatest(0, sum(CASE WHEN details->>'stock_updated' = 'true'
+      AND details->>'received_quantity' ~ '^-?[0-9]+(\.[0-9]+)?$'
+      THEN (details->>'received_quantity')::numeric ELSE 0 END)) AS stock_deducted_quantity
+  FROM events GROUP BY project_id, part_key
+), latest AS (
+  SELECT DISTINCT ON (project_id, part_key) * FROM events
+  WHERE details->>'received_quantity' ~ '^[0-9]+(\.[0-9]+)?$'
+  ORDER BY project_id, part_key, created_at DESC, audit_id DESC
+)
+INSERT INTO public.project_part_receipts (
+  project_id, part_key, part_name, received_quantity, stock_deducted_quantity,
+  received_at, received_by, supplier, product_id, builder_part_id
+)
+SELECT t.project_id, t.part_key, coalesce(l.details->>'part_name', t.part_key),
+  t.received_quantity, t.stock_deducted_quantity,
+  CASE WHEN t.received_quantity > 0 THEN l.created_at END,
+  CASE WHEN t.received_quantity > 0 THEN u.user_id END,
+  CASE WHEN t.received_quantity > 0 THEN l.details->>'supplier' END,
+  CASE WHEN l.details->>'product_id' ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
+    THEN (l.details->>'product_id')::uuid END,
+  CASE WHEN l.details->>'builder_part_id' ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
+    THEN (l.details->>'builder_part_id')::uuid END
+FROM totals t LEFT JOIN latest l USING (project_id, part_key)
+LEFT JOIN public.users u ON u.user_id::text = l.details->>'received_by'
+ON CONFLICT (project_id, part_key) DO NOTHING;
+
+CREATE OR REPLACE FUNCTION public.audit_uuid(value text) RETURNS uuid
+LANGUAGE sql IMMUTABLE SET search_path = pg_catalog AS $$
+  SELECT CASE WHEN value ~* '^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$'
+    THEN value::uuid END
+$$;
+
+-- Redaction applies to snapshots, changes and context, including nested JSON.
+-- Private refund destinations and file bytes never enter staff-readable logs.
+CREATE OR REPLACE FUNCTION public.audit_redact(value jsonb, depth integer DEFAULT 0)
+RETURNS jsonb LANGUAGE plpgsql IMMUTABLE SET search_path = pg_catalog, public AS $$
+DECLARE result jsonb; item record; normalized text;
+BEGIN
+  IF depth > 8 THEN RETURN to_jsonb('[truncated]'::text); END IF;
+  IF jsonb_typeof(value) = 'object' THEN
+    result := '{}';
+    FOR item IN SELECT key, val FROM jsonb_each(value) AS e(key, val) LOOP
+      normalized := lower(regexp_replace(item.key, '[^a-zA-Z0-9]', '', 'g'));
+      IF normalized ~ '(password|passwd|secret|token|authorization|apikey|accesskey|privatekey|credential|cookie|cardnumber|creditcard|gcashnumber|accountnumber|paymentdestination|filedata|filebytes|imagebase64|proofimage|qrcode|codehash)'
+        OR normalized IN ('code','otp','pin','cvv','cvc','jwt','salt','ssn','sessionid')
+        OR normalized LIKE '%previewimage%' THEN
+        result := result || jsonb_build_object(item.key, '[redacted]');
+      ELSE
+        result := result || jsonb_build_object(item.key, public.audit_redact(item.val, depth + 1));
+      END IF;
+    END LOOP;
+    RETURN result;
+  ELSIF jsonb_typeof(value) = 'array' THEN
+    SELECT coalesce(jsonb_agg(public.audit_redact(val, depth + 1) ORDER BY ord), '[]') INTO result
+    FROM jsonb_array_elements(value) WITH ORDINALITY AS e(val, ord) WHERE ord <= 50;
+    RETURN result;
+  ELSIF jsonb_typeof(value) = 'string' THEN
+    IF value #>> '{}' ~* '^data:[^;]+;base64,' THEN RETURN to_jsonb('[redacted]'::text); END IF;
+    RETURN to_jsonb(left(value #>> '{}', 2000));
+  END IF;
+  RETURN value;
+END
+$$;
+
+-- Capture related business references at event time, before they can be renamed
+-- or deleted. JSON access allows the same helpers to work across table shapes.
+CREATE OR REPLACE FUNCTION public.audit_business_context(source_table text, row_data jsonb)
+RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+SET search_path = pg_catalog, public AS $$
+DECLARE result jsonb; related jsonb; project_data jsonb; customer_data jsonb;
+  v_project_id uuid; v_order_id uuid; v_customer_id uuid; v_product_id uuid;
+BEGIN
+  result := jsonb_build_object('source_table', source_table);
+  v_project_id := public.audit_uuid(row_data->>'project_id');
+  v_order_id := public.audit_uuid(row_data->>'order_id');
+  v_customer_id := public.audit_uuid(coalesce(row_data->>'customer_id', row_data->>'user_id'));
+  v_product_id := public.audit_uuid(row_data->>'product_id');
+  IF source_table = 'projects' THEN project_data := row_data;
+  ELSIF source_table = 'project_subtasks' THEN
+    SELECT to_jsonb(p) INTO project_data FROM public.project_milestones m
+      JOIN public.projects p ON p.project_id = m.project_id
+      WHERE m.milestone_id = public.audit_uuid(row_data->>'milestone_id');
+  ELSIF v_project_id IS NOT NULL THEN
+    SELECT to_jsonb(p) INTO project_data FROM public.projects p WHERE p.project_id = v_project_id;
+  END IF;
+  IF project_data IS NOT NULL THEN
+    v_project_id := public.audit_uuid(project_data->>'project_id');
+    v_order_id := coalesce(v_order_id, public.audit_uuid(project_data->>'order_id'));
+    result := result || jsonb_build_object('project_id', v_project_id,
+      'project_number', project_data->>'custom_build_id', 'custom_build_id', project_data->>'custom_build_id',
+      'project_title', project_data->>'title');
+  END IF;
+  IF source_table = 'orders' THEN related := row_data;
+  ELSIF v_order_id IS NOT NULL THEN
+    SELECT to_jsonb(o) INTO related FROM public.orders o WHERE o.order_id = v_order_id;
+  END IF;
+  IF related IS NOT NULL THEN
+    v_customer_id := coalesce(public.audit_uuid(related->>'user_id'), v_customer_id);
+    result := result || jsonb_build_object('order_id', related->>'order_id', 'order_number', related->>'order_number',
+      'order_type', related->>'order_type', 'order_total', related->'total_amount',
+      'payment_status', related->>'payment_status', 'order_status', related->>'status');
+  END IF;
+  IF source_table = 'users' THEN customer_data := row_data;
+  ELSIF v_customer_id IS NOT NULL THEN
+    SELECT to_jsonb(u) INTO customer_data FROM public.users u WHERE u.user_id = v_customer_id;
+  END IF;
+  IF customer_data IS NOT NULL THEN
+    result := result || jsonb_build_object('customer_id', customer_data->>'user_id',
+      'customer_name', trim(concat_ws(' ', customer_data->>'first_name', customer_data->>'last_name')),
+      'customer_email', customer_data->>'email');
+    IF source_table = 'users' THEN
+      result := result || jsonb_build_object('full_name', result->>'customer_name',
+        'email', customer_data->>'email', 'role', customer_data->>'role');
+    END IF;
+  END IF;
+  IF source_table IN ('products', 'guitar_builder_parts') THEN
+    related := row_data;
+  ELSIF v_product_id IS NOT NULL THEN
+    SELECT to_jsonb(p) INTO related FROM public.products p WHERE p.product_id = v_product_id;
+  ELSE related := NULL;
+  END IF;
+  IF related IS NOT NULL THEN
+    result := result || jsonb_build_object('product_id', coalesce(related->>'product_id', related->>'part_id'),
+      'product_name', related->>'name', 'sku', related->>'sku', 'price', related->'price',
+      'guitar_type', related->>'guitar_type', 'part_type', related->>'part_type');
+  END IF;
+  IF row_data ? 'refund_request_id' THEN
+    result := result || jsonb_build_object('refund_request_id', row_data->>'refund_request_id',
+      'refund_number', row_data->>'request_number', 'refund_type', row_data->>'refund_type',
+      'refund_amount', coalesce(row_data->'refunded_amount', row_data->'approved_amount', row_data->'amount_requested'));
+  END IF;
+  IF source_table = 'appointments' THEN
+    result := result || jsonb_build_object('appointment_id', row_data->>'appointment_id',
+      'reference_code', row_data->>'reference_code', 'appointment_date', row_data->'appointment_date',
+      'appointment_time', row_data->'appointment_time', 'appointment_type', row_data->>'appointment_type');
+  END IF;
+  IF row_data ? 'sale_id' THEN
+    IF source_table = 'pos_sales' THEN related := row_data;
+    ELSE SELECT to_jsonb(s) INTO related FROM public.pos_sales s WHERE s.sale_id = public.audit_uuid(row_data->>'sale_id');
+    END IF;
+    result := result || jsonb_build_object('sale_id', row_data->>'sale_id',
+      'sale_number', related->>'sale_number', 'total_amount', related->'total_amount');
+  END IF;
+  IF source_table = 'customizations' THEN
+    result := result || jsonb_build_object('build_id', row_data->>'customization_id',
+      'build_name', row_data->>'name', 'body_model', row_data->>'body_model',
+      'buildId', row_data->>'customization_id', 'buildName', row_data->>'name',
+      'customerId', result->>'customer_id', 'customerName', result->>'customer_name');
+  END IF;
+  RETURN jsonb_strip_nulls(public.audit_redact(result));
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.audit_record_change() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE before_row jsonb := '{}'; after_row jsonb := '{}'; row_data jsonb;
+  safe_before jsonb; safe_after jsonb; field_changes jsonb := '{}'; field text;
+  context_data jsonb; details_data jsonb; actor_id uuid; actor_data jsonb;
+  entity_id uuid; action_name text := TG_OP; previous_status text; new_status text;
+  module_name text := TG_ARGV[0]; ip inet; delta numeric;
+BEGIN
+  IF TG_OP <> 'INSERT' THEN before_row := to_jsonb(OLD); END IF;
+  IF TG_OP <> 'DELETE' THEN after_row := to_jsonb(NEW); END IF;
+  row_data := CASE WHEN TG_OP = 'DELETE' THEN before_row ELSE after_row END;
+  safe_before := public.audit_redact(before_row);
+  safe_after := public.audit_redact(after_row);
+  FOR field IN SELECT key FROM jsonb_object_keys(before_row || after_row) AS keys(key) LOOP
+    IF field IN ('created_at','updated_at','modified_at','version','row_version') THEN CONTINUE; END IF;
+    IF before_row->field IS DISTINCT FROM after_row->field THEN
+      field_changes := field_changes || jsonb_build_object(field,
+        jsonb_build_object('from', safe_before->field, 'to', safe_after->field));
+    END IF;
+  END LOOP;
+  IF TG_OP = 'UPDATE' AND field_changes = '{}' THEN RETURN NEW; END IF;
+  previous_status := coalesce(before_row->>'status', before_row->>'claim_status', before_row->>'payment_status');
+  new_status := coalesce(after_row->>'status', after_row->>'claim_status', after_row->>'payment_status');
+  IF TG_OP = 'UPDATE' AND NOT (field_changes ? 'status') AND field_changes ? 'payment_status' THEN
+    previous_status := before_row->>'payment_status'; new_status := after_row->>'payment_status';
+  END IF;
+  IF TG_OP = 'UPDATE' AND before_row->>'deleted_at' IS NULL AND after_row->>'deleted_at' IS NOT NULL THEN action_name := 'DELETE'; END IF;
+  context_data := public.audit_business_context(TG_TABLE_NAME, row_data)
+    || jsonb_build_object('database_operation', TG_OP, 'database_role', session_user,
+      'source', coalesce(nullif(current_setting('cosmos.audit_source', true), ''), 'database'),
+      'record_id', row_data->>TG_ARGV[1]);
+  entity_id := public.audit_uuid(row_data->>TG_ARGV[1]);
+  IF module_name = 'project' THEN entity_id := coalesce(public.audit_uuid(context_data->>'project_id'), entity_id); END IF;
+  IF module_name = 'order' THEN entity_id := coalesce(public.audit_uuid(context_data->>'order_id'), entity_id); END IF;
+  IF module_name = 'refund' THEN entity_id := coalesce(public.audit_uuid(row_data->>'refund_request_id'), entity_id); END IF;
+  IF module_name = 'inventory' THEN entity_id := coalesce(public.audit_uuid(row_data->>'product_id'), entity_id); END IF;
+  details_data := jsonb_build_object('old', safe_before, 'new', safe_after) || public.audit_redact(row_data);
+
+  IF TG_TABLE_NAME = 'project_subtasks' THEN
+    action_name := CASE WHEN TG_OP = 'INSERT' THEN 'subtask_created'
+      WHEN TG_OP = 'DELETE' OR action_name = 'DELETE' THEN 'subtask_deleted'
+      WHEN previous_status IS DISTINCT FROM new_status THEN 'subtask_status_changed' ELSE 'subtask_updated' END;
+  ELSIF TG_TABLE_NAME = 'project_milestones' THEN
+    action_name := CASE WHEN TG_OP = 'INSERT' THEN 'milestone_created'
+      WHEN TG_OP = 'DELETE' OR action_name = 'DELETE' THEN 'milestone_deleted' ELSE 'milestone_updated' END;
+  ELSIF TG_TABLE_NAME = 'project_part_receipts' THEN
+    delta := coalesce((after_row->>'received_quantity')::numeric, 0) - coalesce((before_row->>'received_quantity')::numeric, 0);
+    action_name := CASE WHEN delta < 0 THEN 'project_part_unreceived'
+      WHEN delta > 0 THEN 'project_part_received' ELSE 'UPDATE' END;
+    details_data := details_data || jsonb_build_object('received_quantity', delta, 'quantity', abs(delta),
+      'stock_updated', coalesce((after_row->>'stock_deducted_quantity')::numeric, 0)
+        IS DISTINCT FROM coalesce((before_row->>'stock_deducted_quantity')::numeric, 0));
+  ELSIF TG_TABLE_NAME = 'project_procurement_requests' THEN action_name := 'procurement_requested';
+  ELSIF TG_TABLE_NAME = 'inventory' AND (TG_OP = 'INSERT' OR field_changes ? 'stock') THEN
+    action_name := 'STOCK_MOVEMENT';
+    context_data := context_data || jsonb_build_object('previous_quantity', before_row->'stock',
+      'new_quantity', after_row->'stock', 'quantity_change',
+      coalesce((after_row->>'stock')::numeric, 0) - coalesce((before_row->>'stock')::numeric, 0));
+    field_changes := field_changes || jsonb_build_object('stock', jsonb_build_object('from', before_row->'stock', 'to', after_row->'stock'));
+  ELSIF TG_TABLE_NAME = 'users' THEN
+    IF TG_OP = 'INSERT' THEN action_name := 'USER_CREATED';
+    ELSIF field_changes ? 'role' THEN action_name := 'USER_ROLE_CHANGED';
+    ELSIF field_changes ? 'is_active' THEN
+      action_name := CASE WHEN after_row->>'is_active' = 'true' THEN 'USER_ACTIVATED' ELSE 'USER_DEACTIVATED' END;
+    ELSIF field_changes ? 'password_hash' THEN action_name := 'PASSWORD_RESET';
+    END IF;
+  ELSIF TG_TABLE_NAME = 'orders' AND TG_OP = 'UPDATE' AND field_changes ? 'status' THEN
+    action_name := CASE new_status WHEN 'shipped' THEN 'ORDER_SHIPPED' WHEN 'out_for_delivery' THEN 'ORDER_OUT_FOR_DELIVERY'
+      WHEN 'delivered' THEN 'ORDER_MARKED_DELIVERED' WHEN 'received' THEN 'ORDER_MARKED_RECEIVED'
+      WHEN 'cancelled' THEN 'ORDER_CANCELLED' ELSE 'ORDER_STATUS_CHANGED' END;
+  ELSIF TG_TABLE_NAME IN ('refund_requests', 'appointment_refunds') AND TG_OP = 'UPDATE' AND field_changes ? 'status' THEN
+    action_name := 'refund_' || new_status;
+  ELSIF TG_TABLE_NAME = 'payments' AND TG_OP = 'UPDATE' AND field_changes ? 'status' THEN
+    action_name := CASE new_status WHEN 'verified' THEN 'VERIFY' WHEN 'rejected' THEN 'REJECT' WHEN 'refunded' THEN 'REFUND' ELSE 'UPDATE' END;
+  ELSIF TG_TABLE_NAME = 'appointments' AND TG_OP = 'UPDATE' AND field_changes ? 'status' THEN
+    action_name := 'APPOINTMENT_' || upper(new_status);
+  ELSIF TG_TABLE_NAME = 'customizations' AND TG_OP = 'INSERT'
+    AND after_row->'config_json'->'_walkIn'->>'createdBy' IS NOT NULL THEN
+    action_name := 'BUILD_SENT_TO_CUSTOMER';
+  END IF;
+
+  actor_id := public.audit_uuid(nullif(current_setting('cosmos.audit_actor_id', true), ''));
+  SELECT to_jsonb(u) INTO actor_data FROM public.users u WHERE u.user_id = actor_id;
+  IF actor_data IS NULL THEN actor_id := NULL;
+  ELSE context_data := context_data || jsonb_build_object('actor_name',
+      trim(concat_ws(' ', actor_data->>'first_name', actor_data->>'middle_name', actor_data->>'last_name')),
+      'actor_email', actor_data->>'email', 'actor_role', actor_data->>'role');
+  END IF;
+  BEGIN ip := nullif(current_setting('cosmos.audit_ip', true), '')::inet;
+  EXCEPTION WHEN invalid_text_representation THEN ip := NULL; END;
+  INSERT INTO public.audit_logs (user_id, action, entity_type, entity_id, previous_status, new_status,
+    details, context, changes, ip_address, user_agent, search_text)
+  VALUES (actor_id, action_name, module_name, entity_id, previous_status, new_status,
+    details_data, jsonb_strip_nulls(public.audit_redact(context_data)), field_changes, ip,
+    nullif(current_setting('cosmos.audit_user_agent', true), ''),
+    public.audit_search_text(action_name, module_name, entity_id, previous_status, new_status,
+      context_data, field_changes, details_data));
+  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.audit_record_truncate() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE actor_id uuid; actor_data jsonb; context_data jsonb;
+BEGIN
+  actor_id := public.audit_uuid(nullif(current_setting('cosmos.audit_actor_id', true), ''));
+  SELECT to_jsonb(u) INTO actor_data FROM public.users u WHERE u.user_id = actor_id;
+  IF actor_data IS NULL THEN actor_id := NULL; END IF;
+  context_data := jsonb_strip_nulls(jsonb_build_object('source_table', TG_TABLE_NAME,
+    'database_operation', 'TRUNCATE', 'database_role', session_user,
+    'source', coalesce(nullif(current_setting('cosmos.audit_source', true), ''), 'database'),
+    'actor_name', CASE WHEN actor_data IS NOT NULL THEN trim(concat_ws(' ', actor_data->>'first_name', actor_data->>'last_name')) END,
+    'actor_email', actor_data->>'email', 'actor_role', actor_data->>'role'));
+  INSERT INTO public.audit_logs (user_id, action, entity_type, context, details, changes, user_agent)
+  VALUES (actor_id, 'TRUNCATE', TG_ARGV[0], context_data,
+    jsonb_build_object('description', 'All rows removed from ' || TG_TABLE_NAME), '{}',
+    nullif(current_setting('cosmos.audit_user_agent', true), ''));
+  RETURN NULL;
+END
+$$;
+
+-- Database mutation is the sole writer. Old application INSERTs fail instead of
+-- silently duplicating history. FK cleanup may only clear a deleted actor ID.
+CREATE OR REPLACE FUNCTION public.audit_protect_history() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog AS $$
+BEGIN
+  IF TG_OP = 'INSERT' AND pg_trigger_depth() > 1 THEN RETURN NEW; END IF;
+  IF TG_OP = 'UPDATE' AND pg_trigger_depth() > 1 AND NEW.user_id IS NULL
+    AND (to_jsonb(NEW) - 'user_id') = (to_jsonb(OLD) - 'user_id') THEN RETURN NEW; END IF;
+  RAISE EXCEPTION 'Audit history is written only by database triggers and cannot be edited or deleted'
+    USING ERRCODE = '42501';
+END
+$$;
+
+DROP TRIGGER IF EXISTS trg_audit_history_guard ON public.audit_logs;
+CREATE TRIGGER trg_audit_history_guard BEFORE INSERT OR UPDATE OR DELETE ON public.audit_logs
+FOR EACH ROW EXECUTE FUNCTION public.audit_protect_history();
+DROP TRIGGER IF EXISTS trg_audit_history_truncate_guard ON public.audit_logs;
+CREATE TRIGGER trg_audit_history_truncate_guard BEFORE TRUNCATE ON public.audit_logs
+FOR EACH STATEMENT EXECUTE FUNCTION public.audit_protect_history();
+
+-- Explicit table/module mappings preserve the existing UI's module vocabulary.
+-- Record IDs that are integers/text remain in context.record_id (entity_id is UUID).
+DO $$
+DECLARE item record;
+BEGIN
+  FOR item IN SELECT * FROM (VALUES
+    ('addresses','users','address_id'),
+    ('appointment_refunds','refund','refund_request_id'),
+    ('appointments','appointments','appointment_id'),
+    ('branch_locations','settings','branch_id'),
+    ('branch_settings','settings','id'),
+    ('builder_guitar_types','guitar_builder_parts','guitar_type_code'),
+    ('builder_model_images','guitar_builder_parts','model_image_id'),
+    ('builder_part_categories','guitar_builder_parts','part_category_code'),
+    ('builder_type_categories','guitar_builder_parts','guitar_type_code'),
+    ('cart_items','cart','cart_item_id'),
+    ('carts','cart','cart_id'),
+    ('categories','products','category_id'),
+    ('category_parent_links_backup','products','category_id'),
+    ('contact_settings','settings','id'),
+    ('current_build_claims','project','claim_id'),
+    ('customization_feedback','customizations','feedback_id'),
+    ('customization_parts','customizations','part_id'),
+    ('customizations','customizations','customization_id'),
+    ('default_workflow_steps','project','step_id'),
+    ('default_workflow_tasks','project','task_id'),
+    ('discount_codes','settings','discount_code_id'),
+    ('fulfillment_requests','fulfillment','id'),
+    ('guitar_builder_parts','guitar_builder_parts','part_id'),
+    ('inventory','inventory','inventory_id'),
+    ('inventory_logs','inventory','log_id'),
+    ('low_stock_alerts','inventory','alert_id'),
+    ('notifications','notifications','notification_id'),
+    ('oauth_codes','users','id'),
+    ('order_items','order','order_item_id'),
+    ('order_number_counters','order','prefix'),
+    ('orders','order','order_id'),
+    ('otp_attempts','users','attempt_id'),
+    ('otp_codes','users','otp_id'),
+    ('password_reset_tokens','users','token_id'),
+    ('payment_config','settings','config_id'),
+    ('payment_settings','settings','id'),
+    ('payments','payment','payment_id'),
+    ('permissions','rbac','permission_id'),
+    ('pos_payments','pos','payment_id'),
+    ('pos_returns','pos','return_id'),
+    ('pos_sale_items','pos','item_id'),
+    ('pos_sales','pos','sale_id'),
+    ('product_images','products','image_id'),
+    ('product_reviews','products','review_id'),
+    ('products','products','product_id'),
+    ('project_installment_schedules','payment','schedule_id'),
+    ('project_milestones','project','milestone_id'),
+    ('project_subtasks','project','subtask_id'),
+    ('project_tasks','project','task_id'),
+    ('project_team_members','project','project_id'),
+    ('project_part_receipts','project','receipt_id'),
+    ('project_procurement_requests','project','request_id'),
+    ('projects','project','project_id'),
+    ('refresh_tokens','users','token_id'),
+    ('refund_private_destinations','refund','refund_request_id'),
+    ('refund_private_files','refund','refund_request_id'),
+    ('refund_request_counters','refund','prefix'),
+    ('refund_request_images','refund','refund_request_image_id'),
+    ('refund_request_items','refund','refund_request_item_id'),
+    ('refund_requests','refund','refund_request_id'),
+    ('refund_restock_log','refund','restock_id'),
+    ('role_permissions','rbac','role_id'),
+    ('roles','rbac','role_id'),
+    ('services','services','service_id'),
+    ('terms_acknowledgments','users','acknowledgment_id'),
+    ('unavailable_dates','appointment_schedule','id'),
+    ('user_identities','users','identity_id'),
+    ('user_roles','rbac','user_id'),
+    ('users','users','user_id')
+  ) AS mappings(table_name, module_name, id_column) LOOP
+    IF to_regclass(format('public.%I', item.table_name)) IS NULL THEN CONTINUE; END IF;
+    EXECUTE format('DROP TRIGGER IF EXISTS trg_database_audit ON public.%I', item.table_name);
+    EXECUTE format('CREATE TRIGGER trg_database_audit AFTER INSERT OR UPDATE OR DELETE ON public.%I
+      FOR EACH ROW EXECUTE FUNCTION public.audit_record_change(%L, %L)',
+      item.table_name, item.module_name, item.id_column);
+    EXECUTE format('DROP TRIGGER IF EXISTS trg_database_audit_truncate ON public.%I', item.table_name);
+    EXECUTE format('CREATE TRIGGER trg_database_audit_truncate AFTER TRUNCATE ON public.%I
+      FOR EACH STATEMENT EXECUTE FUNCTION public.audit_record_truncate(%L)',
+      item.table_name, item.module_name);
+  END LOOP;
+END
+$$;
+
+-- Triggers still execute these functions; callers must not invoke the privileged
+-- context lookup directly to inspect private rows outside the audit path.
+REVOKE ALL ON FUNCTION public.audit_record_change() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.audit_record_truncate() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.audit_business_context(text, jsonb) FROM PUBLIC;
+
+-- Audit filter pagination indexes (migration 47)
+-- Supports deterministic recent-first pagination and actor/date filters.
+-- Existing module/date, action/date, entity, and trigram indexes remain useful.
+CREATE INDEX IF NOT EXISTS idx_audit_logs_timeline
+  ON public.audit_logs (created_at DESC, audit_id DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_timeline
+  ON public.audit_logs (user_id, created_at DESC, audit_id DESC);

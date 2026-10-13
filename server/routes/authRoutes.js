@@ -8,6 +8,10 @@ const rbacService = require('../services/rbacService');
 const { oauthSingleUseGuard } = require('../middleware/oauthGuard');
 
 const router = express.Router();
+const termsController = require('../controllers/termsController');
+router.get('/terms/status', authenticateToken, termsController.status);
+router.post('/terms/account', authenticateToken, termsController.acceptAccount);
+router.post('/terms/checkout', authenticateToken, termsController.acceptCheckout);
 
 // Dedicated rate limiter scoped to the forgot-password route only.
 // Prevents abuse/spam of the email-sending endpoint (max 5 requests per IP per hour).
@@ -90,6 +94,7 @@ const getCookieOptions = () => {
 
 const clearAuthCookies = (res) => {
   const cookieOptions = getCookieOptions();
+  delete cookieOptions.maxAge;
   res.clearCookie('accessToken', cookieOptions);
   res.clearCookie('refreshToken', cookieOptions);
 };
@@ -102,7 +107,7 @@ router.get(
 
 // Google Callback - use custom callback to capture user
 router.get('/google/callback', oauthSingleUseGuard('google'), asyncHandler(async (req, res, next) => {
-  console.log('[Google Callback] Request received:', { query: req.query, params: req.params });
+  console.log('[Google Callback] Request received');
   clearAuthCookies(res);
   
   passport.authenticate('google', { session: false }, async (err, user, info) => {
@@ -155,7 +160,7 @@ router.get('/google/callback', oauthSingleUseGuard('google'), asyncHandler(async
       res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
 
       const redirectUrl = `${getFrontendUrl()}/auth/success?userId=${user.user_id}&token=${encodeURIComponent(accessToken)}&provider=google`;
-      console.log('[Google Callback] Redirecting to:', redirectUrl);
+      console.log('[Google Callback] Redirecting to authentication success');
       
       return res.redirect(redirectUrl);
     } catch (error) {
@@ -245,7 +250,8 @@ router.post('/reset-password', authController.resetPassword);
 
 // Token & Auth Routes
 router.post('/refresh', authController.refreshAccessToken);
-router.post('/logout', authenticateToken, authController.logout);
+// Revoke the presented session directly; authentication middleware must not renew it first.
+router.post('/logout', authController.logout);
 router.get('/check', optionalAuthenticateToken, authController.checkAuth);
 
 module.exports = router;

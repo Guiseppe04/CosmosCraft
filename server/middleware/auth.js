@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { generateTokens, verifyRefreshToken } = require('../utils/generateTokens');
+const { generateAccessToken, verifyRefreshToken } = require('../utils/generateTokens');
 const rbacService = require('../services/rbacService');
 const { pool } = require('../config/database');
 
@@ -68,10 +68,9 @@ const handleAuth = async (req, res, next, { required }) => {
           return null;
         }
 
-        const { accessToken: newAccessToken, refreshToken: newRefreshToken } = await generateTokens(decoded.id, decoded.role);
+        const newAccessToken = await generateAccessToken(decoded.id);
 
         res.cookie('accessToken', newAccessToken, cookieOptions);
-        res.cookie('refreshToken', newRefreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
         res.setHeader('X-New-Access-Token', newAccessToken);
 
         const roleSummary = await rbacService.getUserRoleSummary(decoded.id, false);
@@ -83,6 +82,7 @@ const handleAuth = async (req, res, next, { required }) => {
           permissions: roleSummary.permissions || [],
         };
       } catch (refreshErr) {
+        if (refreshErr.statusCode !== 401) throw refreshErr;
         return null;
       }
     };
@@ -108,91 +108,95 @@ const handleAuth = async (req, res, next, { required }) => {
       });
     }
 
-    jwt.verify(accessToken, process.env.JWT_SECRET, async (err, user) => {
-      if (err) {
-        // If token is expired and we have a refresh token, try to refresh
-        if (err.name === 'TokenExpiredError' && refreshToken) {
-          const refreshedUser = await tryRefreshToken();
-          if (refreshedUser) {
-            req.user = refreshedUser;
-            return next();
-          }
-
-          if (!required) {
-            req.user = null;
-            return next();
-          }
-
-          return res.status(401).json({
-            status: 'error',
-            message: 'Session expired. Please sign in again.',
-            code: 'SESSION_EXPIRED',
-          });
-        } else {
-          if (!required) {
-            req.user = null;
-            return next();
-          }
-
-          return res.status(401).json({
-            status: 'error',
-            message: err.name === 'TokenExpiredError' ? 'Access token expired' : 'Invalid token',
-            code: err.name === 'TokenExpiredError' ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN',
-          });
+    let user;
+    let err;
+    try { user = jwt.verify(accessToken, process.env.JWT_SECRET); }
+    catch (verificationError) { err = verificationError; }
+    if (err) {
+      // If token is expired and we have a refresh token, try to refresh
+      if (err.name === 'TokenExpiredError' && refreshToken) {
+        const refreshedUser = await tryRefreshToken();
+        if (refreshedUser) {
+          req.user = refreshedUser;
+          return next();
         }
+
+        if (!required) {
+          req.user = null;
+          return next();
+        }
+
+        return res.status(401).json({
+          status: 'error',
+          message: 'Session expired. Please sign in again.',
+          code: 'SESSION_EXPIRED',
+        });
       } else {
-        // Check user verification status
-        const userStatus = await getUserVerificationStatus(user.id);
-        if (!userStatus || !userStatus.is_active) {
-          if (!required) {
-            req.user = null;
-            return next();
-          }
-          return res.status(403).json({
-            status: 'error',
-            code: 'ACCOUNT_DEACTIVATED',
-            message: 'Account is deactivated. Please contact support.',
-          });
-        }
-        if (!userStatus.is_verified) {
-          if (!required || isPublicAuthRoute(req.path)) {
-            req.user = null;
-            return next();
-          }
-          return res.status(403).json({
-            status: 'error',
-            code: 'EMAIL_NOT_VERIFIED',
-            message: 'Please verify your email first.',
-          });
+        if (!required) {
+          req.user = null;
+          return next();
         }
 
-        const roleSummary = await rbacService.getUserRoleSummary(user.id, false);
-        req.user = {
-          ...user,
-          user_id: user.id,
-          role: roleSummary.role,
-          roles: roleSummary.roles || [],
-          permissions: roleSummary.permissions || [],
-        };
-        next();
+        return res.status(401).json({
+          status: 'error',
+          message: err.name === 'TokenExpiredError' ? 'Access token expired' : 'Invalid token',
+          code: err.name === 'TokenExpiredError' ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN',
+        });
       }
-    });
-  } catch (error) {
-    if (!required) {
-      req.user = null;
-      return next();
-    }
+    } else {
+      // Check user verification status
+      const userStatus = await getUserVerificationStatus(user.id);
+      if (!userStatus || !userStatus.is_active) {
+        if (!required) {
+          req.user = null;
+          return next();
+        }
+        return res.status(403).json({
+          status: 'error',
+          code: 'ACCOUNT_DEACTIVATED',
+          message: 'Account is deactivated. Please contact support.',
+        });
+      }
+      if (!userStatus.is_verified) {
+        if (!required || isPublicAuthRoute(req.path)) {
+          req.user = null;
+          return next();
+        }
+        return res.status(403).json({
+          status: 'error',
+          code: 'EMAIL_NOT_VERIFIED',
+          message: 'Please verify your email first.',
+        });
+      }
 
-    return res.status(500).json({
-      status: 'error',
-      message: 'Authentication error',
-    });
+      const roleSummary = await rbacService.getUserRoleSummary(user.id, false);
+      req.user = {
+        ...user,
+        user_id: user.id,
+        role: roleSummary.role,
+        roles: roleSummary.roles || [],
+        permissions: roleSummary.permissions || [],
+      };
+      next();
+    }
+  } catch (error) {
+    return next(error);
   }
 };
 
 const { hasRole } = require('../utils/roles');
 
-const authenticateToken = async (req, res, next) => handleAuth(req, res, next, { required: true });
+const authenticateToken = async (req, res, next) => handleAuth(req, res, async () => {
+  try {
+    // These endpoints allow a provisional session to review/accept terms or sign out.
+    const consentRoutes = ['/auth/terms/status', '/auth/terms/account', '/auth/check', '/auth/logout'];
+    if (req.user?.role === 'customer' && !consentRoutes.includes(req.originalUrl.split('?')[0].replace(/^\/api\/auth/, '/auth')) &&
+        !await require('../services/termsService').hasAccountAcceptance(req.user.id)) {
+      return res.status(403).json({ status: 'error', code: 'TERMS_REQUIRED', message: 'Please accept the current account Terms and Conditions.' });
+    }
+    next();
+  } catch (error) { next(error); }
+}, { required: true });
 
 const optionalAuthenticateToken = async (req, res, next) => handleAuth(req, res, next, { required: false });
 

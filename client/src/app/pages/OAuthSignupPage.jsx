@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router'
 import { useAuth } from '../context/AuthContext.jsx'
 import { API } from '../utils/apiConfig'
+import TermsAndConditionsModal from '../components/TermsAndConditionsModal'
+import { accountAgreement } from '../utils/termsAgreement'
 
 export function OAuthSignupPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { login } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
+  const [termsOpen, setTermsOpen] = useState(false)
   const [userData, setUserData] = useState(null)
   useEffect(() => {
     const provider = searchParams.get('provider')
@@ -36,7 +39,7 @@ export function OAuthSignupPage() {
       const response = await fetch(`${API}/auth/oauth-signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(userData),
+        body: JSON.stringify({ ...userData, termsAgreement: accountAgreement() }),
         credentials: 'include',
       })
 
@@ -45,11 +48,13 @@ export function OAuthSignupPage() {
       const data = await response.json()
 
       // Login and redirect
-      login({ email: userData.email, remember: true })
-      setTimeout(() => navigate('/dashboard'), 500)
+      const acceptedUser = await login(data.data.user)
+      setTermsOpen(false)
+      if (acceptedUser) navigate('/dashboard')
     } catch (error) {
       console.error('Signup error:', error)
-      alert('Failed to complete signup. Please try again.')
+      throw error
+    } finally {
       setIsLoading(false)
     }
   }
@@ -64,6 +69,7 @@ export function OAuthSignupPage() {
 
   return (
     <div className="min-h-screen bg-light flex items-center justify-center py-12 px-4">
+      <TermsAndConditionsModal isOpen={termsOpen} account onClose={() => setTermsOpen(false)} onAgree={handleCompleteSignup} />
       <div className="w-full max-w-md">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-dark mb-2">Complete Your Setup</h1>
@@ -96,7 +102,7 @@ export function OAuthSignupPage() {
           </div>
 
           <button
-            onClick={handleCompleteSignup}
+            onClick={() => setTermsOpen(true)}
             disabled={isLoading}
             className="w-full bg-[#d4af37] hover:bg-[#c39d2f] text-[#231f20] font-semibold py-3 rounded-lg transition disabled:opacity-60"
           >

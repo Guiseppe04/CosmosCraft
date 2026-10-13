@@ -3,7 +3,8 @@
  * Handles all HTTP requests to the backend
  */
 
-import { API, getAuthToken, removeAuthToken } from '../utils/apiConfig'
+import { API, getAuthToken } from '../utils/apiConfig'
+import { authFetch } from '../utils/authFetch.js'
 
 // Base API configuration
 const API_BASE_URL = `${API}/api`
@@ -35,7 +36,7 @@ async function fetchAPI(endpoint, options = {}) {
   }
 
   try {
-    const response = await fetch(url, config)
+    const response = await authFetch(url, config)
     
     // Handle non-JSON responses
     const contentType = response.headers.get('content-type')
@@ -46,10 +47,6 @@ async function fetchAPI(endpoint, options = {}) {
     if (!response.ok) {
       // Handle specific error codes
       if (response.status === 401) {
-        // Unauthorized - clear token and redirect
-        removeAuthToken()
-        localStorage.removeItem('cosmoscraft_auth')
-        window.location.href = '/login'
         throw new Error('Session expired. Please login again.')
       }
       
@@ -81,7 +78,7 @@ async function fetchAPI(endpoint, options = {}) {
 // ============================================
 export const authAPI = {
   login: (email, password) => {
-    return fetchAPI('/auth/login', {
+    return fetchAPI('/auth/email-login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     })

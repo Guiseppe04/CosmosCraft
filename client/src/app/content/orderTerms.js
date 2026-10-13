@@ -31,6 +31,7 @@ export const orderTerms = {
     {
       title: 'Returns, Exchanges, and Refunds',
       paragraphs: [
+        'Submit regular-product refund requests within 14 days of receipt. Missing or disputed receipt confirmation requires admin review. A timely request does not expire while being reviewed. Eligible non-defective change-of-mind refunds have an editable 50% suggestion, subject to admin approval. Estimated payment completion is 1–3 calendar days after required evidence, return receipt and inspection are complete, or a documented no-return exception.',
         'Contact CosmosCraft if an item is defective, damaged, or different from what you ordered. Provide your order details, a description of the issue, and available supporting evidence. Keep the item and packaging for assessment and follow the return instructions provided.',
         'Eligible concerns may be resolved through repair, replacement, or refund, as applicable. Requests based only on a change of mind are subject to review. These terms do not limit remedies required by law for defective or incorrect items.',
       ],

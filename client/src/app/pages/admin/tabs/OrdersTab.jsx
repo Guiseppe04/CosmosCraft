@@ -126,7 +126,7 @@ export function OrdersTab({ orders, fetchOrders, user, pagination, showToast, on
               </button>
             )
           })}
-        </div>
+        </div>    
       </div>
 
       {/* Main Content Area */}

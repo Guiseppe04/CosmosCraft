@@ -43,7 +43,7 @@ export function LoginModal() {
       const token = data.data?.accessToken || data.data?.token || data.token
       const userData = data.data?.user || null
       if (userData) {
-        login(userData, token)
+        await login(userData, token)
       }
 
       setEmail('')

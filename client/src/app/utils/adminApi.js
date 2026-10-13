@@ -3,7 +3,8 @@
  * All functions use credentials: 'include' so the access token cookie is sent automatically.
  */
 
-import { API, getAuthHeaders } from './apiConfig'
+import { API, getAuthHeaders, setAuthToken } from './apiConfig'
+import { authFetch } from './authFetch.js'
 import { feedbackService } from '../services/feedbackService'
 
 const API_URL = API
@@ -22,19 +23,25 @@ async function request(path, options = {}) {
 
   let res
   try {
-    res = await fetch(`${API_URL}${path}`, {
+    res = await authFetch(`${API_URL}${path}`, {
       credentials: 'include',
       ...options,
       headers,
       body: isFormData ? options.body : (options.body ? JSON.stringify(options.body) : undefined),
     })
   } catch (networkError) {
+    if (options.signal?.aborted || networkError?.name === 'AbortError') {
+      throw networkError
+    }
     // fetch() rejects before any response exists (backend down, wrong port, CORS,
     // offline). Report that plainly instead of leaking the raw "Failed to fetch".
     const error = new Error('Cannot reach the server. Make sure the backend is running, then try again.')
     error.cause = networkError
     throw error
   }
+  const refreshedToken = res.headers.get('X-New-Access-Token')
+  if (refreshedToken) setAuthToken(refreshedToken)
+
   const data = await res.json()
   if (!res.ok) {
     const error = new Error(data.message || 'Request failed')
@@ -143,6 +150,17 @@ export const adminApi = {
   markAsReceived: (id) => request(`/api/orders/${id}/received`, { method: 'POST' }),
   createRefundRequest: (id, body) => request(`/api/orders/${id}/refund-request`, { method: 'POST', body }),
   getRefundFile: (id, kind) => request(`/api/orders/refund-requests/${id}/files/${kind}`),
+  getCustomerRefundTracking: (id) => request(`/api/orders/refund-requests/${id}/tracking`),
+  getDispatchPhotos: (id,customOnly=false) => request(`/api/orders/${id}/dispatch-photos${customOnly?'?customOnly=true':''}`),
+  getDispatchPhoto: (id) => request(`/api/orders/dispatch-photos/${id}`),
+  appendDispatchPhotos: (id,body) => request(`/api/orders/${id}/dispatch-photos`,{method:'POST',body}),
+  updateRefundReview: (id,body) => request(`/api/orders/refund-requests/${id}/review`, {method:'PATCH',body}),
+  offerRefundRepair: (id,body) => request(`/api/orders/refund-requests/${id}/repair-offer`, {method:'POST',body}),
+  respondRefundRepair: (id,body) => request(`/api/orders/refund-requests/${id}/repair-response`, {method:'POST',body}),
+  getRefundPolicyDraft: () => request('/api/orders/refund-policy-draft'),
+  saveRefundPolicyDraft: (body) => request('/api/orders/refund-policy-draft', {method:'PUT',body}),
+  getCustomerRefundEvidence: (id, kind) => request(`/api/orders/refund-requests/${id}/evidence/${kind}`),
+  submitCustomerReturn: (id, body) => request(`/api/orders/refund-requests/${id}/return-evidence`, { method: 'POST', body }),
   confirmRefund: (id) => request(`/api/orders/refund-requests/${id}/confirm`, { method: 'POST' }),
   getRefundRequests: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
@@ -418,11 +436,11 @@ export const adminApi = {
 
   // Audit Logs
   // Read-only: the API exposes no way to edit or delete audit records.
-  getAuditLogs: (params = {}) => {
+  getAuditLogs: (params = {}, options = {}) => {
     const qs = new URLSearchParams(params).toString()
-    return request(`/api/audit-logs${qs ? '?' + qs : ''}`)
+    return request(`/api/audit-logs${qs ? '?' + qs : ''}`, options)
   },
-  getAuditLog: (id) => request(`/api/audit-logs/${id}`),
+  getAuditLog: (id, options = {}) => request(`/api/audit-logs/${id}`, options),
   getAuditActions: () => request('/api/audit-logs/actions'),
   getAuditSummary: (params = {}) => {
     const qs = new URLSearchParams(params).toString()

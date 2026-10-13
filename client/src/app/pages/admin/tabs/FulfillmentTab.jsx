@@ -106,6 +106,7 @@ export function FulfillmentTab({ showToast }) {
       if (showToast) {
         showToast(err.message || 'Failed to update status', 'error');
       }
+      throw err;
     } finally {
       setActionLoading(null);
     }
@@ -290,9 +291,9 @@ export function FulfillmentTab({ showToast }) {
                       <td className="py-4 px-4 max-w-[200px]">
                         {method === 'delivery' ? (
                           addr ? (
-                            <div className="text-[11px] text-white/80 truncate" title={`${addr.line1}, ${addr.city}, ${addr.province}`}>
+                            <div className="text-[11px] text-white/80 truncate" title={[addr.line1, addr.city, addr.province].filter(Boolean).join(', ')}>
                               <span className="block font-medium text-white truncate">{addr.line1}</span>
-                              <span className="text-[var(--text-muted)] block truncate">{addr.city}, {addr.province}</span>
+                              <span className="text-[var(--text-muted)] block truncate">{[addr.city, addr.province].filter(Boolean).join(', ')}</span>
                             </div>
                           ) : (
                             <span className="text-xs text-[var(--text-muted)]">Saved Address</span>
@@ -350,7 +351,7 @@ export function FulfillmentTab({ showToast }) {
                             <button
                               type="button"
                               disabled={isBusy}
-                              onClick={() => handleAdvanceStatus(req.id, next.nextStatus)}
+                              onClick={() => next.nextStatus==='out_for_delivery'?setSelectedRequest(req):handleAdvanceStatus(req.id, next.nextStatus).catch(()=>{})}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-xs font-bold text-black shadow hover:opacity-95 disabled:opacity-50 transition-all cursor-pointer"
                             >
                               {isBusy ? (

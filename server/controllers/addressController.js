@@ -37,6 +37,7 @@ const validateZipForCity = (req, res, next) => {
           message: result.message,
           city: result.city,
           zips: result.zips,
+          zipCoverage: result.zipCoverage,
         },
       });
     }

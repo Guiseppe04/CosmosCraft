@@ -1,6 +1,10 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { API, getAuthHeaders, setAuthToken, removeAuthToken, getAuthToken } from '../utils/apiConfig'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { API, getAuthHeaders, setAuthToken, removeAuthToken } from '../utils/apiConfig'
+import { authFetch } from '../utils/authFetch.js'
 import { normalizeRole } from '../utils/roles'
+
+import TermsAndConditionsModal from '../components/TermsAndConditionsModal'
+import { accountAgreement, saveAgreement } from '../utils/termsAgreement'
 
 const AuthContext = createContext(null)
 
@@ -97,14 +101,42 @@ export function AuthProvider({ children }) {
   const [isLoadingUser, setIsLoadingUser] = useState(true)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
+  const [termsOpen, setTermsOpen] = useState(false)
+  const pendingTerms = useRef(null)
+  const restoreTimer = useRef(null)
+  const sessionVersion = useRef(0)
+  const ensureAccountTerms = useCallback(async () => {
+    const response = await authFetch(API + '/auth/terms/status', { headers: getAuthHeaders(), credentials: 'include' })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.message || 'Unable to check account agreement.')
+    if (!data.data.required) return true
+    if (!pendingTerms.current) {
+      let resolve
+      const promise = new Promise(done => { resolve = done })
+      pendingTerms.current = { promise, resolve }
+      setTermsOpen(true)
+    }
+    return pendingTerms.current.promise
+  }, [])
+
   // Fetch current authenticated user from backend
   const fetchUser = useCallback(async () => {
+    const version = ++sessionVersion.current
+    clearTimeout(restoreTimer.current)
+    let completed = false
     try {
-      const response = await fetch(`${API}/auth/check`, {
+      const response = await authFetch(`${API}/auth/check`, {
         method: 'GET',
         headers: getAuthHeaders(),
         credentials: 'include',
       })
+
+      if (version !== sessionVersion.current) return null
+      if (!response.ok) {
+        const error = new Error('Unable to check session')
+        error.status = response.status
+        throw error
+      }
 
       // If backend issued a new access token via header during auto-refresh
       const newAccessToken = response.headers.get('X-New-Access-Token')
@@ -114,7 +146,10 @@ export function AuthProvider({ children }) {
 
       if (response.ok) {
         const data = await response.json()
+        if (version !== sessionVersion.current) return null
         if (data.data?.isAuthenticated && data.data?.user) {
+          if (!await ensureAccountTerms()) { completed = true; return null }
+          if (version !== sessionVersion.current) return null
           // If auth check doesn't include addresses, fetch profile for full data
           let userData = data.data.user
 
@@ -135,6 +170,8 @@ export function AuthProvider({ children }) {
             console.warn('Could not fetch full profile, using auth data')
           }
 
+          if (version !== sessionVersion.current) return null
+          completed = true
           setIsAuthenticated(true)
           setUser(userData)
           // Store full user data in localStorage
@@ -145,57 +182,47 @@ export function AuthProvider({ children }) {
           return userData
         }
 
-        setIsAuthenticated(false)
-        setUser(null)
-        window.localStorage.removeItem('cosmoscraft_auth')
-        removeAuthToken()
-      } else if (response.status === 401) {
+        completed = true
         setIsAuthenticated(false)
         setUser(null)
         window.localStorage.removeItem('cosmoscraft_auth')
         removeAuthToken()
       }
     } catch (error) {
-      console.error('Failed to fetch user:', error)
+      if (version !== sessionVersion.current) return null
+      if (error.status === 401 || error.status === 403) {
+        completed = true
+        setIsAuthenticated(false)
+        setUser(null)
+        window.localStorage.removeItem('cosmoscraft_auth')
+        removeAuthToken()
+      } else {
+        // Keep protected routes waiting while the session service is unavailable.
+        clearTimeout(restoreTimer.current)
+        restoreTimer.current = setTimeout(() => fetchUser(), 5000)
+      }
     } finally {
-      setIsLoadingUser(false)
+      if (completed && version === sessionVersion.current) setIsLoadingUser(false)
     }
     return null
-  }, [])
+  }, [ensureAccountTerms])
 
   // Verify authentication on app mount
   useEffect(() => {
-    const verifyAuth = async () => {
-      const stored = window.localStorage.getItem('cosmoscraft_auth')
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored)
-          if (parsed?.id || parsed?.user_id || parsed?._id) {
-            // Restore user immediately from localStorage
-            setIsAuthenticated(true)
-            setUser(parsed)
-            setIsLoadingUser(false)
-
-            // Verify with backend in background
-            await fetchUser()
-          } else {
-            setIsLoadingUser(false)
-          }
-        } catch {
-          window.localStorage.removeItem('cosmoscraft_auth')
-          setIsLoadingUser(false)
-        }
-      } else {
-        // Also check if we have a token stored
-        if (getAuthToken()) {
-          await fetchUser()
-        } else {
-          setIsLoadingUser(false)
-        }
-      }
+    fetchUser()
+    const onSessionExpired = () => {
+      sessionVersion.current++
+      clearTimeout(restoreTimer.current)
+      setIsAuthenticated(false)
+      setUser(null)
+      setIsLoadingUser(false)
     }
-
-    verifyAuth()
+    window.addEventListener('cosmoscraft:session-expired', onSessionExpired)
+    return () => {
+      sessionVersion.current++
+      clearTimeout(restoreTimer.current)
+      window.removeEventListener('cosmoscraft:session-expired', onSessionExpired)
+    }
   }, [fetchUser])
 
   const openLogin = useCallback(callback => {
@@ -220,7 +247,13 @@ export function AuthProvider({ children }) {
   }, [])
 
   const login = useCallback(
-    (userData, token = null) => {
+    async (userData, token = null) => {
+      const version = ++sessionVersion.current
+      clearTimeout(restoreTimer.current)
+      if (token) setAuthToken(token)
+      if (!await ensureAccountTerms()) return null
+      if (version !== sessionVersion.current) return null
+      setIsLoadingUser(false)
       setIsAuthenticated(true)
       setUser(userData)
       setLoginOpen(false)
@@ -233,11 +266,15 @@ export function AuthProvider({ children }) {
         loginCallback()
         setLoginCallback(null)
       }
+      return userData
     },
-    [loginCallback],
+    [loginCallback, ensureAccountTerms],
   )
 
   const logout = useCallback(async () => {
+    sessionVersion.current++
+    clearTimeout(restoreTimer.current)
+    setIsLoadingUser(false)
     setIsLoggingOut(true)
 
     try {
@@ -333,6 +370,19 @@ export function AuthProvider({ children }) {
       }}
     >
       {children}
+      <TermsAndConditionsModal isOpen={termsOpen} account
+        onClose={async () => {
+          await logout()
+          setTermsOpen(false)
+          pendingTerms.current?.resolve(false)
+          pendingTerms.current = null
+        }}
+        onAgree={async () => {
+          await saveAgreement('account', accountAgreement())
+          setTermsOpen(false)
+          pendingTerms.current?.resolve(true)
+          pendingTerms.current = null
+        }} />
     </AuthContext.Provider>
   )
 }

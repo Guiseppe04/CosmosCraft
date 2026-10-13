@@ -1,3 +1,4 @@
+import { resolveSavedLocation } from '../../utils/phAddress';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle, Circle, ChevronDown, ChevronRight, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, X, Lock, AlertTriangle, Loader2 } from 'lucide-react';
@@ -166,7 +167,7 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
   const validateAddress = (address, fieldName) => {
     if (!address?.line1) return `${fieldName} is required`;
     if (!address?.city) return 'City is required';
-    if (!address?.province) return 'Province is required';
+    if (resolveSavedLocation(address).province && !address?.province) return 'Province is required';
     if (!address?.postal_code) return 'Postal code is required';
     return null;
   };

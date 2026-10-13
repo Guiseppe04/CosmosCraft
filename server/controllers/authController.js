@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
-const { generateTokens, verifyRefreshToken, revokeRefreshToken } = require('../utils/generateTokens');
+const { generateTokens, generateAccessToken, verifyRefreshToken, revokeRefreshToken } = require('../utils/generateTokens');
 const { generateOTPWithExpiry, verifyOTP } = require('../utils/otp');
 const userService = require('../services/userService');
 const rbacService = require('../services/rbacService');
@@ -78,6 +78,7 @@ exports.facebookCallback = asyncHandler(async (req, res, next) => {
 
 // OAuth Signup(for new users)
 exports.oauthSignup = asyncHandler(async (req, res, next) => {
+  require('../services/termsService').validateAgreement(req.body.termsAgreement, ['account']);
   const { provider, googleId, facebookId, email, firstName, middleName, lastName } = req.body;
 
   if (!['google', 'facebook'].includes(provider)) throw new AppError('Provider must be google or facebook', 400);
@@ -97,6 +98,7 @@ exports.oauthSignup = asyncHandler(async (req, res, next) => {
     firstName,
     middleName: middleName || '',
     lastName,
+    termsAgreement: req.body.termsAgreement,
   });
 
   const roleSummary = await rbacService.getUserRoleSummary(newUser.user_id, false);
@@ -114,6 +116,7 @@ exports.oauthSignup = asyncHandler(async (req, res, next) => {
 });
 // Email Signup
 exports.emailSignup = asyncHandler(async (req, res, next) => {
+  require('../services/termsService').validateAgreement(req.body.termsAgreement, ['account']);
   const { error, value } = emailSignupSchema.validate(req.body, { abortEarly: false });
   if (error) {
     const errors = error.details.map((detail) => ({ field: detail.path.join('.'), message: detail.message }));
@@ -174,6 +177,7 @@ exports.emailSignup = asyncHandler(async (req, res, next) => {
     if (error.message && error.message.includes('already exists')) {
       const existingUser = await userService.getUserByEmail(value.email.toLowerCase());
       if (existingUser && !existingUser.is_verified && existingUser.password_hash) {
+        await require('../services/termsService').recordAccount(existingUser.user_id, value.termsAgreement, 'registration');
         const { code: otp, expiresAt: otpExpires } = generateOTPWithExpiry(15);
         await userService.saveOTP(existingUser.user_id, otp, otpExpires, 'signup');
 
@@ -284,20 +288,18 @@ exports.refreshAccessToken = asyncHandler(async (req, res, next) => {
   }
 
   const roleSummary = await rbacService.getUserRoleSummary(user.user_id, false);
-  const tokens = await generateTokens(user.user_id, roleSummary.role);
+  const accessToken = await generateAccessToken(user.user_id, roleSummary.role);
 
   const cookieOptions = getCookieOptions();
 
-  res.cookie('accessToken', tokens.accessToken, cookieOptions);
-  res.cookie('refreshToken', tokens.refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
+  res.cookie('accessToken', accessToken, cookieOptions);
 
   res.status(200).json({
     status: 'success',
     message: 'Token refreshed',
     data: {
-      token: tokens.accessToken,
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
+      token: accessToken,
+      accessToken,
     },
   });
 });
@@ -307,6 +309,7 @@ exports.logout = asyncHandler(async (req, res, next) => {
   if (refreshToken) await revokeRefreshToken(refreshToken);
 
   const cookieOptions = getCookieOptions();
+  delete cookieOptions.maxAge;
   res.clearCookie('accessToken', cookieOptions);
   res.clearCookie('refreshToken', cookieOptions);
   res.status(200).json({ status: 'success', message: 'Logged out successfully' });
