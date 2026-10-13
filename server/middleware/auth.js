@@ -190,8 +190,8 @@ const authenticateToken = async (req, res, next) => handleAuth(req, res, async (
   try {
     // These endpoints allow a provisional session to review/accept terms or sign out.
     const consentRoutes = ['/auth/terms/status', '/auth/terms/account', '/auth/check', '/auth/logout'];
-    if (req.user?.role === 'customer' && !consentRoutes.includes(req.originalUrl.split('?')[0].replace(/^\/api\/auth/, '/auth')) &&
-        !await require('../services/termsService').hasAccountAcceptance(req.user.id)) {
+    if (!consentRoutes.includes(req.originalUrl.split('?')[0].replace(/^\/api\/auth/, '/auth')) &&
+        await require('../services/termsService').requiresAccountAgreement(req.user.id, req.user.role)) {
       return res.status(403).json({ status: 'error', code: 'TERMS_REQUIRED', message: 'Please accept the current account Terms and Conditions.' });
     }
     next();

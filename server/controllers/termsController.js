@@ -2,7 +2,7 @@ const { asyncHandler } = require('../middleware/errorHandler');
 const terms = require('../services/termsService');
 const { pool } = require('../config/database');
 exports.status = asyncHandler(async (req, res) => {
-  const required = req.user.role === 'customer' && !await terms.hasAccountAcceptance(req.user.id);
+  const required = await terms.requiresAccountAgreement(req.user.id, req.user.role);
   res.json({ status: 'success', data: { required, versions: terms.versions } });
 });
 exports.acceptAccount = asyncHandler(async (req, res) => {

@@ -56,9 +56,10 @@ async function list(orderId,user,customOnly=false){
   return {items:await items(pool,orderId,customOnly),photos:photos.rows};
 }
 async function get(photoId,user){
+  // Production uses an enum without "completed"; compare text for legacy status compatibility.
   const photo=(await pool.query(`SELECT p.mime_type,p.file_data FROM order_dispatch_photos p JOIN orders o ON o.order_id=p.order_id
     WHERE p.photo_id=$1 AND ($2::boolean OR (o.user_id=$3 AND p.phase='pre_dispatch'
-      AND (o.status IN ('shipped','out_for_delivery','delivered','received','completed') OR to_jsonb(o)->>'shipped_at' IS NOT NULL)))`,
+      AND (o.status::text IN ('shipped','out_for_delivery','delivered','received','completed') OR to_jsonb(o)->>'shipped_at' IS NOT NULL)))`,
     [photoId,privileged(user),user?.user_id || user?.id || null])).rows[0];
   if(!photo)fail('Dispatch photo not found',404);return photo;
 }

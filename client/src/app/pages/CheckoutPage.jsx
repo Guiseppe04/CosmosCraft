@@ -485,6 +485,9 @@ function CheckoutSummaryCard({
   disabled,
   monthlyPayment = 0,
   estimatedCompletion,
+  acceptedTerms,
+  onReviewTerms,
+  onClearTerms,
 }) {
   const safeSubtotal = Number.isFinite(Number(subtotal)) ? Number(subtotal) : 0
   const safeShippingCost = Number.isFinite(Number(shippingCost)) ? Number(shippingCost) : 0
@@ -599,9 +602,17 @@ function CheckoutSummaryCard({
         )}
       </div>
 
+      <label className="flex items-start gap-2 text-sm text-[var(--text-muted)]">
+        <input type="checkbox" checked={acceptedTerms} disabled={isProcessing || isCheckoutDisabled}
+          onChange={event=>event.target.checked?onReviewTerms():onClearTerms()}
+          className="mt-1 h-4 w-4 shrink-0 accent-[var(--gold-primary)]" />
+        <span>I have read and agree to the Terms and Conditions.</span>
+      </label>
+      <button type="button" onClick={onReviewTerms} className="text-left text-sm text-[var(--gold-primary)] underline">Read Terms and Conditions</button>
+
       <button
         onClick={onPlaceOrder}
-        disabled={isProcessing || isCheckoutDisabled}
+        disabled={isProcessing || isCheckoutDisabled || !acceptedTerms}
         className="w-full py-4 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold rounded-lg hover:shadow-[0_0_25px_rgba(212,175,55,0.5)] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
         {isProcessing ? (
@@ -989,7 +1000,6 @@ export function CheckoutPage() {
     }
     setTermsAcceptance({ scope, checkoutId })
     setShowTermsModal(false)
-    setShowPaymentModal(true)
   }
 
   const handleSaveAddress = async (addressData) => {
@@ -1148,7 +1158,8 @@ export function CheckoutPage() {
         setOrderError(`Not enough stock for ${outOfStockItem.name}. Available stock: ${availableStock}.`)
         return
       }
-      setShowTermsModal(true)
+      if (acceptedTerms) setShowPaymentModal(true)
+      else setShowTermsModal(true)
     } finally { openingTerms.current = false }
   }
 
@@ -1502,6 +1513,9 @@ export function CheckoutPage() {
                   disabled={hasNoAddresses || !hasSelectedItems || isPreparingCart}
                   monthlyPayment={monthlyPayment}
                   estimatedCompletion={estimatedCompletion}
+                  acceptedTerms={acceptedTerms}
+                  onReviewTerms={()=>setShowTermsModal(true)}
+                  onClearTerms={()=>{setTermsAcceptance({scope:termsScope});checkoutTermsRequest.current=null;setShowPaymentModal(false)}}
                 />
               </motion.div>
             </div>

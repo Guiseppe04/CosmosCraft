@@ -17,6 +17,13 @@ async function hasAccountAcceptance(userId, db = pool) {
   return result.rows.length > 0;
 }
 
+async function requiresAccountAgreement(userId, role, db = pool) {
+  if (role !== 'customer') return false;
+  // Registration consent remains required. Policy revisions do not interrupt returning logins.
+  const result = await db.query('SELECT terms_registration_pending FROM users WHERE user_id=$1', [userId]);
+  return !result.rows.length || result.rows[0].terms_registration_pending === true;
+}
+
 async function recordAccount(userId, agreement, context, db = pool) {
   validateAgreement(agreement, ['account']);
   if (!['registration', 'login'].includes(context)) throw new AppError('Invalid agreement context', 400);
@@ -75,4 +82,4 @@ async function attachCheckout(db, userId, checkoutId, items, orderId) {
   await db.query('UPDATE terms_acknowledgments SET order_id = $3 WHERE user_id = $1 AND checkout_id = $2', [userId, checkoutId, orderId]);
 }
 
-module.exports = { versions, validateAgreement, hasAccountAcceptance, recordAccount, recordCheckout, attachCheckout };
+module.exports = { versions, validateAgreement, hasAccountAcceptance, requiresAccountAgreement, recordAccount, recordCheckout, attachCheckout };
