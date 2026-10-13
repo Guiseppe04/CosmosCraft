@@ -35,9 +35,9 @@ async function saveFile(db, id, kind, image, actorId) {
     VALUES ($1,$2,$3,$4,$5)`, [id, kind, file.mime, file.bytes, actorId]);
 }
 
-async function ensureReady() {
+async function ensureReady({ legacyDestination = false } = {}) {
   const result = await pool.query("SELECT to_regclass('refund_private_destinations') AS destinations, to_regclass('refund_private_files') AS files");
-  if (!result.rows[0]?.destinations || !result.rows[0]?.files) throw new AppError('The updated refund process is not yet available. Ask the administrator to apply refund migration 42.', 503);
+  if (!result.rows[0]?.files || (legacyDestination && !result.rows[0]?.destinations)) throw new AppError('The updated refund process is not yet available. Ask the administrator to apply refund migration 42.', 503);
 }
 
 function validateDestination(destination) {
@@ -68,7 +68,7 @@ async function attachRequest(db, refund, destination, actorId) {
 async function update(id, status, user, data = {}) {
   const version = await pool.query("SELECT to_jsonb(r)->>'original_payment_method' AS original_payment_method FROM refund_requests r WHERE refund_request_id=$1 AND deleted_at IS NULL",[id]);
   if (version.rows[0]?.original_payment_method) return require('./adminOrderRefundWorkflow').update(id,status,user,data);
-  await ensureReady();
+  await ensureReady({ legacyDestination: true });
   const db = await pool.connect();
   try {
     await db.query('BEGIN');

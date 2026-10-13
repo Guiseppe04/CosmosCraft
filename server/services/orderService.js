@@ -2116,9 +2116,16 @@ exports.getRefundRequestById = async (refundRequestId, includeSensitive = false)
   if (res.rows.length === 0) return null;
 
   const request = res.rows[0];
+  // Current requests use the original payment method. Only historical requests
+  // can have a separately recorded destination, whose table may not exist.
+  let hasLegacyDestination = false;
+  if (includeSensitive && request.workflow_version === 2 && !request.original_payment_method) {
+    const schema = await pool.query("SELECT to_regclass('refund_private_destinations') AS destinations");
+    hasLegacyDestination = Boolean(schema.rows[0]?.destinations);
+  }
   // These reads depend only on the verified request above, not on one another.
   const [destinationRes, filesRes, itemsRes, imagesRes, paymentRes, reviewContext] = await Promise.all([
-    includeSensitive && request.workflow_version === 2
+    hasLegacyDestination
       ? pool.query('SELECT payment_destination FROM refund_private_destinations WHERE refund_request_id=$1', [refundRequestId])
       : Promise.resolve({ rows: [] }),
     request.workflow_version === 2

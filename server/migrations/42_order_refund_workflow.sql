@@ -15,12 +15,15 @@ ALTER TABLE refund_requests ADD CONSTRAINT refund_requests_refund_method_check C
 ALTER TABLE refund_requests ADD CONSTRAINT refund_requests_status_check CHECK (status IN (
   'pending', 'under_review', 'approved', 'processing', 'refund_sent', 'completed',
   'rejected', 'refunded', 'pending_payment_verification', 'withdrawn',
-  'return_pending', 'returned', 'return_confirmed'
+  'return_pending', 'returned', 'return_confirmed',
+  'return_required', 'return_in_transit', 'item_received', 'under_inspection'
 ));
+-- Preserve migration 47's return workflow when this migration is rerun.
 DROP INDEX IF EXISTS uq_refund_requests_active_order;
 CREATE UNIQUE INDEX uq_refund_requests_active_order ON refund_requests(order_id)
   WHERE deleted_at IS NULL AND status IN ('pending', 'under_review', 'approved', 'processing',
-    'refund_sent', 'return_pending', 'returned', 'pending_payment_verification');
+    'refund_sent', 'return_pending', 'returned', 'return_confirmed', 'pending_payment_verification',
+    'return_required', 'return_in_transit', 'item_received', 'under_inspection');
 
 CREATE TABLE IF NOT EXISTS refund_private_files (
   refund_request_id UUID NOT NULL REFERENCES refund_requests(refund_request_id) ON DELETE CASCADE,
