@@ -527,7 +527,7 @@ exports.getFulfillmentRequestById = async (requestId, userId, userRole) => {
 /**
  * Admin action: Transition fulfillment status
  */
-exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actorId, actorRole, pickupIdVerified = false) => {
+exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actorId, actorRole, pickupIdVerified = false, itemPhotos = undefined) => {
   const isPrivileged = ['staff', 'admin', 'super_admin'].includes(actorRole);
   if (!isPrivileged) {
     throw new AppError('You are not authorized to perform this action.', 403);
@@ -559,6 +559,10 @@ exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actor
     const allowedNext = VALID_STATUS_TRANSITIONS[method]?.[currentStatus] || [];
     if (!allowedNext.includes(newStatus)) {
       throw new AppError(`This fulfillment status transition is not allowed. (${currentStatus} → ${newStatus})`, 400);
+    }
+    if(method==='delivery' && newStatus==='out_for_delivery'){
+      await client.query("SELECT set_config('cosmos.audit_actor_id',$1,true),set_config('cosmos.audit_source','shipment_api',true)",[String(actorId)]);
+      await require('./dispatchPhotoService').save(client,currentReq.order_id,`fulfillment:${requestId}`,itemPhotos,actorId,{customOnly:true});
     }
 
     // Set timestamps based on newStatus

@@ -143,6 +143,17 @@ export const adminApi = {
   markAsReceived: (id) => request(`/api/orders/${id}/received`, { method: 'POST' }),
   createRefundRequest: (id, body) => request(`/api/orders/${id}/refund-request`, { method: 'POST', body }),
   getRefundFile: (id, kind) => request(`/api/orders/refund-requests/${id}/files/${kind}`),
+  getCustomerRefundTracking: (id) => request(`/api/orders/refund-requests/${id}/tracking`),
+  getDispatchPhotos: (id,customOnly=false) => request(`/api/orders/${id}/dispatch-photos${customOnly?'?customOnly=true':''}`),
+  getDispatchPhoto: (id) => request(`/api/orders/dispatch-photos/${id}`),
+  appendDispatchPhotos: (id,body) => request(`/api/orders/${id}/dispatch-photos`,{method:'POST',body}),
+  updateRefundReview: (id,body) => request(`/api/orders/refund-requests/${id}/review`, {method:'PATCH',body}),
+  offerRefundRepair: (id,body) => request(`/api/orders/refund-requests/${id}/repair-offer`, {method:'POST',body}),
+  respondRefundRepair: (id,body) => request(`/api/orders/refund-requests/${id}/repair-response`, {method:'POST',body}),
+  getRefundPolicyDraft: () => request('/api/orders/refund-policy-draft'),
+  saveRefundPolicyDraft: (body) => request('/api/orders/refund-policy-draft', {method:'PUT',body}),
+  getCustomerRefundEvidence: (id, kind) => request(`/api/orders/refund-requests/${id}/evidence/${kind}`),
+  submitCustomerReturn: (id, body) => request(`/api/orders/refund-requests/${id}/return-evidence`, { method: 'POST', body }),
   confirmRefund: (id) => request(`/api/orders/refund-requests/${id}/confirm`, { method: 'POST' }),
   getRefundRequests: (params = {}) => {
     const qs = new URLSearchParams(params).toString()

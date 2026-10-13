@@ -14,7 +14,7 @@ export default function PrivateRefundFile({ refundId, kind, label }) {
   return <div className="space-y-2">
     <p className="text-sm font-semibold text-[var(--text-light)]">{label}</p>
     {loading && <p role="status" className="text-sm text-[var(--text-muted)]">Loading secure image…</p>}
-    {error && <div role="alert" className="text-sm text-red-400">{error} <button type="button" onClick={() => setRetry(v => v + 1)} className="underline">Retry</button></div>}
+    {error && <div role="alert" style={{ color: '#ef4444' }} className="text-sm text-red-400">{error} <button type="button" onClick={() => setRetry(v => v + 1)} className="underline">Retry</button></div>}
     {image && <><img src={image} alt={label} className="max-h-64 max-w-full rounded-lg bg-white object-contain" />
       <a href={image} download={`refund-${refundId}-${kind}.${image.startsWith('data:image/jpeg') ? 'jpg' : image.startsWith('data:image/webp') ? 'webp' : 'png'}`}
         className="inline-block rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--gold-primary)]">Download {label.toLowerCase()}</a></>}

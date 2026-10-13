@@ -763,7 +763,7 @@ const orderStatusEnum = ['pending', 'processing', 'shipped', 'out_for_delivery',
 const orderPaymentStatusEnum = ['pending', 'proof_submitted', 'under_review', 'approved', 'rejected', 'failed'];
 const fulfillmentMethods = ['pickup', 'delivery', 'pickup_appointment', 'external_delivery', 'shop_delivery'];
 const notificationTypeEnum = ['order_update', 'appointment_reminder', 'system', 'promotional', 'low_stock'];
-const refundStatusEnum = ['pending', 'under_review', 'approved', 'processing', 'refund_sent', 'completed', 'rejected', 'refunded', 'pending_payment_verification'];
+const refundStatusEnum = ['return_required','return_in_transit','item_received','under_inspection','return_pending','returned','return_confirmed','withdrawn','pending', 'under_review', 'approved', 'processing', 'refund_sent', 'completed', 'rejected', 'refunded', 'pending_payment_verification'];
 
 exports.createOrderSchema = Joi.object({
   items: Joi.array()
@@ -877,13 +877,15 @@ exports.cancelMyOrderSchema = Joi.object({
 exports.markAsReceivedSchema = Joi.object({});
 
 exports.createRefundRequestSchema = Joi.object({
-  destination: require('./refundValidation').refundDestinationSchema.required(),
-  reason: Joi.string().trim().min(3).max(500).required().messages({
+  destination: Joi.forbidden(),
+  receiptDateDisputed: Joi.boolean().optional(),
+  receiptDisputeExplanation: Joi.when('receiptDateDisputed',{is:true,then:Joi.string().trim().min(10).max(1000).required(),otherwise:Joi.string().trim().max(1000).allow('',null).optional()}),
+  customerNotes: Joi.string().trim().max(1000).optional().allow('', null).label('Additional explanation'),
+  reason: Joi.string().valid('damaged','wrong_item','not_as_described','no_longer_needed','better_price','other').required().messages({
     'string.min': 'Refund reason must be at least 3 characters',
     'string.max': 'Refund reason must not exceed 500 characters',
     'any.required': 'Refund reason is required',
   }),
-  customerNotes: Joi.string().trim().max(1000).optional().allow(''),
   items: Joi.array().unique('order_item_id')
     .items(
       Joi.object({
@@ -903,7 +905,7 @@ exports.createRefundRequestSchema = Joi.object({
       'array.min': 'At least one item must be selected for refund',
       'any.required': 'Items are required',
     }),
-  images: Joi.array().items(Joi.string().uri()).max(5).optional().messages({
+  images: Joi.array().items(require('./refundValidation').refundImageSchema).min(1).max(5).required().label('Supporting evidence').messages({
     'array.max': 'Maximum 5 images are allowed',
   }),
 });
@@ -922,6 +924,14 @@ exports.createProjectRefundRequestSchema = Joi.object({
 }).unknown(true);
 
 exports.updateRefundStatusSchema = Joi.object({
+  action: Joi.string().valid('start_review','mark_no_return').optional(),
+  internalNotes: Joi.string().trim().max(1000).allow('').optional(),
+  returnInstructions: Joi.string().trim().max(2000).allow('').optional(),
+  noReturnReason: Joi.string().trim().max(1000).allow('').optional(),
+  inspectionNotes: Joi.string().trim().max(1000).allow('').optional(),
+  resaleSuitable: Joi.boolean().strict().optional(),
+  claimVerified: Joi.boolean().strict().optional(),
+  paymentConfirmed: Joi.boolean().strict().optional(),
   approvedAmount: Joi.number().positive().precision(2).optional(),
   refundReference: Joi.string().trim().max(255).allow('').optional(),
   proofImage: require('./refundValidation').refundImageSchema.optional(),
@@ -957,6 +967,7 @@ exports.updatePaymentStatusSchema = Joi.object({
 });
 
 exports.updateOrderSchema = Joi.object({
+  itemPhotos: require('./dispatchPhotoValidation').itemPhotos.optional(),
   status: Joi.string().valid(...orderStatusEnum).optional(),
   additional_shipping_fee: shippingFeeSchema.when('status', { is: 'shipped', then: Joi.required(), otherwise: Joi.optional() }),
   payment_status: Joi.string().valid(...orderPaymentStatusEnum).optional(),
@@ -980,6 +991,7 @@ exports.orderIdParamSchema = Joi.object({
 });
 
 exports.updateShipmentSchema = Joi.object({
+  itemPhotos: require('./dispatchPhotoValidation').itemPhotos.optional(),
   additional_shipping_fee: shippingFeeSchema.required(),
   tracking_number: Joi.string().trim().min(5).max(100).required().messages({
     'string.min': 'Tracking number must be at least 5 characters',
@@ -1047,6 +1059,7 @@ exports.submitFulfillmentSchema = Joi.object({
 }).or('fulfillment_method', 'method');
 
 exports.updateFulfillmentStatusSchema = Joi.object({
+  itemPhotos: require('./dispatchPhotoValidation').itemPhotos.optional(),
   status: Joi.string().valid('requested', 'processing', 'ready_for_pickup', 'out_for_delivery', 'completed', 'cancelled').required().messages({
     'any.only': 'Status must be one of: requested, processing, ready_for_pickup, out_for_delivery, completed, cancelled',
     'any.required': 'Status is required',
@@ -1395,6 +1408,7 @@ exports.arrangeCourierSchema = Joi.object({
 }).unknown(true);
 
 exports.updateBuildClaimStatusSchema = Joi.object({
+  itemPhotos: require('./dispatchPhotoValidation').itemPhotos.optional(),
   status: Joi.string().valid(...claimStatusEnum).required().messages({
     'any.only': `Status must be one of: ${claimStatusEnum.join(', ')}`,
     'any.required': 'Status is required',
@@ -1490,3 +1504,10 @@ exports.updateReviewStatusSchema = Joi.object({
   admin_notes: Joi.string().max(1000).optional().allow('').trim(),
 }).unknown(true);
 
+
+exports.customerReturnEvidenceSchema = Joi.object({
+  images: Joi.array().items(require('./refundValidation').refundImageSchema).min(1).max(5).required(),
+  returnMethod: Joi.string().valid('courier','pickup').required(),
+  returnReference: Joi.string().trim().max(255).when('returnMethod', { is:'courier', then:Joi.required(), otherwise:Joi.optional().allow('') }),
+  notes: Joi.string().trim().max(1000).optional().allow(''),
+});

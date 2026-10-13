@@ -13,7 +13,7 @@ const userId = user => user?.user_id || user?.id;
 // Never send account details or file bytes to a socket, customer list, or staff.
 const publicRefund = refund => {
   if (!refund) return refund;
-  const { payment_destination, ...safe } = refund;
+  const { payment_destination, internal_notes, review_data, review_context, ...safe } = refund;
   return safe;
 };
 
@@ -66,10 +66,13 @@ async function attachRequest(db, refund, destination, actorId) {
 }
 
 async function update(id, status, user, data = {}) {
+  const version = await pool.query("SELECT to_jsonb(r)->>'original_payment_method' AS original_payment_method FROM refund_requests r WHERE refund_request_id=$1 AND deleted_at IS NULL",[id]);
+  if (version.rows[0]?.original_payment_method) return require('./adminOrderRefundWorkflow').update(id,status,user,data);
   await ensureReady();
   const db = await pool.connect();
   try {
     await db.query('BEGIN');
+    const auditContext = await require('./refundAudit').prepare(db,userId(user));
     const result = await db.query(`SELECT r.*, d.payment_destination FROM refund_requests r
       LEFT JOIN refund_private_destinations d USING(refund_request_id)
       WHERE r.refund_request_id=$1 AND r.deleted_at IS NULL FOR UPDATE OF r`, [id]);
@@ -77,12 +80,23 @@ async function update(id, status, user, data = {}) {
     if (!refund) throw new AppError('Refund request not found', 404);
     if (refund.workflow_version !== 2) throw new AppError('Use the original workflow for this refund', 409);
     await db.query('SELECT order_id FROM orders WHERE order_id=$1 FOR UPDATE', [refund.order_id]);
-    const owner = refund.user_id === userId(user);
-    if (!isAdmin(user) && !(owner && status === 'completed' && refund.status === 'refund_sent')) throw new AppError('Only authorized admins can manage refunds', 403);
+    if (!isAdmin(user)) throw new AppError('Only authorized admins can manage refunds', 403);
+    if (status === 'under_review' && data.action === 'start_review' && refund.status !== 'pending') {
+      await db.query('COMMIT');
+      return publicRefund(refund);
+    }
     if (!transitions[refund.status]?.includes(status)) throw new AppError(`Invalid refund status transition from '${refund.status}' to '${status}'`, 409);
     const notes = String(data.adminNotes || '').trim();
     if (notes.length > 1000) throw new AppError('Refund notes must not exceed 1000 characters', 400);
-    if (status === 'rejected' && !notes) throw new AppError('A rejection reason is required', 400);
+    if (status === 'rejected') {
+      const error = require('../utils/refundValidation').refundTextError(notes,'Rejection reason');
+      if (error) throw new AppError(error,400);
+    }
+    if (status === 'completed' && data.paymentConfirmed !== true) throw new AppError('Confirm that the actual refund payment succeeded before completing the refund',400);
+    if (status === 'completed') {
+      const proof = await db.query("SELECT 1 FROM refund_private_files WHERE refund_request_id=$1 AND kind='proof'",[id]);
+      if (!proof.rows.length) throw new AppError('Refund payment proof is required',400);
+    }
     let amount = Number(refund.approved_amount ?? refund.amount_requested);
     if (status === 'approved') {
       amount = data.approvedAmount == null ? Number(refund.amount_requested) : Number(data.approvedAmount);
@@ -108,6 +122,10 @@ async function update(id, status, user, data = {}) {
       if (!data.proofImage) throw new AppError('Upload proof of payment before marking the refund as sent', 400);
       await saveFile(db, id, 'proof', data.proofImage, userId(user));
     }
+    if (data.internalNotes != null) {
+      if (typeof data.internalNotes !== 'string' || data.internalNotes.length > 1000) throw new AppError('Internal notes must be text up to 1000 characters',400);
+      await db.query('UPDATE refund_requests SET internal_notes=$2 WHERE refund_request_id=$1',[id,data.internalNotes.trim()]);
+    }
     const reference = String(data.refundReference || '').trim();
     if (reference.length > 255) throw new AppError('Transaction reference must not exceed 255 characters', 400);
     const updated = await db.query(`UPDATE refund_requests SET status=$2::text, updated_at=now(),
@@ -124,6 +142,8 @@ async function update(id, status, user, data = {}) {
       sent_by=CASE WHEN $2='refund_sent' THEN $4 ELSE sent_by END,
       refunded_at=CASE WHEN $2='completed' THEN now() ELSE refunded_at END,
       completed_at=CASE WHEN $2='completed' THEN now() ELSE completed_at END,
+      payment_confirmed=CASE WHEN $2='completed' THEN true ELSE payment_confirmed END,
+      payment_confirmed_at=CASE WHEN $2='completed' THEN now() ELSE payment_confirmed_at END,
       completed_by=CASE WHEN $2='completed' THEN $4 ELSE completed_by END
       WHERE refund_request_id=$1 RETURNING *`, [id,status,notes,userId(user),amount,reference]);
     if (status === 'refund_sent') {
@@ -137,7 +157,7 @@ async function update(id, status, user, data = {}) {
         await db.query("UPDATE orders SET payment_status='refunded', updated_at=now() WHERE order_id=$1", [refund.order_id]);
       }
     }
-    await require('./auditService').logRefundEvent({ userId: userId(user), action: `refund_${status}`, entityId: refund.order_id,
+    await require('./refundAudit').record(auditContext,{ userId: userId(user), action: `refund_${status}`, entityId: refund.order_id,
       status, previousStatus: refund.status, details: { refund_request_id: id, amount }, executor: db });
     await db.query('COMMIT');
     return publicRefund(updated.rows[0]);
@@ -146,12 +166,12 @@ async function update(id, status, user, data = {}) {
 
 async function getFile(id, kind, user) {
   await ensureReady();
-  if (!['qr','proof'].includes(kind)) throw new AppError('File not found', 404);
+  if (!['qr','proof','inspection'].includes(kind) && !/^(evidence|return)_?[0-4]$/.test(kind)) throw new AppError('File not found', 404);
   const result = await pool.query(`SELECT f.mime_type,f.file_data,r.user_id,r.status FROM refund_private_files f
     JOIN refund_requests r USING(refund_request_id) WHERE f.refund_request_id=$1 AND f.kind=$2 AND r.deleted_at IS NULL`, [id,kind]);
   const file = result.rows[0];
   if (!file) throw new AppError('File not found', 404);
-  if (!isAdmin(user) && !(kind === 'proof' && file.user_id === userId(user) && ['refund_sent','completed'].includes(file.status))) throw new AppError('You do not have access to this file', 403);
+  if (!isAdmin(user) && !(file.user_id === userId(user) && (/^(evidence|return)_?[0-4]$/.test(kind) || (kind === 'proof' && ['refund_sent','completed'].includes(file.status))))) throw new AppError('You do not have access to this file', 403);
   return file;
 }
 

@@ -718,6 +718,10 @@ exports.updateClaimStatus = async (projectId, adminId, newStatus, data = {}) => 
     if (!isValidTransition(claim.claim_status, newStatus)) {
       throw new AppError(`Invalid status transition from '${claim.claim_status}' to '${newStatus}'`, 400);
     }
+    if(newStatus==='out_for_delivery'){
+      await client.query("SELECT set_config('cosmos.audit_actor_id',$1,true),set_config('cosmos.audit_source','shipment_api',true)",[String(adminId)]);
+      await require('./dispatchPhotoService').save(client,claim.order_id,`claim:${projectId}`,data.itemPhotos,adminId,{customOnly:true});
+    }
 
     const res = await client.query(
       `UPDATE current_build_claims
@@ -753,7 +757,8 @@ exports.updateClaimStatus = async (projectId, adminId, newStatus, data = {}) => 
       );
     }
 
-    await logClaimActivity(client, projectId, adminId, 'build_claim_status_updated', {
+    // Dispatch set transaction-local actor context before the database-owned audit.
+    if(newStatus!=='out_for_delivery' || !await require('./dispatchPhotoService').hasManagedAudit(client,'current_build_claims'))await logClaimActivity(client, projectId, adminId, 'build_claim_status_updated', {
       claim_id: claim.claim_id,
       from: claim.claim_status,
       to: newStatus,

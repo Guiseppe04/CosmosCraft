@@ -132,7 +132,7 @@ exports.getAllOrders = asyncHandler(async (req, res, next) => {
 })
 
 exports.updateOrder = asyncHandler(async (req, res, next) => {
-  const order = await orderService.updateOrder(req.params.id, req.validatedData || req.body)
+  const order = await orderService.updateOrder(req.params.id, req.validatedData || req.body, req.user?.user_id || req.user?.id)
   if (!order) throw new AppError('Order not found', 404)
   socketService.emitToUserAndStaff(order.user_id, 'order:updated', { order, action: 'order_updated' });
   res.status(200).json({ status: 'success', data: order })
@@ -202,7 +202,7 @@ exports.approvePayment = asyncHandler(async (req, res, next) => {
 })
 
 exports.updateShipment = asyncHandler(async (req, res, next) => {
-  const { tracking_number, courier_name, rider_name, rider_contact, additional_shipping_fee } = req.validatedData || req.body
+  const { tracking_number, courier_name, rider_name, rider_contact, additional_shipping_fee, itemPhotos } = req.validatedData || req.body
   
   if (!tracking_number || !courier_name) {
     throw new AppError('Tracking number and courier name are required', 400)
@@ -212,6 +212,7 @@ exports.updateShipment = asyncHandler(async (req, res, next) => {
     tracking_number,
     courier_name,
     additional_shipping_fee,
+    itemPhotos,
     rider_name,
     rider_contact
   }, req.user?.id ?? null)
@@ -259,7 +260,7 @@ exports.createRefundRequest = asyncHandler(async (req, res, next) => {
   if (!userId) {
     throw new AppError('You must be logged in to request a refund', 401)
   }
-  const { reason, customerNotes, items, images, destination } = req.validatedData || req.body
+  const { reason, customerNotes, items, images, receiptDateDisputed, receiptDisputeExplanation } = req.validatedData || req.body
   if (!reason || !String(reason).trim()) {
     throw new AppError('Refund reason is required', 400)
   }
@@ -273,7 +274,8 @@ exports.createRefundRequest = asyncHandler(async (req, res, next) => {
     customerNotes: customerNotes ? String(customerNotes).trim() : null,
     items,
     images: images || [],
-    destination,
+    receiptDateDisputed,
+    receiptDisputeExplanation,
   })
   socketService.emitRefundChanged(refundRequest, 'refund:created', 'created');
   res.status(201).json({ status: 'success', data: refundRequest })
@@ -305,6 +307,7 @@ exports.updateRefundStatus = asyncHandler(async (req, res, next) => {
     throw new AppError('Status is required', 400)
   }
   const refundRequest = await orderService.updateRefundStatus(req.params.refundId, status, {
+    action: req.body.action,
     adminUserId,
     adminNotes: adminNotes ? String(adminNotes).trim() : null,
   })
@@ -332,7 +335,16 @@ exports.getRefundFile = asyncHandler(async (req, res) => {
 })
 
 exports.confirmRefund = asyncHandler(async (req, res) => {
-  const refundRequest = await require('../services/orderRefundWorkflow').update(req.params.refundId, 'completed', req.user)
+  const tracking = await require('../services/customerRefundService').getTracking(req.params.refundId, req.user.id)
+  if (!require('../services/orderRefundWorkflow').isAdmin(req.user)) throw new AppError('Only authorized admins can complete refunds', 403)
+  if (tracking.original_payment_method && tracking.status === 'refund_sent') {
+    if (tracking.return_status !== 'return_confirmed' && !(tracking.return_status === 'not_required' && tracking.no_return_reason?.trim())) {
+      throw new AppError('The returned item must be verified before confirming refund completion', 409)
+    }
+    const proof = await pool.query("SELECT 1 FROM refund_private_files WHERE refund_request_id=$1 AND kind='proof'", [req.params.refundId])
+    if (!proof.rows.length) throw new AppError('Payment proof is required before confirming completion', 409)
+  }
+  const refundRequest = await require('../services/orderRefundWorkflow').update(req.params.refundId, 'completed', req.user, { paymentConfirmed: true })
   socketService.emitRefundChanged(refundRequest, 'refund:updated', 'customer_confirmed')
   res.status(200).json({ status: 'success', data: refundRequest })
 })
@@ -359,3 +371,55 @@ exports.adjustRefundAmount = asyncHandler(async (req, res, next) => {
   socketService.emitRefundChanged(refundRequest, 'refund:updated', 'amount_adjusted');
   res.status(200).json({ status: 'success', data: refundRequest })
 })
+
+exports.getCustomerRefundTracking = asyncHandler(async (req,res) => {
+  const data = await require('../services/customerRefundService').getTracking(req.params.refundId,req.user.id);
+  res.set('Cache-Control','private, no-store');
+  res.status(200).json({status:'success',data});
+});
+
+exports.getDispatchPhotos = asyncHandler(async(req,res)=>{
+  const data=await require('../services/dispatchPhotoService').list(req.params.orderId,req.user,req.query.customOnly==='true');
+  res.set('Cache-Control','private, no-store');res.json({status:'success',data});
+});
+exports.getDispatchPhoto = asyncHandler(async(req,res)=>{
+  const photo=await require('../services/dispatchPhotoService').get(req.params.photoId,req.user);
+  res.set('Cache-Control','private, no-store');res.set('X-Content-Type-Options','nosniff');
+  res.json({status:'success',data:{image:`data:${photo.mime_type};base64,${Buffer.from(photo.file_data).toString('base64')}`}});
+});
+exports.appendDispatchPhotos = asyncHandler(async(req,res)=>{
+  const data=await require('../services/dispatchPhotoService').append(req.params.orderId,req.user,req.validatedData || req.body);
+  res.json({status:'success',data});
+});
+
+exports.updateRefundReview = asyncHandler(async (req,res) => {
+  const refund = await require('../services/refundReviewService').update(req.params.refundId,req.user,req.validatedData || req.body);
+  socketService.emitRefundChanged(refund);
+  res.json({status:'success',data:refund});
+});
+exports.offerRefundRepair = asyncHandler(async (req,res) => {
+  const refund = await require('../services/refundReviewService').offer(req.params.refundId,req.user,req.validatedData || req.body);
+  socketService.emitRefundChanged(refund);
+  res.json({status:'success',data:refund});
+});
+exports.respondRefundRepair = asyncHandler(async (req,res) => {
+  const refund = await require('../services/refundReviewService').respond(req.params.refundId,req.user,req.validatedData || req.body);
+  socketService.emitRefundChanged(refund);
+  res.json({status:'success',data:refund});
+});
+exports.getRefundPolicyDraft = asyncHandler(async (req,res) => {
+  res.json({status:'success',data:await require('../services/refundReviewService').getPolicy(req.user)});
+});
+exports.saveRefundPolicyDraft = asyncHandler(async (req,res) => {
+  res.json({status:'success',data:await require('../services/refundReviewService').savePolicy(req.user,req.validatedData || req.body)});
+});
+exports.getCustomerRefundEvidence = asyncHandler(async (req,res) => {
+  const file = await require('../services/customerRefundService').getEvidence(req.params.refundId,req.params.kind,req.user.id);
+  res.set('Cache-Control','private, no-store'); res.set('X-Content-Type-Options','nosniff');
+  res.status(200).json({status:'success',data:{image:`data:${file.mime_type};base64,${Buffer.from(file.file_data).toString('base64')}`}});
+});
+exports.submitCustomerReturn = asyncHandler(async (req,res) => {
+  const refund = await require('../services/customerRefundService').submitReturn(req.params.refundId,req.user.id,req.validatedData);
+  socketService.emitRefundChanged(refund,'refund:updated','return_submitted');
+  res.status(200).json({status:'success',data:refund});
+});

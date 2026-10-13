@@ -23,6 +23,8 @@ import { normalizeRiderContact } from '../../utils/phone'
 import PhoneInput from '../PhoneInput'
 import { ShippingFeeInput, ShippingFeeNotice } from '../ShippingFeeNotice'
 import { isValidShippingFee } from '../../utils/shippingFee'
+import DispatchPhotoInput from '../DispatchPhotoInput'
+import DispatchPhotoGallery from '../DispatchPhotoGallery'
 import { useSocketEvent } from '../../context/SocketContext'
 
 const ORDER_STATUS_LIFECYCLE = [
@@ -1156,7 +1158,7 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
             <PaymentVerificationPanel order={order} onVerify={onVerifyPayment} onMarkUnderReview={onMarkUnderReview} user={user} />
           )}
           {activeSection === 'order' && (
-            <OrderStatusPanel order={order} onUpdate={onUpdateOrderStatus} onMarkProcessing={onMarkProcessing} />
+            <><OrderStatusPanel order={order} onUpdate={onUpdateOrderStatus} onMarkProcessing={onMarkProcessing} /><DispatchPhotoGallery orderId={order.order_id} allowAdd /></>
           )}
           {activeSection === 'installment' && (
             <InstallmentTracking orderId={order.order_id} order={order} />
@@ -1384,6 +1386,7 @@ function PaymentVerificationPanel({ order, onVerify, onMarkUnderReview, user }) 
 }
 
 function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
+  const [itemPhotos,setItemPhotos]=useState([]),[photosReady,setPhotosReady]=useState(false)
   const [selectedStatus, setSelectedStatus] = useState(order.status || 'pending')
   const [shippingFee, setShippingFee] = useState('')
   const [trackingInfo, setTrackingInfo] = useState('')
@@ -1398,7 +1401,7 @@ function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
   const requiresRiderDetails = selectedStatus === 'out_for_delivery'
   const canSubmit =
     selectedStatus !== currentStatus && allowedStatuses.includes(selectedStatus) &&
-    (!requiresTrackingNumber || (Boolean(trackingInfo.trim()) && isValidShippingFee(shippingFee))) &&
+    (!requiresTrackingNumber || (Boolean(trackingInfo.trim()) && isValidShippingFee(shippingFee) && photosReady)) &&
     (!requiresRiderDetails || Boolean(riderName.trim() && riderContact.trim()))
 
   useEffect(() => {
@@ -1407,6 +1410,7 @@ function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
 
   useEffect(() => {
     setTrackingInfo('')
+    setItemPhotos([]);setPhotosReady(false)
     setShippingFee('')
     setRiderName('')
     setRiderContact('')
@@ -1425,6 +1429,7 @@ function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
   }
 
   const handleUpdate = async () => {
+    if(requiresTrackingNumber && !photosReady){setTrackingError('Upload pre-shipping photos for every item before dispatch.');return}
     if (requiresTrackingNumber && !isValidShippingFee(shippingFee)) {
       setTrackingError('Enter a valid additional shipping fee (0 or more, with up to 2 decimal places).')
       return
@@ -1451,6 +1456,7 @@ function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
       await onUpdate(order.order_id, selectedStatus, {
         trackingInfo: trackingInfo.trim(),
         shippingFee: requiresTrackingNumber ? Number(shippingFee) : undefined,
+        itemPhotos:requiresTrackingNumber?itemPhotos:undefined,
         riderName: riderName.trim(),
         riderContact: requiresRiderDetails ? normalizeRiderContact(riderContact) : riderContact.trim(),
       })
@@ -1502,6 +1508,7 @@ function OrderStatusPanel({ order, onUpdate, onMarkProcessing }) {
 
         {requiresTrackingNumber && (
           <div className="mb-4">
+            <DispatchPhotoInput orderId={order.order_id} value={itemPhotos} onChange={setItemPhotos} onReadyChange={setPhotosReady} disabled={isUpdating} />
             <div className="mb-4">
               <ShippingFeeInput value={shippingFee} onChange={(value) => { setShippingFee(value); setTrackingError('') }} />
             </div>
@@ -1870,7 +1877,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
   }
 
   const handleUpdateOrderStatus = async (orderId, newStatus, details = {}) => {
-    const { trackingInfo = '', riderName = '', riderContact = '', shippingFee } = details
+    const { trackingInfo = '', riderName = '', riderContact = '', shippingFee, itemPhotos } = details
     setIsUpdatingOrder(true)
     try {
       const order = selectedOrder?.order_id === orderId ? selectedOrder : orders.find(o => o.order_id === orderId)
@@ -1884,6 +1891,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
       if (newStatus === 'shipped') {
         if (!isValidShippingFee(shippingFee)) throw new Error('Enter a valid additional shipping fee before shipping.')
         updateData.additional_shipping_fee = Number(shippingFee)
+        updateData.itemPhotos = itemPhotos
       }
       if (newStatus === 'shipped' && trackingInfo) {
         updateData.tracking_number = trackingInfo

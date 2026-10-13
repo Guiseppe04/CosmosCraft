@@ -100,6 +100,9 @@ app.use(
   })
 );
 
+// Five 5 MB images encoded as JSON require up to 36 MB on these customer routes.
+app.use(/^\/api\/orders\/(?:[^/]+\/refund-request|refund-requests\/[^/]+\/return-evidence)$/, express.json({ limit: '36mb' }));
+app.use(/^\/api\/(?:orders\/(?:[^/]+(?:\/dispatch-photos)?)|fulfillment\/requests\/[^/]+\/status|projects\/[^/]+\/build-claim\/status)$/, express.json({limit:'72mb'}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(cookieParser());

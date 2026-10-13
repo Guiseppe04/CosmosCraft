@@ -4,6 +4,7 @@ import { normalizeRiderContact } from '../../../../utils/phone'
 import PhoneInput from '../../../../components/PhoneInput'
 import { ShippingFeeInput } from '../../../../components/ShippingFeeNotice'
 import { isValidShippingFee } from '../../../../utils/shippingFee'
+import DispatchPhotoInput from '../../../../components/DispatchPhotoInput'
 
 export function OrderStatusModal({
   modal,
@@ -21,6 +22,7 @@ export function OrderStatusModal({
 }) {
   const handleUpdateStatus = async () => {
     if (!form.order_status) return
+    if(form.order_status==='shipped' && !form.dispatchReady){showToast('Upload pre-shipping photos for every item before dispatch.','error');return}
     if (form.order_status === 'shipped' && !isValidShippingFee(form.additional_shipping_fee)) {
       showToast('Enter a valid additional shipping fee before shipping.', 'error')
       return
@@ -43,7 +45,7 @@ export function OrderStatusModal({
     setIsSaving(true)
     try {
       const updateData = { status: form.order_status }
-      if (form.order_status === 'shipped') updateData.additional_shipping_fee = Number(form.additional_shipping_fee)
+      if (form.order_status === 'shipped') {updateData.additional_shipping_fee = Number(form.additional_shipping_fee);updateData.itemPhotos=form.itemPhotos}
       if (form.tracking_info) {
         if (form.order_status === 'shipped') updateData.tracking_number = form.tracking_info
       }
@@ -126,6 +128,7 @@ export function OrderStatusModal({
 
           {form.order_status === 'shipped' && (
             <div>
+              <DispatchPhotoInput orderId={modal.data.order_id} value={form.itemPhotos || []} onChange={itemPhotos=>setForm(previous=>({...previous,itemPhotos}))} onReadyChange={dispatchReady=>setForm(previous=>({...previous,dispatchReady}))} disabled={isSaving} />
               <div className="mb-4">
                 <ShippingFeeInput value={form.additional_shipping_fee} onChange={(value) => setForm((f) => ({ ...f, additional_shipping_fee: value }))} />
               </div>

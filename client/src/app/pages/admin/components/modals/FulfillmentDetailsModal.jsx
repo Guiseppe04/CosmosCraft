@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import DispatchPhotoInput from '../../../../components/DispatchPhotoInput';
+import DispatchPhotoGallery from '../../../../components/DispatchPhotoGallery';
 import { motion } from 'motion/react';
 import {
   X,
@@ -47,6 +49,7 @@ export function FulfillmentDetailsModal({ request, onClose, onUpdateStatus }) {
   const [adminNotes, setAdminNotes] = useState(request.admin_notes || '');
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState(null);
+  const [itemPhotos,setItemPhotos]=useState([]),[photosReady,setPhotosReady]=useState(false);
 
   const method = request.fulfillment_method?.includes('delivery') ? 'delivery' : 'pickup';
   const status = request.status;
@@ -80,10 +83,11 @@ export function FulfillmentDetailsModal({ request, onClose, onUpdateStatus }) {
   }
 
   const handleAdvance = async (targetStatus) => {
+    if(method==='delivery' && targetStatus==='out_for_delivery' && !photosReady){setError('Upload pre-shipping photos for every customized item before dispatch.');return;}
     try {
       setUpdating(true);
       setError(null);
-      await onUpdateStatus(request.id, targetStatus, adminNotes);
+      await onUpdateStatus(request.id, targetStatus, adminNotes,{itemPhotos:targetStatus==='out_for_delivery'?itemPhotos:undefined});
       onClose();
     } catch (err) {
       setError(err.message || 'Failed to update fulfillment status');
@@ -281,6 +285,8 @@ export function FulfillmentDetailsModal({ request, onClose, onUpdateStatus }) {
         </div>
 
         {/* Footer Actions */}
+        {method==='delivery' && nextStatus==='out_for_delivery' && <DispatchPhotoInput orderId={request.order_id} customOnly value={itemPhotos} onChange={setItemPhotos} onReadyChange={setPhotosReady} disabled={updating} />}
+        <DispatchPhotoGallery orderId={request.order_id} allowAdd />
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-[var(--border)]">
           <button
             type="button"

@@ -16,10 +16,13 @@ async function createFixture() {
   await db.exec(`
     CREATE ROLE anon; CREATE ROLE authenticated;
     CREATE TABLE users(user_id UUID PRIMARY KEY,first_name TEXT,last_name TEXT,email TEXT);
+    CREATE TABLE roles(role_id UUID,name TEXT);
+    CREATE TABLE user_roles(user_id UUID,role_id UUID,is_active BOOLEAN);
+    CREATE TABLE notifications(notification_id UUID DEFAULT gen_random_uuid(),user_id UUID,title TEXT,message TEXT,notification_type TEXT,related_entity_id UUID,related_entity_type TEXT,created_at TIMESTAMPTZ DEFAULT now());
     CREATE TABLE products(product_id UUID PRIMARY KEY,name TEXT);
     CREATE TABLE orders(order_id UUID PRIMARY KEY,user_id UUID,order_number TEXT,status TEXT,payment_status TEXT,
       delivered_at TIMESTAMPTZ DEFAULT now(), received_at TIMESTAMPTZ,created_at TIMESTAMPTZ DEFAULT now(),updated_at TIMESTAMPTZ,total_amount NUMERIC);
-    CREATE TABLE payments(payment_id UUID DEFAULT gen_random_uuid(),order_id UUID,amount NUMERIC,status TEXT,payment_method TEXT,created_at TIMESTAMPTZ DEFAULT now(),updated_at TIMESTAMPTZ);
+    CREATE TABLE payments(payment_id UUID DEFAULT gen_random_uuid(),order_id UUID,amount NUMERIC,status TEXT,payment_method TEXT,proof_url TEXT,reference_number TEXT,created_at TIMESTAMPTZ DEFAULT now(),updated_at TIMESTAMPTZ);
     CREATE TABLE order_items(order_item_id BIGSERIAL PRIMARY KEY,order_id UUID,product_id UUID,product_name TEXT,unit_price NUMERIC,quantity INT);
     CREATE TABLE product_images(product_id UUID,image_url TEXT,is_primary BOOLEAN);
     CREATE TABLE product_reviews(order_id UUID,order_item_id BIGINT,deleted_at TIMESTAMPTZ);
@@ -36,14 +39,23 @@ async function createFixture() {
     CREATE TABLE refund_request_images(refund_request_id UUID,image_url TEXT,sort_order INT,deleted_at TIMESTAMPTZ);
     CREATE TABLE refund_request_counters(prefix TEXT PRIMARY KEY,date DATE,last_number INT,updated_at TIMESTAMPTZ);
     CREATE TABLE audit_logs(user_id UUID,action TEXT,entity_type TEXT,entity_id UUID,previous_status TEXT,new_status TEXT,
-      details JSONB,context JSONB,changes JSONB,ip_address TEXT,user_agent TEXT,search_text TEXT);
+      details JSONB,context JSONB,changes JSONB,ip_address TEXT,user_agent TEXT,search_text TEXT,created_at TIMESTAMPTZ DEFAULT now());
   `);
   await db.exec(fs.readFileSync(path.join(__dirname, '../../migrations/42_order_refund_workflow.sql'), 'utf8'));
+  await db.exec(`ALTER TABLE refund_requests ADD COLUMN return_status TEXT, ADD COLUMN return_method TEXT, ADD COLUMN return_reference TEXT, ADD COLUMN return_confirmed_at TIMESTAMPTZ;`);
+  await db.exec(fs.readFileSync(path.join(__dirname, '../../migrations/46_customer_refund_evidence.sql'), 'utf8'));
   // Rerunning the additive migration must leave records and files intact.
   await db.exec(fs.readFileSync(path.join(__dirname, '../../migrations/42_order_refund_workflow.sql'), 'utf8'));
+  await db.exec(fs.readFileSync(path.join(__dirname, '../../migrations/47_admin_refund_returns.sql'), 'utf8'));
+  await db.exec(fs.readFileSync(path.join(__dirname, '../../migrations/48_admin_refund_usability.sql'), 'utf8'));
+  await db.exec(fs.readFileSync(path.join(__dirname, '../../migrations/49_refund_claim_verification.sql'), 'utf8'));
+  await db.exec(fs.readFileSync(path.join(__dirname, '../../migrations/50_refund_review_tools.sql'), 'utf8'));
+  await db.exec(fs.readFileSync(path.join(__dirname, '../../migrations/51_dispatch_photos.sql'), 'utf8'));
   for (const [name,id] of Object.entries(ids).filter(([name]) => ['customer','admin','other','staff'].includes(name))) {
     await db.query('INSERT INTO users VALUES($1,$2,$3,$4)', [id,name,'Test',`${name}@example.test`]);
   }
+  await db.exec("ALTER TABLE users ADD COLUMN role TEXT, ADD COLUMN is_active BOOLEAN DEFAULT true, ADD COLUMN deleted_at TIMESTAMPTZ;");
+  await db.query("UPDATE users SET role=CASE WHEN user_id=$1 THEN 'admin' ELSE 'customer' END",[ids.admin]);
   await db.query('INSERT INTO products VALUES($1,$2)', [ids.product,'Test Guitar']);
   await db.query("INSERT INTO orders(order_id,user_id,order_number,status,payment_status,total_amount) VALUES($1,$2,'TEST-ORDER','received','approved',1000)", [ids.order,ids.customer]);
   await db.query("INSERT INTO payments(order_id,amount,status,payment_method) VALUES($1,1000,'verified','e_wallet')", [ids.order]);
@@ -69,6 +81,16 @@ async function createFixture() {
   app.use(express.json({ limit: '10mb' }));
   app.use('/api/orders', router);
   app.use((err,req,res,next) => res.status(err.statusCode || 400).json({ message: err.message }));
-  return { db, app, ids, png, async close() { pool.query = originalQuery; pool.connect = originalConnect; await db.close(); } };
+  return { db, app, ids, png, async createLegacyRefund(data) {
+    const workflow = require('../../services/orderRefundWorkflow');
+    await db.query('BEGIN');
+    try {
+      const refund = (await db.query('INSERT INTO refund_requests(order_id,user_id,reason) VALUES($1,$2,$3) RETURNING *',[data.orderId,data.userId,data.reason])).rows[0];
+      for (const item of data.items) await db.query(`INSERT INTO refund_request_items(refund_request_id,order_item_id,product_id,product_name,quantity,unit_price,refund_amount)
+        SELECT $1,order_item_id,product_id,product_name,$2::int,unit_price,unit_price*$2::int FROM order_items WHERE order_item_id=$3`,[refund.refund_request_id,item.quantity,item.order_item_id]);
+      const attached = await workflow.attachRequest({query},refund,data.destination,data.userId);
+      await db.query('COMMIT'); return attached;
+    } catch(error) { await db.query('ROLLBACK'); throw error; }
+  }, async close() { pool.query = originalQuery; pool.connect = originalConnect; await db.close(); } };
 }
 module.exports = { createFixture, ids, png };

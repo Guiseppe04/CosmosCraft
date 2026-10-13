@@ -21,9 +21,9 @@ import { uploadToCloudinary } from '../utils/cloudinary.js'
 import { formatCurrency } from '../utils/formatCurrency.js'
 import { ShippingFeeNotice } from '../components/ShippingFeeNotice.jsx'
 import { getFulfillmentProgress, getOrderDisplayTotal } from '../utils/orderDisplay.js'
-import RefundDestinationForm from '../components/refunds/RefundDestinationForm'
+import CustomerRefundImages from '../components/refunds/CustomerRefundImages'
 import CustomerRefundTracking from '../components/refunds/CustomerRefundTracking'
-import { emptyRefundDestination, refundDestinationError } from '../utils/refundWorkflow'
+import CustomerRefundReviewLoader from '../components/refunds/CustomerRefundReviewLoader'
 import CustomerProjectTracker from '../components/projects/CustomerProjectTracker.jsx'
 import { AddressForm } from '../components/AddressForm.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
@@ -162,6 +162,10 @@ const PURCHASE_TABS = [
 ]
 
 const REFUND_STATUS_CONFIG = {
+  return_required: {label:'Return Required',icon:Truck,className:'border-amber-500/30 text-amber-400'},
+  return_in_transit: {label:'Return in Transit',icon:Truck,className:'border-sky-500/30 text-sky-400'},
+  item_received: {label:'Item Received',icon:CheckCircle,className:'border-sky-500/30 text-sky-400'},
+  under_inspection: {label:'Under Inspection',icon:Search,className:'border-amber-500/30 text-amber-400'},
   under_review: { label: 'Under Review', icon: Clock, className: 'border-amber-500/30 text-amber-400' },
   refund_sent: { label: 'Refund Sent', icon: CheckCircle, className: 'border-sky-500/30 text-sky-400' },
   completed: { label: 'Refund Completed', icon: CheckCircle, className: 'border-green-500/30 text-green-400' },
@@ -564,11 +568,14 @@ export function DashboardPage() {
   const [isRefundModalOpen, setIsRefundModalOpen] = useState(false)
   const [refundTarget, setRefundTarget] = useState(null)
   const [refundReason, setRefundReason] = useState('')
+  const [refundReceiptDisputed,setRefundReceiptDisputed] = useState(false)
+  const [refundReceiptDisputeExplanation,setRefundReceiptDisputeExplanation] = useState('')
   const [refundCustomerNotes, setRefundCustomerNotes] = useState('')
   const [refundSelectedItems, setRefundSelectedItems] = useState([])
   const [refundImages, setRefundImages] = useState([])
-  const [refundDestination, setRefundDestination] = useState(emptyRefundDestination)
-  const [readingRefundQr, setReadingRefundQr] = useState(false)
+  const [readingRefundImages, setReadingRefundImages] = useState(false)
+  const [refundErrors, setRefundErrors] = useState({})
+  const refundSubmitLock = useRef(false)
   const [isSubmittingRefund, setIsSubmittingRefund] = useState(false)
   const [isMarkingReceived, setIsMarkingReceived] = useState(false)
   const [printingOrderId, setPrintingOrderId] = useState(null)
@@ -1248,8 +1255,10 @@ export function DashboardPage() {
   }
 
   const openRefundModal = (order) => {
-    setRefundDestination(emptyRefundDestination())
-    setReadingRefundQr(false)
+    setRefundReceiptDisputed(false)
+    setRefundReceiptDisputeExplanation('')
+    setRefundErrors({})
+    setReadingRefundImages(false)
     setRefundTarget(order)
     setRefundReason('')
     setRefundCustomerNotes('')
@@ -1267,7 +1276,7 @@ export function DashboardPage() {
   }
 
   const closeRefundModal = (force = false) => {
-    if (isSubmittingRefund && !force) return
+    if ((isSubmittingRefund || readingRefundImages) && !force) return
     setIsRefundModalOpen(false)
     setRefundTarget(null)
     setRefundReason('')
@@ -1293,68 +1302,34 @@ export function DashboardPage() {
     })
   }
 
-  const handleRefundImageUpload = async (e) => {
-    const files = Array.from(e.target.files || [])
-    if (!files.length) return
-    const maxSize = 5 * 1024 * 1024
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
-    for (const file of files) {
-      if (!allowedTypes.includes(file.type)) {
-        setToastMessage('Only JPG, PNG, and WebP images are allowed')
-        continue
-      }
-      if (file.size > maxSize) {
-        setToastMessage('Each image must be less than 5MB')
-        continue
-      }
-      try {
-        const url = await uploadToCloudinary(file, { folder: 'cosmoscraft_assets/refund_proofs' })
-        setRefundImages(prev => [...prev, url])
-      } catch (err) {
-        setToastMessage(`Failed to upload image: ${err.message}`)
-      }
-    }
-    e.target.value = ''
-  }
-
-  const removeRefundImage = (index) => {
-    setRefundImages(prev => prev.filter((_, i) => i !== index))
-  }
-
   const handleSubmitRefund = async () => {
-    if (!refundTarget?.order_id) return
+    if (!refundTarget?.order_id || refundSubmitLock.current || readingRefundImages) return
     const selected = refundSelectedItems.filter(item => item.selected)
-    if (selected.length === 0) {
-      setToastMessage('Please select at least one item to refund')
-      return
-    }
-    if (!refundReason.trim()) {
-      setToastMessage('Please provide a refund reason')
-      return
-    }
-    const destinationError = refundDestinationError(refundDestination)
-    if (destinationError || readingRefundQr) {
-      setToastMessage(destinationError || 'Wait for the QR code to finish loading.')
-      return
-    }
+    const errors = {}
+    if (!selected.length) errors.items = 'Select at least one item to refund.'
+    if (!['damaged','wrong_item','not_as_described','no_longer_needed','better_price','other'].includes(refundReason)) errors.reason = 'Select a valid refund reason.'
+    if (!refundImages.length) errors.images = 'Upload at least one image showing the issue.'
+    if (refundReceiptDisputed && refundReceiptDisputeExplanation.trim().length<10) errors.receiptDisputeExplanation='Explain the receipt-date dispute using at least 10 characters.'
+    setRefundErrors(errors)
+    if (Object.keys(errors).length) return
+    refundSubmitLock.current = true
+    setIsSubmittingRefund(true)
     try {
-      setIsSubmittingRefund(true)
       await adminApi.createRefundRequest(refundTarget.order_id, {
-        reason: refundReason.trim(),
-        customerNotes: refundCustomerNotes.trim() || undefined,
-        items: selected.map(item => ({
-          order_item_id: item.order_item_id,
-          quantity: item.refundQuantity,
-        })),
+        reason: refundReason, customerNotes: refundCustomerNotes.trim(),
+        receiptDateDisputed:refundReceiptDisputed,receiptDisputeExplanation:refundReceiptDisputeExplanation.trim(),
+        items: selected.map(item => ({order_item_id:item.order_item_id,quantity:item.refundQuantity})),
         images: refundImages,
-        destination: refundDestination,
       })
-      setToastMessage('Refund request submitted successfully.')
+      setToastMessage('Refund request submitted for review. Follow the return instructions once provided.')
       closeRefundModal(true)
       fetchMyOrders()
     } catch (err) {
-      setToastMessage(`Failed to submit refund request: ${err.message}`)
+      const errors = {submit:err.message}
+      for (const field of err.fieldErrors || []) errors[String(field.field).split('.')[0]] = field.message
+      setRefundErrors(errors)
     } finally {
+      refundSubmitLock.current = false
       setIsSubmittingRefund(false)
     }
   }
@@ -2524,6 +2499,7 @@ export function DashboardPage() {
                     {order.has_refund_request && order.refund_workflow_version === 2 && (
                       <CustomerRefundTracking key={order.refund_request_id} order={order} onRefresh={fetchMyOrders} />
                     )}
+                    {order.has_refund_request && order.refund_workflow_version !== 2 && <CustomerRefundReviewLoader refundId={order.refund_request_id} onUpdated={fetchMyOrders} />}
                   </div>
                 )
               })}
@@ -3222,6 +3198,7 @@ export function DashboardPage() {
                       </div>
                     </div>
                   </div>
+                  {project.refund_request_id && <CustomerRefundReviewLoader refundId={project.refund_request_id} onUpdated={fetchMyProjects} />}
                   <div className="flex gap-2 mt-4 pt-4 border-t border-[var(--border)]">
                     {String(project.status || '').toLowerCase() !== 'cancelled' && String(project.status || '').toLowerCase() !== 'completed' && (
                       <>
@@ -6027,10 +6004,16 @@ export function DashboardPage() {
             <p className="text-sm text-[var(--text-muted)] mb-6">Order #{refundTarget.order_number}</p>
 
             <div className="space-y-5">
-              <RefundDestinationForm value={refundDestination} onChange={setRefundDestination}
-                disabled={isSubmittingRefund || readingRefundQr} onBusyChange={setReadingRefundQr} />
+              <div className="rounded-xl border border-[var(--border)] p-4 text-sm text-[var(--text-muted)]">
+                <p>Original payment method: <strong className="text-white">{formatPaymentMethod(refundTarget.payment_method)}</strong></p>
+                <p className="mt-2">Your refund will use the original payment channel. Physical items must be returned and inspected before repayment. Wait for return instructions before shipping.</p>
+                <p className="mt-2">Submit within 14 days of receipt for regular products or three calendar months for customized guitars. Missing or disputed receipt confirmation requires admin review. A timely request does not expire while being reviewed.</p>
+                <p className="mt-2">Eligible regular-product change-of-mind refunds have a suggested 50% amount, subject to admin approval. Customized guitar refunds use verified material/base value and remaining payment minus incurred labor. Request regular and customized items separately.</p>
+                <p className="mt-2">After required evidence, return receipt and inspection are complete, estimated payment completion is 1–3 calendar days for regular products or 1–2 calendar weeks for customized guitars.</p>
+              </div>
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Select Items to Refund</label>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Select Items to Refund <span style={{ color: '#ef4444' }}>*</span></label>
+                {refundErrors.items && <p role="alert" style={{ color: '#ef4444' }} className="text-sm text-red-400">{refundErrors.items}</p>}
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                   {(refundTarget.items || []).map((item, idx) => {
                     const selectableIdx = refundSelectedItems.findIndex(ri => ri.order_item_id === item.order_item_id)
@@ -6061,8 +6044,9 @@ export function DashboardPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Reason for Refund</label>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Reason for Refund <span style={{ color: '#ef4444' }}>*</span></label>
                 <select
+                  required disabled={isSubmittingRefund}
                   value={refundReason}
                   onChange={(e) => setRefundReason(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-sm text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] mb-2"
@@ -6075,43 +6059,31 @@ export function DashboardPage() {
                   <option value="better_price">Found better price elsewhere</option>
                   <option value="other">Other</option>
                 </select>
-                <textarea
+                {refundErrors.reason && <p role="alert" style={{ color: '#ef4444' }} className="text-sm text-red-400">{refundErrors.reason}</p>}
+                <label className="block text-sm text-[var(--text-muted)] mb-2" htmlFor="refund-explanation">Additional Explanation (Optional)</label>
+                <textarea id="refund-explanation" maxLength={1000} disabled={isSubmittingRefund}
                   value={refundCustomerNotes}
                   onChange={(e) => setRefundCustomerNotes(e.target.value)}
-                  placeholder="Additional details (optional)..."
+                  placeholder="Describe the issue and why you are requesting a refund..."
                   rows={3}
                   className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-sm text-white placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)] resize-none"
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Proof Photos (max 5)</label>
-                <div className="flex flex-wrap gap-3 mb-3">
-                  {refundImages.map((url, idx) => (
-                    <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden border border-[var(--border)]">
-                      <img src={url} alt={`Proof ${idx + 1}`} className="w-full h-full object-cover" />
-                      <button type="button" onClick={() => removeRefundImage(idx)} className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-red-500 transition-colors">
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                  {refundImages.length < 5 && (
-                    <label className="w-20 h-20 rounded-lg border border-dashed border-[var(--border)] flex flex-col items-center justify-center cursor-pointer hover:border-[var(--gold-primary)] transition-colors">
-                      <Upload className="w-5 h-5 text-[var(--text-muted)]" />
-                      <span className="text-[10px] text-[var(--text-muted)] mt-1">Add</span>
-                      <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={handleRefundImageUpload} className="hidden" />
-                    </label>
-                  )}
-                </div>
-                <p className="text-xs text-[var(--text-muted)]">JPG, PNG, or WebP. Max 5MB each.</p>
-              </div>
+              {refundErrors.customerNotes && <p role="alert" style={{ color: '#ef4444' }} className="text-sm text-red-400">{refundErrors.customerNotes}</p>}
+              <label className="flex gap-2 text-sm text-[var(--text-muted)]"><input type="checkbox" checked={refundReceiptDisputed} disabled={isSubmittingRefund} onChange={e=>setRefundReceiptDisputed(e.target.checked)} />The recorded receipt or delivery date is incorrect or disputed.</label>
+              {refundReceiptDisputed && <label className="block text-sm text-[var(--text-muted)]">Receipt-date dispute explanation (required)<textarea maxLength={1000} rows={2} value={refundReceiptDisputeExplanation} disabled={isSubmittingRefund} onChange={e=>setRefundReceiptDisputeExplanation(e.target.value)} className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-3 text-white" /></label>}
+              {refundErrors.receiptDisputeExplanation && <p role="alert" style={{ color: '#ef4444' }}>{refundErrors.receiptDisputeExplanation}</p>}
+              <CustomerRefundImages images={refundImages} onChange={setRefundImages}
+                disabled={isSubmittingRefund || readingRefundImages} onBusyChange={setReadingRefundImages} error={refundErrors.images} />
+              {refundErrors.submit && <p role="alert" style={{ color: '#ef4444' }} className="text-sm text-red-400">{refundErrors.submit}</p>}
 
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => closeRefundModal()} disabled={isSubmittingRefund} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-white hover:bg-white/5 transition-colors font-medium text-sm disabled:opacity-50">
                   Cancel
                 </button>
-                <button type="button" onClick={handleSubmitRefund} disabled={isSubmittingRefund || readingRefundQr || Boolean(refundDestinationError(refundDestination))} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all disabled:opacity-50">
-                  {isSubmittingRefund ? 'Submitting...' : 'Submit Refund Request'}
+                <button type="button" onClick={handleSubmitRefund} disabled={isSubmittingRefund || readingRefundImages} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all disabled:opacity-50">
+                  {isSubmittingRefund ? 'Submitting...' : readingRefundImages ? 'Reading images...' : 'Submit Refund Request'}
                 </button>
               </div>
             </div>

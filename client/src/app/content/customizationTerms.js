@@ -47,6 +47,7 @@ export const customizationTerms = {
     {
       title: 'Customer-Supplied Materials and Warranty',
       paragraphs: [
+        'Submit customized guitar warranty requests within three calendar months of receipt. Missing or disputed receipt confirmation requires admin review. Approved monetary refunds are limited to the lower of verified material/base value and remaining actual payment minus verified incurred labor, capped at the requested amount. Unknown costs require verification. Estimated payment completion is 1–2 calendar weeks after required evidence, return receipt and inspection are complete, or a documented no-return exception. This is separate from the warranty submission window.',
         'Customer-supplied wood, hardware, strings, or other materials are subject to suitability checks and acceptance by CosmosCraft. Discuss specifications and condition with us before supplying materials.',
         'Defects inherent in customer-supplied materials are not covered by the shop warranty for those materials. This does not remove responsibility for defects in CosmosCraft workmanship or any remedy required by law. Report issues with the completed build so we can assess the cause and available resolution.',
       ],

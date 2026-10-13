@@ -1767,6 +1767,7 @@ export function AdminPage() {
     }
 
     if (orderStatusChanged && newOrderStatus === 'shipped') {
+      if(!form.dispatchReady){showToast('Upload pre-shipping photos for every item before dispatch.','error');return}
       if (!isValidShippingFee(form.additional_shipping_fee) || !form.tracking_info?.trim()) {
         showToast('Enter a valid additional shipping fee and tracking number before shipping.', 'error')
         return
@@ -1782,7 +1783,7 @@ export function AdminPage() {
       if (orderStatusChanged) {
         await adminApi.updateOrder(modal.data.order_id, {
           status: newOrderStatus,
-          ...(newOrderStatus === 'shipped' ? { additional_shipping_fee: Number(form.additional_shipping_fee), tracking_number: form.tracking_info.trim() } : {}),
+          ...(newOrderStatus === 'shipped' ? { additional_shipping_fee: Number(form.additional_shipping_fee), tracking_number: form.tracking_info.trim(),itemPhotos:form.itemPhotos } : {}),
         })
       }
       

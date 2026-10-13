@@ -27,13 +27,25 @@ const {
 router.get('/my-orders', authenticateToken, orderController.getUserOrders)
 
 // --- REFUND ROUTES ---
-router.get('/refund-requests/:refundId/files/:kind', authenticateToken, validateParams(namedUuidParamSchema('refundId').keys({ kind: require('joi').string().valid('qr', 'proof').required() })), orderController.getRefundFile)
+router.get('/dispatch-photos/:photoId', authenticateToken, authorize('staff','admin','super_admin'), validateParams(namedUuidParamSchema('photoId')), orderController.getDispatchPhoto)
+router.get('/:orderId/dispatch-photos', authenticateToken, authorize('staff','admin','super_admin'), validateParams(orderIdParamSchema), orderController.getDispatchPhotos)
+router.post('/:orderId/dispatch-photos', authenticateToken, authorize('staff','admin','super_admin'), validateParams(orderIdParamSchema), validate(require('../utils/dispatchPhotoValidation').appendSchema), orderController.appendDispatchPhotos)
+router.get('/refund-policy-draft', authenticateToken, authorize('admin','super_admin'), orderController.getRefundPolicyDraft)
+router.put('/refund-policy-draft', authenticateToken, authorize('admin','super_admin'), validate(require('../utils/refundReviewValidation').policySchema), orderController.saveRefundPolicyDraft)
+router.patch('/refund-requests/:refundId/review', authenticateToken, authorize('admin','super_admin'), validateParams(namedUuidParamSchema('refundId')), validate(require('../utils/refundReviewValidation').reviewSchema), orderController.updateRefundReview)
+router.post('/refund-requests/:refundId/repair-offer', authenticateToken, authorize('admin','super_admin'), validateParams(namedUuidParamSchema('refundId')), validate(require('../utils/refundReviewValidation').offerSchema), orderController.offerRefundRepair)
+router.post('/refund-requests/:refundId/repair-response', authenticateToken, validateParams(namedUuidParamSchema('refundId')), validate(require('../utils/refundReviewValidation').responseSchema), orderController.respondRefundRepair)
+router.get('/refund-requests/:refundId/tracking', authenticateToken, validateParams(namedUuidParamSchema('refundId')), orderController.getCustomerRefundTracking)
+router.get('/refund-requests/:refundId/evidence/:kind', authenticateToken, validateParams(namedUuidParamSchema('refundId').keys({kind:require('joi').string().pattern(/^(evidence|return)_?[0-4]$/).required()})), orderController.getCustomerRefundEvidence)
+router.post('/refund-requests/:refundId/return-evidence', authenticateToken, validateParams(namedUuidParamSchema('refundId')), validate(require('../utils/validation').customerReturnEvidenceSchema), orderController.submitCustomerReturn)
+
+router.get('/refund-requests/:refundId/files/:kind', authenticateToken, validateParams(namedUuidParamSchema('refundId').keys({ kind: require('joi').string().pattern(/^(qr|proof|inspection|(evidence|return)_?[0-4])$/).required() })), orderController.getRefundFile)
 router.post('/refund-requests/:refundId/confirm', authenticateToken, validateParams(namedUuidParamSchema('refundId')), orderController.confirmRefund)
 router.get('/refund-requests', authenticateToken, authorize('staff', 'admin', 'super_admin'), validateQuery(listRefundRequestsSchema), orderController.getRefundRequests)
 router.get('/refund-requests/:refundId', authenticateToken, authorize('staff', 'admin', 'super_admin'), validateParams(namedUuidParamSchema('refundId')), orderController.getRefundRequest)
-router.put('/refund-requests/:refundId/status', authenticateToken, authorize('staff', 'admin', 'super_admin'), validateParams(namedUuidParamSchema('refundId')), validate(updateRefundStatusSchema), orderController.updateRefundStatus)
+router.put('/refund-requests/:refundId/status', authenticateToken, authorize('admin', 'super_admin'), validateParams(namedUuidParamSchema('refundId')), validate(updateRefundStatusSchema), orderController.updateRefundStatus)
 router.post('/refund-requests/:refundId/withdraw', authenticateToken, validateParams(namedUuidParamSchema('refundId')), orderController.withdrawRefund)
-router.patch('/refund-requests/:refundId/adjust', authenticateToken, authorize('staff', 'admin', 'super_admin'), validateParams(namedUuidParamSchema('refundId')), orderController.adjustRefundAmount)
+router.patch('/refund-requests/:refundId/adjust', authenticateToken, authorize('admin', 'super_admin'), validateParams(namedUuidParamSchema('refundId')), orderController.adjustRefundAmount)
 
 // --- ADMIN ROUTES ---
 router.get('/', authenticateToken, authorize('staff', 'admin', 'super_admin'), validate(listOrdersSchema, 'query'), orderController.getAllOrders)

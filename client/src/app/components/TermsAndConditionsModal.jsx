@@ -63,7 +63,7 @@ export default function TermsAndConditionsModal({ isOpen, onClose, types = ALL_T
       <header className="shrink-0 border-b border-[var(--border)] p-5 sm:px-6">
         <p className="text-xs font-semibold uppercase tracking-wider text-[var(--gold-primary)]">CosmosCraft</p>
         <h2 id={`${id}-title`} className="mt-2 text-xl font-bold sm:text-2xl">Terms and Conditions</h2>
-        <p id={`${id}-instruction`} className="mt-2 text-sm text-[var(--text-muted)]">{onAgree ? 'Scroll to the bottom of these terms to enable acknowledgment.' : 'Review the applicable terms below.'}</p>
+        <p id={`${id}-instruction`} className="mt-2 text-sm text-[var(--text-muted)]">{onAgree ? '' : 'Review the applicable terms below.'}</p>
       </header>
       <div ref={panel} tabIndex={0} aria-describedby={`${id}-instruction`}
         onScroll={event => {

@@ -1296,7 +1296,11 @@ exports.getAllOrders = async (params = {}) => {
   }
 }
 
-exports.updateOrder = async (orderId, updateData) => {
+exports.updateOrder = async (orderId, updateData, actorId = null, executor = pool, lockedOrder = null) => {
+  if(updateData.status==='shipped' && executor===pool){
+    validateShippingFee(updateData.additional_shipping_fee);
+    return require('./dispatchPhotoService').transaction(orderId,actorId,(db,order)=>exports.updateOrder(orderId,updateData,actorId,db,order));
+  }
   if (updateData.rider_contact) {
     const normalized = require('../utils/riderContact').normalizeRiderContact(updateData.rider_contact);
     if (!normalized) throw createValidationError('Please enter a valid mobile number.');
@@ -1305,7 +1309,7 @@ exports.updateOrder = async (orderId, updateData) => {
   const { status, payment_status, notes, tracking_number, courier_name, shipped_at, out_for_delivery_at, delivered_at, received_at, rider_name, rider_contact } = updateData;
   
   if (status) {
-    const currentRes = await pool.query(
+    const currentRes = await executor.query(
       `SELECT status, tracking_number, rider_name, rider_contact FROM orders WHERE order_id = $1`,
       [orderId]
     );
@@ -1356,7 +1360,8 @@ exports.updateOrder = async (orderId, updateData) => {
     updateData.received_at = updateData.received_at || new Date();
   }
 
-  const res = await pool.query(
+  if(status==='shipped' && !require('./dispatchPhotoService').isPickup(lockedOrder || {}))await require('./dispatchPhotoService').save(executor,orderId,'order',updateData.itemPhotos,actorId);
+  const res = await executor.query(
     `UPDATE orders 
      SET status = COALESCE($1, status),
          payment_status = COALESCE($2, payment_status),
@@ -1750,11 +1755,12 @@ exports.approvePayment = async (orderId, options = {}) => {
   }
 }
 
-exports.updateShipment = async (orderId, shipmentData, actorId = null) => {
+exports.updateShipment = async (orderId, shipmentData, actorId = null, executor = pool, lockedOrder = null) => {
+  if(executor===pool){validateShippingFee(shipmentData.additional_shipping_fee);return require('./dispatchPhotoService').transaction(orderId,actorId,(db,order)=>exports.updateShipment(orderId,shipmentData,actorId,db,order));}
   const { tracking_number, courier_name, rider_name, rider_contact } = shipmentData;
   const additionalShippingFee = validateShippingFee(shipmentData.additional_shipping_fee);
   
-  const orderRes = await pool.query(
+  const orderRes = await executor.query(
     `SELECT status, payment_status FROM orders WHERE order_id = $1`,
     [orderId]
   );
@@ -1778,7 +1784,8 @@ exports.updateShipment = async (orderId, shipmentData, actorId = null) => {
     throw new Error('Tracking number and courier name are required for shipment');
   }
   
-  const res = await pool.query(
+  if(!require('./dispatchPhotoService').isPickup(lockedOrder || {}))await require('./dispatchPhotoService').save(executor,orderId,'order',shipmentData.itemPhotos,actorId);
+  const res = await executor.query(
     `UPDATE orders 
      SET status = 'shipped',
          tracking_number = $1,
@@ -1792,7 +1799,8 @@ exports.updateShipment = async (orderId, shipmentData, actorId = null) => {
     [tracking_number, courier_name, rider_name || null, rider_contact || null, orderId, additionalShippingFee]
   );
 
-  await logOrderStatusEvent({
+  // Trigger-managed deployments already recorded the status on this transaction.
+  if(!await require('./dispatchPhotoService').hasManagedAudit(executor,'orders'))await logOrderStatusEvent({
     orderId,
     previousStatus: order.status,
     order: res.rows[0],
@@ -2090,10 +2098,13 @@ exports.markAsReceived = async (orderId, userId) => {
 }
 
 exports.createRefundRequest = async (data) => {
-  const { orderId, userId, reason, customerNotes, items, images } = data;
+  const { orderId, userId, reason, customerNotes, items, images, receiptDateDisputed, receiptDisputeExplanation } = data;
   const workflow = require('./orderRefundWorkflow');
-  const destination = workflow.validateDestination(data.destination);
-  await workflow.ensureReady();
+  const customerRefunds = require('./customerRefundService');
+  await customerRefunds.ensureReady();
+  const { error } = require('../utils/validation').createRefundRequestSchema.validate({ reason, customerNotes, items, images, receiptDateDisputed, receiptDisputeExplanation });
+  if (error) throw createValidationError(error.details[0].message);
+  images.forEach(workflow.decodeImage);
   if (!Array.isArray(items) || new Set(items.map(item => item.order_item_id)).size !== items.length) throw new Error('Duplicate refund items are not allowed');
 
   const orderRes = await pool.query(
@@ -2107,14 +2118,6 @@ exports.createRefundRequest = async (data) => {
   const eligibleStatuses = ['delivered', 'received'];
   if (!eligibleStatuses.includes(order.status)) {
     throw new Error(`Refund requests are only allowed for delivered or received orders. Current status: ${order.status}`);
-  }
-
-  const deliveryDate = order.received_at || order.delivered_at;
-  if (deliveryDate) {
-    const daysSinceDelivery = (Date.now() - new Date(deliveryDate).getTime()) / (1000 * 60 * 60 * 24);
-    if (daysSinceDelivery > 30) {
-      throw new Error('Refund requests can only be made within 30 days of delivery');
-    }
   }
 
   const existingRes = await pool.query(
@@ -2132,7 +2135,23 @@ exports.createRefundRequest = async (data) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const auditContext = await require('./refundAudit').prepare(client,userId);
 
+    // Serialize requests and payment/item budget checks for this order.
+    const locked = await client.query('SELECT status,delivered_at,received_at FROM orders WHERE order_id=$1 AND user_id=$2 FOR UPDATE', [orderId,userId]);
+    const lockedOrder = locked.rows[0];
+    if (!lockedOrder || !eligibleStatuses.includes(lockedOrder.status)) throw createValidationError('This order is no longer eligible for a refund');
+    const policyService = require('./refundPolicyService');
+    const submittedAt = new Date().toISOString();
+    const eligibilityItems = [];
+    const duplicate = await client.query(`SELECT 1 FROM refund_requests WHERE order_id=$1 AND deleted_at IS NULL
+      AND status NOT IN ('rejected','withdrawn','completed','refunded')`, [orderId]);
+    if (duplicate.rows.length) throw createValidationError('A refund request already exists for this order',409);
+    const paymentRes = await client.query(`SELECT p.*, COALESCE(to_jsonb(p)->>'method',to_jsonb(p)->>'payment_method') AS original_method
+      FROM payments p WHERE order_id=$1 AND status='verified' ORDER BY created_at DESC`, [orderId]);
+    if (!paymentRes.rows.length || paymentRes.rows.some(p => !p.original_method)) throw createValidationError('A verified original payment is required');
+    if (new Set(paymentRes.rows.map(p => p.original_method)).size !== 1) throw createValidationError('Orders paid through multiple channels require assistance before requesting a refund');
+    const payment = paymentRes.rows[0];
     const requestNumber = await generateRefundRequestNumber(client, 'RF');
 
     const refundRes = await client.query(
@@ -2153,9 +2172,14 @@ exports.createRefundRequest = async (data) => {
         throw new Error('Order item not found');
       }
       const orderItem = itemRes.rows[0];
+      eligibilityItems.push(await policyService.snapshotItem(client,orderId,orderItem,submittedAt,receiptDateDisputed));
       const refundQty = Number(item.quantity);
       if (!Number.isInteger(refundQty) || refundQty < 1 || refundQty > Number(orderItem.quantity)) throw new Error('Invalid refund quantity');
       const unitPrice = Number(orderItem.unit_price || 0);
+      const prior = await client.query(`SELECT COALESCE(SUM(i.quantity),0) AS quantity FROM refund_request_items i
+        JOIN refund_requests r USING(refund_request_id) WHERE i.order_item_id=$1 AND i.deleted_at IS NULL
+        AND r.deleted_at IS NULL AND r.status NOT IN ('rejected','withdrawn')`, [item.order_item_id]);
+      if (refundQty + Number(prior.rows[0].quantity) > Number(orderItem.quantity)) throw createValidationError('The selected quantity has already been refunded or requested');
       const refundAmount = unitPrice * refundQty;
 
       await client.query(
@@ -2164,17 +2188,30 @@ exports.createRefundRequest = async (data) => {
       );
     }
 
-    if (images && images.length > 0) {
-      for (let i = 0; i < images.length; i++) {
-        await client.query(
-          `INSERT INTO refund_request_images (refund_request_id, image_url, sort_order) VALUES ($1, $2, $3)`,
-          [refundRequest.refund_request_id, images[i], i]
-        );
-      }
-    }
-
-    const attachedRequest = await workflow.attachRequest(client, refundRequest, destination, userId);
+    if (eligibilityItems.some(item=>item.custom) && eligibilityItems.some(item=>!item.custom)) throw createValidationError('Request regular products and customized guitars separately so their refund values can be verified. Complete one request before submitting the next.');
+    for (let i = 0; i < images.length; i++) await workflow.saveFile(client, refundRequest.refund_request_id, `evidence${i}`,images[i],userId);
+    const totals = await client.query(`SELECT
+      (SELECT COALESCE(SUM(amount),0) FROM payments WHERE order_id=$1 AND status='verified') AS paid,
+      (SELECT COALESCE(SUM(COALESCE(refunded_amount,approved_amount,amount_requested)),0) FROM refund_requests
+        WHERE order_id=$1 AND refund_request_id<>$2 AND deleted_at IS NULL AND status NOT IN ('rejected','withdrawn')) AS reserved,
+      (SELECT COALESCE(SUM(refund_amount),0) FROM refund_request_items WHERE refund_request_id=$2 AND deleted_at IS NULL) AS requested`, [orderId,refundRequest.refund_request_id]);
+    const total = totals.rows[0];
+    // A custom claim may require a cost-based refund below its listed price.
+    if (eligibilityItems.every(item=>item.custom)) total.requested=Math.min(Number(total.requested),Math.max(0,Number(total.paid)-Number(total.reserved)));
+    if (Number(total.requested) <= 0 || Number(total.requested) + Number(total.reserved) > Number(total.paid)) throw createValidationError('The requested refund exceeds the remaining verified payment');
+    const attached = await client.query(`UPDATE refund_requests SET workflow_version=2,refund_type='money_refund',
+      amount_requested=$2,original_payment_method=$3,original_payment_id=$4,preferred_method=$5,return_status='return_pending',review_data=$6::jsonb
+      WHERE refund_request_id=$1 RETURNING *`, [refundRequest.refund_request_id,total.requested,payment.original_method,payment.payment_id,
+        /bank|transfer/.test(payment.original_method) ? 'e_bank' : /wallet|gcash|maya/.test(payment.original_method) ? 'e_wallet' : null,
+        JSON.stringify({version:0,...(receiptDateDisputed?{receipt:{status:'disputed',confirmedDate:null,evidence:receiptDisputeExplanation.trim()}}:{}),policy:{settings:policyService.settings,submittedAt,items:eligibilityItems}})]);
+    const attachedRequest = workflow.publicRefund(attached.rows[0]);
+    const audit = await require('./refundAudit').record(auditContext,{userId,action:'refund_requested',entityId:orderId,
+      status:'pending',details:{refund_request_id:refundRequest.refund_request_id,amount:total.requested},executor:client});
+    if (!audit) throw createValidationError('The refund activity could not be recorded. Please retry.',503);
+    const notifications = require('./refundNotifications');
+    const recorded = await notifications.record(client,attachedRequest,'pending',true);
     await client.query('COMMIT');
+    notifications.publish(recorded);
     return attachedRequest;
   } catch (error) {
     await client.query('ROLLBACK');
@@ -2315,6 +2352,8 @@ exports.getRefundRequestById = async (refundRequestId, includeSensitive = false)
   const filesRes = request.workflow_version === 2
     ? await pool.query('SELECT kind FROM refund_private_files WHERE refund_request_id=$1', [refundRequestId])
     : { rows: [] };
+  request.private_files = includeSensitive ? filesRes.rows.map(file => file.kind) : [];
+  request.can_manage = includeSensitive;
   request.has_qr = filesRes.rows.some(file => file.kind === 'qr');
   request.has_proof = filesRes.rows.some(file => file.kind === 'proof');
   const itemsRes = await pool.query(
@@ -2329,8 +2368,8 @@ exports.getRefundRequestById = async (refundRequestId, includeSensitive = false)
   let payment = null;
   if (request.order_id) {
     const paymentRes = await pool.query(
-      `SELECT * FROM payments WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1`,
-      [request.order_id]
+      `SELECT * FROM payments WHERE order_id=$1 AND ($2::uuid IS NULL OR payment_id=$2) ORDER BY created_at DESC LIMIT 1`,
+      [request.order_id,request.original_payment_id || null]
     );
     payment = paymentRes.rows[0] || null;
   }
@@ -2340,11 +2379,31 @@ exports.getRefundRequestById = async (refundRequestId, includeSensitive = false)
     items: itemsRes.rows,
     images: imagesRes.rows,
     payment,
+    ...(includeSensitive ? {review_context:await require('./refundReviewService').getContext(request)} : {}),
   };
 }
 
 exports.updateRefundStatus = async (refundRequestId, status, options = {}) => {
   const { adminUserId, adminNotes } = options;
+
+  if (options.action === 'start_review' && status === 'under_review') {
+    const db = await pool.connect();
+    try {
+      await db.query('BEGIN');
+      const auditContext = await require('./refundAudit').prepare(db,adminUserId);
+      const locked = await db.query('SELECT * FROM refund_requests WHERE refund_request_id=$1 AND deleted_at IS NULL FOR UPDATE',[refundRequestId]);
+      let refund = locked.rows[0];
+      if (!refund) throw createValidationError('Refund request not found',404);
+      if (refund.status === 'pending') {
+        refund = (await db.query("UPDATE refund_requests SET status='under_review',reviewed_by=$2,reviewed_at=now(),updated_at=now() WHERE refund_request_id=$1 RETURNING *",[refundRequestId,adminUserId])).rows[0];
+        const audit = await require('./refundAudit').record(auditContext,{userId:adminUserId,action:'refund_under_review',entityId:refund.order_id,
+          status:'under_review',previousStatus:'pending',details:{refund_request_id:refundRequestId},executor:db});
+        if (!audit) throw createValidationError('The refund review could not be recorded. Please retry.',503);
+      }
+      await db.query('COMMIT');
+      return refund;
+    } catch (error) { await db.query('ROLLBACK'); throw error; } finally { db.release(); }
+  }
 
   const checkRes = await pool.query(
     `SELECT status, (to_jsonb(refund_requests)->>'workflow_version')::int AS workflow_version FROM refund_requests WHERE refund_request_id = $1 AND deleted_at IS NULL`,
@@ -2357,6 +2416,7 @@ exports.updateRefundStatus = async (refundRequestId, status, options = {}) => {
   if (checkRes.rows[0].workflow_version === 2) throw new Error('Use the reviewed refund workflow for this request');
   const allowedTransitions = {
     pending: ['approved', 'rejected', 'refunded'],
+    under_review: ['approved', 'rejected', 'refunded'],
     approved: ['processing', 'refunded'],
     processing: ['refunded'],
     rejected: [],
