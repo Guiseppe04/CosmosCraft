@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { useSiteContact } from '../hooks/useSiteContact'
-import { POLICY_UPDATED, termsOfService, privacyPolicy } from '../content/sitePolicies'
+import { POLICY_UPDATED, POLICY_UPDATED_ISO, termsOfService, privacyPolicy } from '../content/sitePolicies'
 import TermsAndConditionsModal from '../components/TermsAndConditionsModal'
 
 function LegalPolicyPage({ policy, showPurchaseTerms = false }) {
@@ -17,7 +17,7 @@ function LegalPolicyPage({ policy, showPurchaseTerms = false }) {
     <header className="mt-6 border-b border-[var(--border)] pb-8">
       <p className="text-xs font-semibold uppercase tracking-widest text-[var(--gold-primary)]">CosmosCraft</p>
       <h1 className="mt-3 text-3xl font-bold sm:text-4xl">{policy.title}</h1>
-      <p className="mt-3 text-sm text-[var(--text-muted)]">Last updated: <time dateTime="2026-10-07">{POLICY_UPDATED}</time></p>
+      <p className="mt-3 text-sm text-[var(--text-muted)]">Last updated: <time dateTime={POLICY_UPDATED_ISO}>{POLICY_UPDATED}</time></p>
       <p className="mt-5 text-base leading-7 text-[var(--text-muted)]">{policy.introduction}</p>
     </header>
     <nav aria-label="On this page" className="my-8 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
