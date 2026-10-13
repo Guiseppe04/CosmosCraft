@@ -1061,3 +1061,39 @@
   margin: 0 0 0 auto;
   text-align: right;
 }
+
+.shop-page .shop-skeleton-block {
+  background: var(--border) !important;
+  border-radius: 6px;
+  animation: shop-skeleton-pulse 1.8s ease-in-out infinite;
+}
+
+.shop-skeleton-brand { width: 35%; height: 12px; }
+.shop-skeleton-name { width: 65%; height: 28px; }
+.shop-skeleton-reviews { width: 45%; height: 14px; }
+.shop-skeleton-stock { width: 30%; height: 14px; align-self: flex-end; }
+.shop-skeleton-action { width: 100%; height: 38px; border-radius: 999px; }
+
+.shop-skeleton-price {
+  position: absolute;
+  top: 16px;
+  right: 0;
+  width: 70px;
+  height: 18px;
+}
+
+.shop-catalog-error { color: var(--text-light); }
+
+@keyframes shop-skeleton-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+@media (max-width: 767px) {
+  .shop-skeleton-name { width: 90%; height: 23px; }
+  .shop-skeleton-price { position: static; order: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shop-page .shop-skeleton-block { animation: none; }
+}
