@@ -2108,41 +2108,32 @@ exports.getRefundRequestById = async (refundRequestId, includeSensitive = false)
   if (res.rows.length === 0) return null;
 
   const request = res.rows[0];
-  if (includeSensitive && request.workflow_version === 2) {
-    const destinationRes = await pool.query('SELECT payment_destination FROM refund_private_destinations WHERE refund_request_id=$1', [refundRequestId]);
-    request.payment_destination = destinationRes.rows[0]?.payment_destination || null;
-  }
-  const filesRes = request.workflow_version === 2
-    ? await pool.query('SELECT kind FROM refund_private_files WHERE refund_request_id=$1', [refundRequestId])
-    : { rows: [] };
-  request.private_files = includeSensitive ? filesRes.rows.map(file => file.kind) : [];
-  request.can_manage = includeSensitive;
-  request.has_qr = filesRes.rows.some(file => file.kind === 'qr');
-  request.has_proof = filesRes.rows.some(file => file.kind === 'proof');
-  const itemsRes = await pool.query(
-    `SELECT * FROM refund_request_items WHERE refund_request_id = $1 AND deleted_at IS NULL`,
-    [refundRequestId]
-  );
-  const imagesRes = await pool.query(
-    `SELECT * FROM refund_request_images WHERE refund_request_id = $1 AND deleted_at IS NULL ORDER BY sort_order`,
-    [refundRequestId]
-  );
-
-  let payment = null;
-  if (request.order_id) {
-    const paymentRes = await pool.query(
-      `SELECT * FROM payments WHERE order_id=$1 AND ($2::uuid IS NULL OR payment_id=$2) ORDER BY created_at DESC LIMIT 1`,
-      [request.order_id,request.original_payment_id || null]
-    );
-    payment = paymentRes.rows[0] || null;
-  }
-
+  // These reads depend only on the verified request above, not on one another.
+  const [destinationRes, filesRes, itemsRes, imagesRes, paymentRes, reviewContext] = await Promise.all([
+    includeSensitive && request.workflow_version === 2
+      ? pool.query('SELECT payment_destination FROM refund_private_destinations WHERE refund_request_id=$1', [refundRequestId])
+      : Promise.resolve({ rows: [] }),
+    request.workflow_version === 2
+      ? pool.query('SELECT kind FROM refund_private_files WHERE refund_request_id=$1', [refundRequestId])
+      : Promise.resolve({ rows: [] }),
+    pool.query('SELECT * FROM refund_request_items WHERE refund_request_id=$1 AND deleted_at IS NULL', [refundRequestId]),
+    pool.query('SELECT * FROM refund_request_images WHERE refund_request_id=$1 AND deleted_at IS NULL ORDER BY sort_order', [refundRequestId]),
+    request.order_id
+      ? pool.query('SELECT * FROM payments WHERE order_id=$1 AND ($2::uuid IS NULL OR payment_id=$2) ORDER BY created_at DESC LIMIT 1', [request.order_id, request.original_payment_id || null])
+      : Promise.resolve({ rows: [] }),
+    includeSensitive ? require('./refundReviewService').getContext(request) : Promise.resolve(null),
+  ]);
+  if (includeSensitive && request.workflow_version === 2) request.payment_destination = destinationRes.rows[0]?.payment_destination || null;
   return {
     ...request,
+    private_files: includeSensitive ? filesRes.rows.map(file => file.kind) : [],
+    can_manage: includeSensitive,
+    has_qr: filesRes.rows.some(file => file.kind === 'qr'),
+    has_proof: filesRes.rows.some(file => file.kind === 'proof'),
     items: itemsRes.rows,
     images: imagesRes.rows,
-    payment,
-    ...(includeSensitive ? {review_context:await require('./refundReviewService').getContext(request)} : {}),
+    payment: paymentRes.rows[0] || null,
+    ...(includeSensitive ? { review_context: reviewContext } : {}),
   };
 }
 

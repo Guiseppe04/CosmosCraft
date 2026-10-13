@@ -278,6 +278,7 @@ export function RefundRequestsTab({ showToast, user }) {
   const [page, setPage] = useState(1)
   const [pagination, setPagination] = useState({ page: 1, page_size: 10, total: 0, total_pages: 1 })
   const [selectedRequest, setSelectedRequest] = useState(null)
+  const [detailLoading, setDetailLoading] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [activeSection, setActiveSection] = useState('details')
   const [imageZoom, setImageZoom] = useState(null)
@@ -320,7 +321,7 @@ export function RefundRequestsTab({ showToast, user }) {
 
   const refreshRefunds = useRefundRealtime(async () => {
     fetchRefundRequests({ silent: true })
-    if (!selectedRequest?.refund_request_id) return
+    if (detailLoading || !selectedRequest?.refund_request_id) return
     const id = selectedRequest.refund_request_id
     const version = ++detailVersion.current
     try {
@@ -341,6 +342,10 @@ export function RefundRequestsTab({ showToast, user }) {
 
   const handleViewDetails = async (requestId, defaultSection = 'details') => {
     const version = ++detailVersion.current
+    setSelectedRequest(refundRequests.find(request=>request.refund_request_id===requestId) || {refund_request_id:requestId})
+    setSelectedOrder(null)
+    setActiveSection(defaultSection)
+    setDetailLoading(true)
     try {
       const res = await adminApi.getRefundRequest(requestId)
       if (version !== detailVersion.current) return
@@ -348,37 +353,39 @@ export function RefundRequestsTab({ showToast, user }) {
       setSelectedRequest(reqData)
       setAdminNotes(reqData?.admin_notes || '')
       setActiveSection(defaultSection)
+      setSelectedOrder({order_id:reqData.order_id,payment_status:reqData.order_payment_status || reqData.payment_status || 'pending',payment:reqData.payment || null})
+      setDetailLoading(false)
 
-      if (defaultSection === 'details' && reqData.status === 'pending' && reqData.can_manage) {
+      const startReview = async () => {
+        if (defaultSection !== 'details' || reqData.status !== 'pending' || !reqData.can_manage) return
         try {
           const review = await adminApi.updateRefundStatus(requestId,'under_review',{action:'start_review'})
+          if (version !== detailVersion.current) return
           setSelectedRequest(current => current?.refund_request_id === requestId ? {...current,...review.data} : current)
           fetchRefundRequests({silent:true})
         } catch (err) {
-          showToast?.(`Refund details loaded, but review could not start: ${err.message}`,'error')
+          if (version === detailVersion.current) showToast?.(`Refund details loaded, but review could not start: ${err.message}`,'error')
         }
       }
 
-      if (reqData.order_id) {
+      const loadOrder = async () => {
+        if (!reqData.order_id) return
         try {
           const orderRes = await adminApi.getOrder(reqData.order_id)
+          if (version !== detailVersion.current) return
           setSelectedOrder(orderRes.data?.order || orderRes.data || null)
         } catch {
-          setSelectedOrder({
-            order_id: reqData.order_id,
-            payment_status: reqData.payment_status || reqData.order_payment_status || 'pending',
-            payment: reqData.payment || null,
-          })
+          // The refund response already includes the payment summary as a fallback.
         }
-      } else {
-        setSelectedOrder({
-          order_id: reqData.refund_request_id,
-          payment_status: reqData.payment_status || 'pending',
-          payment: reqData.payment || null,
-        })
       }
+      await Promise.all([startReview(), loadOrder()])
     } catch (err) {
-      showToast?.(`Failed to load refund request details: ${err.message}`, 'error')
+      if (version === detailVersion.current) {
+        setSelectedRequest(null)
+        showToast?.(`Failed to load refund request details: ${err.message}`, 'error')
+      }
+    } finally {
+      if (version === detailVersion.current) setDetailLoading(false)
     }
   }
 
@@ -651,7 +658,7 @@ export function RefundRequestsTab({ showToast, user }) {
 
       {/* Refund Details & Payment Modal */}
       {selectedRequest && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div role="dialog" aria-modal="true" aria-label="Refund details" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-6 w-full max-w-3xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between mb-4 pb-4 border-b border-[var(--border)]">
               <div>
@@ -668,7 +675,10 @@ export function RefundRequestsTab({ showToast, user }) {
                 </div>
               </div>
               <button
+                aria-label="Close refund details"
                 onClick={() => {
+                  detailVersion.current++
+                  setDetailLoading(false)
                   setSelectedRequest(null)
                   setSelectedOrder(null)
                   setAdminNotes('')
@@ -682,7 +692,7 @@ export function RefundRequestsTab({ showToast, user }) {
             {/* Modal Section Tabs */}
             <div className="flex gap-2 mb-4 border-b border-[var(--border)] pb-2 flex-shrink-0">
               <button
-                onClick={() => setActiveSection('details')}
+                disabled={detailLoading} onClick={() => setActiveSection('details')}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   activeSection === 'details'
                     ? 'bg-[var(--gold-primary)] text-black font-semibold'
@@ -693,7 +703,7 @@ export function RefundRequestsTab({ showToast, user }) {
                 View Details
               </button>
               <button
-                onClick={() => setActiveSection('payment')}
+                disabled={detailLoading} onClick={() => setActiveSection('payment')}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   activeSection === 'payment'
                     ? 'bg-[var(--gold-primary)] text-black font-semibold'
@@ -706,6 +716,7 @@ export function RefundRequestsTab({ showToast, user }) {
             </div>
 
             <div className="flex-1 overflow-y-auto pr-1">
+              {detailLoading ? <p role="status" className="py-8 text-center text-sm text-[var(--text-muted)]">Loading refund details...</p> : <>
               {activeSection === 'details' && (
                 <div className="space-y-6">
                   {selectedRequest.workflow_version === 2 && <AdminRefundWorkflow key={selectedRequest.refund_request_id + (['pending','under_review'].includes(selectedRequest.status) ? 'review' : selectedRequest.status)} refund={selectedRequest}
@@ -910,6 +921,7 @@ export function RefundRequestsTab({ showToast, user }) {
                   user={user}
                 />
               )}
+              </>}
             </div>
           </div>
         </div>

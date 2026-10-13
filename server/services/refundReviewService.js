@@ -24,13 +24,18 @@ function customerReview(refund) {
     repairOffers:(review.repairOffers || []).map(({id,type,description,offeredAt,response,respondedAt})=>({id,type,description,offeredAt,response,respondedAt}))};
 }
 async function getContext(refund) {
-  const order = (await pool.query('SELECT to_jsonb(o) AS data FROM orders o WHERE order_id=$1',[refund.order_id])).rows[0]?.data || {};
-  const project = refund.project_id ? (await pool.query('SELECT to_jsonb(p) AS data FROM projects p WHERE project_id=$1',[refund.project_id])).rows[0]?.data || {} : {};
-  const custom = await require('./refundPolicyService').selectedCustom(pool,refund);
-  const paid = (await pool.query("SELECT COALESCE(SUM(amount),0) AS total FROM payments WHERE order_id=$1 AND status IN ('verified','refunded') AND to_jsonb(payments)->>'deleted_at' IS NULL",[refund.order_id])).rows[0]?.total;
+  const policy = require('./refundPolicyService');
+  const [orderResult, projectResult, custom, paidResult, calculation] = await Promise.all([
+    pool.query('SELECT to_jsonb(o) AS data FROM orders o WHERE order_id=$1',[refund.order_id]),
+    refund.project_id ? pool.query('SELECT to_jsonb(p) AS data FROM projects p WHERE project_id=$1',[refund.project_id]) : Promise.resolve({rows:[]}),
+    policy.selectedCustom(pool,refund),
+    pool.query("SELECT COALESCE(SUM(amount),0) AS total FROM payments WHERE order_id=$1 AND status IN ('verified','refunded') AND to_jsonb(payments)->>'deleted_at' IS NULL",[refund.order_id]),
+    policy.calculation(pool,refund),
+  ]);
+  const order=orderResult.rows[0]?.data || {},project=projectResult.rows[0]?.data || {},paid=paidResult.rows[0]?.total;
   const receipt=refund.review_data?.receipt;
   return {containsCustomItems:custom || Boolean(refund.project_id),confirmedPolicy:require('./refundPolicyService').settings,
-    calculation:await require('./refundPolicyService').calculation(pool,refund),timeline:require('./refundPolicyService').timeline(refund),receivedAt:order.received_at || null,deliveredAt:order.delivered_at || null,
+    calculation,timeline:require('./refundPolicyService').timeline(refund),receivedAt:order.received_at || null,deliveredAt:order.delivered_at || null,
     projectDeliveredAt:project.delivered_at || null,projectPickedUpAt:project.picked_up_at || null,
     receiptNeedsReview:receipt?.status==='disputed' || (receipt?.status!=='verified' && !order.received_at && !order.delivered_at && !project.delivered_at && !project.picked_up_at),
     receiptDisputed:receipt?.status==='disputed',verifiedPaymentTotal:Number(paid || 0),discountAmount:order.discount_amount ?? null,
