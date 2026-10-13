@@ -270,20 +270,6 @@ export function FulfillmentDetailsModal({ request, onClose, onUpdateStatus }) {
           )}
         </div>
 
-        {/* Staff / Admin Notes */}
-        <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wider font-bold text-[var(--text-muted)] block">
-            Internal Staff / Admin Notes
-          </label>
-          <textarea
-            value={adminNotes}
-            onChange={(e) => setAdminNotes(e.target.value)}
-            rows={2}
-            placeholder="Add tracking number, courier details, or pickup notes here..."
-            className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-xs text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)]"
-          />
-        </div>
-
         {/* Footer Actions */}
         {method==='delivery' && nextStatus==='out_for_delivery' && <DispatchPhotoInput orderId={request.order_id} customOnly value={itemPhotos} onChange={setItemPhotos} onReadyChange={setPhotosReady} disabled={updating} />}
         <DispatchPhotoGallery orderId={request.order_id} allowAdd />
