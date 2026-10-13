@@ -1642,6 +1642,23 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
   const [selectedSection, setSelectedSection] = useState(() => initialOrder ? 'payment' : 'details')
   const [isUpdatingPayment, setIsUpdatingPayment] = useState(false)
   const [isUpdatingOrder, setIsUpdatingOrder] = useState(false)
+  const syncSelectedOrder = useCallback((incoming) => {
+    if (!incoming?.order_id) return
+    setSelectedOrder(previous => {
+      if (!previous || String(previous.order_id) !== String(incoming.order_id)) return previous
+      const previousTime = Date.parse(previous.updated_at), incomingTime = Date.parse(incoming.updated_at)
+      if (Number.isFinite(previousTime) && Number.isFinite(incomingTime) && incomingTime < previousTime) return previous
+      const previousStep = ORDER_STATUS_LIFECYCLE.findIndex(step => step.value === previous.status)
+      const incomingStep = ORDER_STATUS_LIFECYCLE.findIndex(step => step.value === incoming.status)
+      // Order statuses only advance; a stale page response must not restore Pending.
+      if (previousStep >= 0 && incomingStep >= 0 && incomingStep < previousStep) return previous
+      return { ...previous, ...incoming }
+    })
+  }, [])
+  useEffect(() => {
+    // Keep the open modal in sync with refreshed rows, without requiring it to reopen.
+    orders.forEach(syncSelectedOrder)
+  }, [orders, syncSelectedOrder])
   // True once a page request has settled. Rows normally arrive through the
   // socket subscription below, so only the first ever load may show skeletons.
   const [hasLoadedOnce, setHasLoadedOnce] = useState(orders.length > 0)
@@ -1792,7 +1809,10 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
   }, [requestOrdersPage])
 
   useSocketEvent('order:created', reloadFromSocket)
-  useSocketEvent('order:updated', reloadFromSocket)
+  useSocketEvent('order:updated', (payload) => {
+    syncSelectedOrder(payload?.order)
+    reloadFromSocket()
+  })
   useSocketEvent('payment:created', reloadFromSocket)
   useSocketEvent('payment:updated', reloadFromSocket)
   useSocketEvent('refund:created', reloadFromSocket)
@@ -1822,7 +1842,14 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
         .then((res) => {
           const full = res?.data?.order || res?.data || res
           if (full && (full.order_id === orderId || full.id === orderId)) {
-            setSelectedOrder(prev => prev && (prev.order_id === orderId || prev.id === orderId) ? { ...prev, ...full } : full)
+            setSelectedOrder(prev => {
+              if (!prev || (prev.order_id !== orderId && prev.id !== orderId)) return prev
+              // A details request started before a status save must not restore the old status.
+              return { ...prev, ...full,
+                status: prev.status !== initialToSet.status ? prev.status : full.status,
+                payment_status: prev.payment_status !== initialToSet.payment_status ? prev.payment_status : full.payment_status,
+              }
+            })
           }
         })
         .catch(() => {})
@@ -1869,8 +1896,8 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
   // Best-effort: never blocks the admin's action.
   const handleMarkProcessing = async (orderId) => {
     try {
-      await adminApi.updateOrder(orderId, { status: 'processing' })
-      setSelectedOrder(prev => prev ? { ...prev, status: 'processing' } : null)
+      const response = await adminApi.updateOrder(orderId, { status: 'processing' })
+      setSelectedOrder(prev => prev?.order_id === orderId ? { ...prev, ...response.data, status: response.data?.status || 'processing' } : prev)
     } catch (error) {
       console.warn('Could not mark order as processing:', error)
     }
@@ -1904,13 +1931,14 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
           updateData.rider_contact = riderContact
         }
       }
-      await adminApi.updateOrder(orderId, updateData)
-      setSelectedOrder(prev => prev ? {
+      const response = await adminApi.updateOrder(orderId, updateData)
+      setSelectedOrder(prev => prev?.order_id === orderId ? {
         ...prev,
+        ...response.data,
         status: newStatus,
         ...(newStatus === 'shipped' ? { tracking_number: trackingInfo, additional_shipping_fee: Number(shippingFee) } : {}),
         ...(newStatus === 'out_for_delivery' ? { rider_name: riderName, rider_contact: riderContact } : {}),
-      } : null)
+      } : prev)
     } catch (error) {
       console.error('Failed to update order status:', error)
       throw error
