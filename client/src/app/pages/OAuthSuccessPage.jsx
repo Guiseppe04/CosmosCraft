@@ -1,60 +1,35 @@
 import { useEffect, useState, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router'
 import { useAuth } from '../context/AuthContext.jsx'
-import { setAuthToken } from '../utils/apiConfig'
 
 import { getAuthDestination, takeAuthReturnPath } from '../utils/authRedirect.js'
 
 export function OAuthSuccessPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { login, fetchUser } = useAuth()
+  const { user, isAuthenticated, isRestoringSession } = useAuth()
   const [error, setError] = useState(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const initializationStarted = useRef(false)
+  const redirectStarted = useRef(false)
 
   useEffect(() => {
-    if (initializationStarted.current) return
-    initializationStarted.current = true
+    if (redirectStarted.current) return
     const userId = searchParams.get('userId')
     const token = searchParams.get('token') || searchParams.get('accessToken')
-    const returnPath = takeAuthReturnPath()
     const fallbackPath = '/login'
+    const validCallback = Boolean(userId || token)
+    if (validCallback && isRestoringSession) return
 
-    if (token) {
-      setAuthToken(token)
-    }
-
-    if (!userId && !token) {
-      setError('Authentication failed. Please try again.')
-      setTimeout(() => navigate(fallbackPath, { replace: true }), 800)
+    if (validCallback && isAuthenticated && user) {
+      redirectStarted.current = true
+      const returnPath = takeAuthReturnPath()
+      navigate(getAuthDestination(user.role, returnPath, window.location.origin), { replace: true })
       return
     }
 
-    // Fetch the authenticated user data from backend
-    const initializeUser = async () => {
-      try {
-        const userData = await fetchUser()
-
-        if (userData) {
-          await login(userData, token)
-          navigate(getAuthDestination(userData.role, returnPath, window.location.origin), { replace: true })
-          return
-        }
-
-        setError('Failed to load user data')
-        setTimeout(() => navigate(fallbackPath, { replace: true }), 800)
-      } catch (err) {
-        console.error('Auth initialization error:', err)
-        setError('Failed to complete authentication')
-        setTimeout(() => navigate(fallbackPath, { replace: true }), 800)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    initializeUser()
-  }, [searchParams, navigate, login, fetchUser])
+    setError(validCallback ? 'Unable to complete sign-in. Please try again.' : 'Authentication failed. Please try again.')
+    const timer = setTimeout(() => navigate(fallbackPath, { replace: true }), 800)
+    return () => clearTimeout(timer)
+  }, [searchParams, navigate, user, isAuthenticated, isRestoringSession])
 
   if (error) {
     return (

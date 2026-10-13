@@ -8,6 +8,18 @@ import { accountAgreement, saveAgreement } from '../utils/termsAgreement'
 
 const AuthContext = createContext(null)
 
+function readInitialSession() {
+  let savedUser = null
+  try {
+    savedUser = JSON.parse(window.localStorage.getItem('cosmoscraft_auth'))
+  } catch {}
+  const managementSession = /^\/(admin|staff)(\/|$)/.test(window.location.pathname)
+    || ['admin', 'staff'].includes(normalizeRole(savedUser?.role))
+  // Only customers may use cached account details while the server verifies them.
+  const user = !managementSession && savedUser?.role === 'customer' ? savedUser : null
+  return { user, managementSession }
+}
+
 // Role constants
 export const ROLES = {
   ADMIN: 'admin',
@@ -94,8 +106,9 @@ const ROLE_PERMISSIONS = {
 }
 
 export function AuthProvider({ children }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [user, setUser] = useState(null)
+  const [initialSession] = useState(readInitialSession)
+  const [isAuthenticated, setIsAuthenticated] = useState(Boolean(initialSession.user))
+  const [user, setUser] = useState(initialSession.user)
   const [loginOpen, setLoginOpen] = useState(false)
   const [loginCallback, setLoginCallback] = useState(null)
   const [isLoadingUser, setIsLoadingUser] = useState(true)
@@ -105,6 +118,7 @@ export function AuthProvider({ children }) {
   const pendingTerms = useRef(null)
   const restoreTimer = useRef(null)
   const sessionVersion = useRef(0)
+  const managementSession = useRef(initialSession.managementSession)
   const ensureAccountTerms = useCallback(async () => {
     const response = await authFetch(API + '/auth/terms/status', { headers: getAuthHeaders(), credentials: 'include' })
     const data = await response.json()
@@ -148,6 +162,7 @@ export function AuthProvider({ children }) {
         const data = await response.json()
         if (version !== sessionVersion.current) return null
         if (data.data?.isAuthenticated && data.data?.user) {
+          managementSession.current = ['admin', 'staff'].includes(normalizeRole(data.data.user.role))
           if (!await ensureAccountTerms()) { completed = true; return null }
           if (version !== sessionVersion.current) return null
           // If auth check doesn't include addresses, fetch profile for full data
@@ -197,9 +212,14 @@ export function AuthProvider({ children }) {
         window.localStorage.removeItem('cosmoscraft_auth')
         removeAuthToken()
       } else {
-        // Keep protected routes waiting while the session service is unavailable.
-        clearTimeout(restoreTimer.current)
-        restoreTimer.current = setTimeout(() => fetchUser(), 5000)
+        if (managementSession.current || /^\/(admin|staff)(\/|$)/.test(window.location.pathname)) {
+          // Keep management routes waiting and retrying when verification is unavailable.
+          clearTimeout(restoreTimer.current)
+          restoreTimer.current = setTimeout(() => fetchUser(), 5000)
+        } else {
+          // Customer browsing must not remain blocked by a temporary session outage.
+          completed = true
+        }
       }
     } finally {
       if (completed && version === sessionVersion.current) setIsLoadingUser(false)
@@ -209,6 +229,13 @@ export function AuthProvider({ children }) {
 
   // Verify authentication on app mount
   useEffect(() => {
+    // OAuth returns through a full page navigation. Install its token before
+    // starting the single session restoration shared with the callback page.
+    if (window.location.pathname === '/auth/success') {
+      const params = new URLSearchParams(window.location.search)
+      const token = params.get('token') || params.get('accessToken')
+      if (token) setAuthToken(token)
+    }
     fetchUser()
     const onSessionExpired = () => {
       sessionVersion.current++
@@ -253,6 +280,7 @@ export function AuthProvider({ children }) {
       if (token) setAuthToken(token)
       if (!await ensureAccountTerms()) return null
       if (version !== sessionVersion.current) return null
+      managementSession.current = ['admin', 'staff'].includes(normalizeRole(userData.role))
       setIsLoadingUser(false)
       setIsAuthenticated(true)
       setUser(userData)
@@ -354,7 +382,8 @@ export function AuthProvider({ children }) {
         fetchUser,
         updateUser,
         isLoggingOut,
-        isLoadingUser,
+        isLoadingUser: isLoadingUser && managementSession.current,
+        isRestoringSession: isLoadingUser,
         // Role helpers
         getUserRole,
         isAdmin,
