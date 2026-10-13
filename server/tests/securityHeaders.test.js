@@ -30,7 +30,7 @@ test('headers cover JSON, errors, static media and credentialed CORS without exp
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
     assert.equal(res.headers.get('x-frame-options'), 'DENY');
     assert.equal(res.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
-    assert.equal(res.headers.get('permissions-policy'), 'camera=(), microphone=(), geolocation=()');
+    assert.equal(res.headers.get('permissions-policy'), 'geolocation=()');
     assert.match(res.headers.get('content-security-policy'), /default-src 'none'/);
     assert.match(res.headers.get('content-security-policy'), /frame-ancestors 'none'/);
     assert.equal(res.headers.get('cross-origin-opener-policy'), 'same-origin-allow-popups');

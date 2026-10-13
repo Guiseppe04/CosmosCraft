@@ -1,5 +1,5 @@
 // Browser policies shared by the API and Vite's application document server.
-const permissionsPolicy = 'camera=(), microphone=(), geolocation=()';
+const permissionsPolicy = 'geolocation=()';
 const referrerPolicy = 'strict-origin-when-cross-origin';
 const documentBaseline = "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 const documentMetaBaseline = "object-src 'none'; base-uri 'self'; form-action 'self'";

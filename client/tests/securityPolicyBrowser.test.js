@@ -89,7 +89,7 @@ test('document CSP preserves media, uploads, previews, API, Socket.IO and printi
     assert.deepEqual(violations.filter(v=>v.disposition==='enforce'),[])
     assert.deepEqual(violations.filter(v=>v.disposition==='report'&&!['script-src-elem','script-src'].includes(v.directive)),[])
     assert.deepEqual(errors,[])
-    assert.deepEqual(await page.evaluate(()=>['camera','microphone','geolocation'].map(feature=>document.featurePolicy.allowsFeature(feature))),[false,false,false])
+    assert.deepEqual(await page.evaluate(()=>['camera','microphone','geolocation'].map(feature=>document.featurePolicy.allowsFeature(feature))),[true,true,false])
     await page.evaluate(()=>{const base=document.createElement('base');base.href='https://unapproved.example/';document.head.append(base)})
     await page.waitForFunction(()=>window.violations.some(v=>v.directive==='base-uri'&&v.disposition==='enforce'))
     assert.equal(await page.evaluate(()=>document.baseURI),frontendOrigin+'/')
