@@ -29,11 +29,12 @@ export const orderTerms = {
       ],
     },
     {
-      title: 'Returns, Exchanges, and Refunds',
+      title: 'Regular Product Returns and Refunds',
       paragraphs: [
-        'Submit regular-product refund requests within 14 days of receipt. Missing or disputed receipt confirmation requires admin review. A timely request does not expire while being reviewed. All regular-product refunds default to 50%, regardless of reason, subject to admin review and adjustment. Estimated payment completion is 1–3 calendar days after required evidence, return receipt and inspection are complete, or a documented no-return exception.',
-        'Contact CosmosCraft if an item is defective, damaged, or different from what you ordered. Provide your order details, a description of the issue, and available supporting evidence. Keep the item and packaging for assessment and follow the return instructions provided.',
-        'Eligible concerns may be resolved through repair, replacement, or refund, as applicable. Requests based only on a change of mind are subject to review. These terms do not limit remedies required by law for defective or incorrect items.',
+        'Submit a return or refund request for a delivered or received regular product within 14 days of receipt. If receipt confirmation is missing or the recorded date is disputed, the admin will review the actual receipt date and available evidence instead of automatically denying the request. A request submitted within the applicable window does not expire while it is being reviewed or processed.',
+        'For these regular-product requests, the default refund is 50% of the requested item value covered by remaining verified payment, regardless of the selected reason. This includes damaged, incorrect, or misdescribed items and change-of-mind requests. The admin reviews the case and may adjust the amount with an explanation. The default is not automatic approval or a maximum, and the approved amount cannot exceed the requested amount or remaining verified payment.',
+        'Estimated refund payment completion is 1-3 calendar days after the required evidence, return receipt and inspection have been completed, or after the required evidence and a documented no-return exception are complete. This processing estimate is separate from the 14-day submission window. Delays do not automatically reject the request or confirm that payment has been completed.',
+        'Report defective, damaged, incorrect, or missing items promptly and keep the item and available packaging for assessment. The shop request window and default refund amount do not limit remedies required by applicable consumer protection laws. Contact CosmosCraft if a concern cannot be submitted through the automated request process.',
       ],
     },
     {

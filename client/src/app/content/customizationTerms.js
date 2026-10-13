@@ -45,9 +45,23 @@ export const customizationTerms = {
       ],
     },
     {
-      title: 'Customer-Supplied Materials and Warranty',
+      title: 'Completed Guitar Warranty, Returns, and Refunds',
       paragraphs: [
-        'Submit customized guitar warranty requests within three calendar months of receipt. Missing or disputed receipt confirmation requires admin review. Approved monetary refunds are limited to the lower of verified material/base value and remaining actual payment minus verified incurred labor, capped at the requested amount. Unknown costs require verification. Estimated payment completion is 1–2 calendar weeks after required evidence, return receipt and inspection are complete, or a documented no-return exception. This is separate from the warranty submission window.',
+        'Submit a warranty request for a completed customized guitar within three calendar months of confirmed receipt, including receipt by delivery or pickup. Calendar months are counted using Philippine time; when the anniversary day does not exist in the ending month, its last day is used. Missing or disputed receipt confirmation requires admin verification. A timely request does not expire during review or processing.',
+        'Customized guitar refunds use verified costs rather than the regular-product 50% default. The refundable limit is the lower of verified material/base value and remaining actual payment minus verified incurred labor, capped at the requested amount. Remaining actual payment accounts for other reserved or completed refunds. The result cannot be negative, and a monetary refund must have a positive approved amount. The admin must verify material/base value, labor and supporting records; missing financial values are not assumed.',
+        'Estimated refund payment completion is 7-14 calendar days (1-2 weeks) after the required evidence, return receipt and inspection have been completed, or after the required evidence and a documented no-return exception are complete. This is a processing estimate, separate from the three-month warranty request window, and does not guarantee automatic payment or completion.',
+        'These completed-build warranty requests are separate from cancellation and Current Build Claim settlements before receipt. The shop warranty window and cost-based calculation do not remove remedies required by applicable consumer protection laws. Contact CosmosCraft if a concern cannot be submitted through the automated request process.',
+      ],
+    },
+    {
+      title: 'Repair or Rework Offers',
+      paragraphs: [
+        'For a customized guitar request, an admin may propose a repair or rework and explain the offer in your refund tracking details. You can accept or decline the current offer. Acceptance records your choice for review; it does not automatically book an appointment, authorize new charges, pay a refund, or close the request. Service arrangements must be confirmed separately with CosmosCraft.',
+      ],
+    },
+    {
+      title: 'Customer-Supplied Materials',
+      paragraphs: [
         'Customer-supplied wood, hardware, strings, or other materials are subject to suitability checks and acceptance by CosmosCraft. Discuss specifications and condition with us before supplying materials.',
         'Defects inherent in customer-supplied materials are not covered by the shop warranty for those materials. This does not remove responsibility for defects in CosmosCraft workmanship or any remedy required by law. Report issues with the completed build so we can assess the cause and available resolution.',
       ],
