@@ -41,6 +41,7 @@ const updateAccountActiveStatus = async (userId, isActive) => {
 };
 
 exports.createOAuthUser = async (userData) => {
+  if (userData.provider !== 'google') throw new Error('Unsupported OAuth provider');
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -52,7 +53,7 @@ exports.createOAuthUser = async (userData) => {
     }
 
     // Determine if email is verified by provider
-    // Google and Facebook both return email_verified in profile when email scope is granted
+    // Google returns email_verified in its profile
     const isVerified = userData.emailVerified === true;
 
     // Insert user
@@ -70,7 +71,7 @@ exports.createOAuthUser = async (userData) => {
       [
         user.user_id, 
         userData.provider, 
-        userData.provider === 'google' ? userData.googleId : userData.facebookId,
+        userData.googleId,
         userData.email
       ]
     );

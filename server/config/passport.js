@@ -1,6 +1,5 @@
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const FacebookStrategy = require('passport-facebook').Strategy;
 const { pool } = require('./database');
 const userService = require('../services/userService');
 
@@ -18,12 +17,10 @@ const parseDisplayName = (displayName) => {
 
 const handleOAuthLogin = async (provider, profile, done) => {
   try {
-    console.log(`[OAuth:${provider}] Profile received:`, JSON.stringify(profile, null, 2));
     const email = profile.emails?.[0]?.value;
     const emailVerified = profile.emails?.[0]?.verified === true || profile._json?.email_verified === true;
-    if (!email) {
-      console.error(`[OAuth:${provider}] No email found in profile. profileFields may be misconfigured.`);
-      return done(new Error('No email address returned by provider. Please ensure the email permission is granted.'), null);
+    if (!email || !emailVerified) {
+      return done(new Error('A verified Google email address is required.'), null);
     }
     const { firstName, middleName, lastName } = parseDisplayName(profile.displayName);
 
@@ -33,7 +30,6 @@ const handleOAuthLogin = async (provider, profile, done) => {
       user = await userService.createOAuthUser({
         provider,
         googleId: provider === 'google' ? profile.id : undefined,
-        facebookId: provider === 'facebook' ? profile.id : undefined,
         email,
         firstName,
         middleName: middleName || '',
@@ -71,20 +67,6 @@ passport.use(
         : process.env.GOOGLE_CALLBACK_URL,
     },
     async (accessToken, refreshToken, profile, done) => handleOAuthLogin('google', profile, done)
-  )
-);
-
-passport.use(
-  new FacebookStrategy(
-    {
-      clientID: process.env.FACEBOOK_APP_ID,
-      clientSecret: process.env.FACEBOOK_APP_SECRET,
-      callbackURL: process.env.NODE_ENV === 'production'
-        ? (process.env.FACEBOOK_CALLBACK_URL_PROD || process.env.FACEBOOK_CALLBACK_URL)
-        : process.env.FACEBOOK_CALLBACK_URL,
-      profileFields: ['id', 'displayName', 'email', 'photos'],
-    },
-    async (accessToken, refreshToken, profile, done) => handleOAuthLogin('facebook', profile, done)
   )
 );
 

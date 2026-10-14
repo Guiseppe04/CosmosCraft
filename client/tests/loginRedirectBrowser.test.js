@@ -38,13 +38,22 @@ test('email and delayed OAuth login reach the correct destination without a fals
     browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}) })
     const origin = `http://127.0.0.1:${server.address().port}`
     for (const [role, destination] of [['customer', 'dashboard'], ['staff', 'staff'], ['admin', 'admin'], ['super_admin', 'admin']]) {
-      for (const social of [false, 'token', 'accessToken', 'cookie']) {
+      for (const social of [false, 'handoff', 'cookie']) {
         const context = await browser.newContext()
         let signedIn = Boolean(social)
         const pendingChecks = []
-        let termsChecks = 0
+        let termsChecks = 0, exchanges = 0
         const user = { id: 'user-1', role, email: 'test@example.com' }
         await context.addInitScript(() => sessionStorage.setItem('cosmoscraft.auth.returnTo', '/login'))
+        if (social === 'handoff') {
+          await context.addInitScript(() => sessionStorage.setItem('cosmoscraft.oauth.verifier', 'a'.repeat(64)))
+          await context.route('**/auth/oauth/complete', async route => {
+            exchanges++
+            assert.deepEqual(route.request().postDataJSON(), { handoff: 'b'.repeat(64), verifier: 'a'.repeat(64) })
+            await new Promise(resolve => setTimeout(resolve, 200))
+            return route.fulfill({ json: { data: { accessToken: 'test-token' } } })
+          })
+        }
         if (social) await context.addInitScript(() => localStorage.setItem('cosmoscraft_auth', JSON.stringify({ id: 'previous-user', role: 'customer' })))
         await context.route('**/auth/check', route => {
           if (social) {
@@ -66,15 +75,18 @@ test('email and delayed OAuth login reach the correct destination without a fals
         const page = await context.newPage()
         const errors = []
         page.on('pageerror', error => errors.push(error.message))
-        const callback = social === 'cookie' ? 'userId=user-1' : `${social}=test-token`
-        await page.goto(origin + (social ? '/auth/success?' + callback : '/login'))
+        const callback = social === 'cookie' ? '?auth_code=AUTH_CODE_USED' : '#handoff=' + 'b'.repeat(64)
+        await page.goto(origin + (social ? '/auth/success' + callback : '/login'))
         if (social) {
           await page.getByRole('heading', { name: 'Signing In', exact: true }).waitFor()
           await page.waitForTimeout(1200)
           assert.equal(new URL(page.url()).pathname, '/auth/success')
           assert.equal(await page.getByText(/Failed to load user data|Unable to complete sign-in|Redirecting to login/).count(), 0)
-          assert.equal(pendingChecks.length, 2, 'only StrictMode provider mount checks should run')
-          await pendingChecks[1].fulfill({ json: { data: { isAuthenticated: true, user } } })
+          assert.equal(pendingChecks.length, 1, 'StrictMode shares completion before restoring the session')
+          assert.equal(new URL(page.url()).hash, '')
+          assert.equal(new URL(page.url()).search, '')
+          assert.equal(exchanges, social === 'handoff' ? 1 : 0)
+          await pendingChecks[0].fulfill({ json: { data: { isAuthenticated: true, user } } })
         }
         if (!social) {
           await page.getByPlaceholder('name@example.com').fill('test@example.com')
@@ -83,7 +95,6 @@ test('email and delayed OAuth login reach the correct destination without a fals
         }
         await page.getByRole('heading', { name: destination, exact: true }).waitFor()
         if (social) {
-          await pendingChecks[0].fulfill({ json: { data: { isAuthenticated: false } } })
           await page.waitForTimeout(900)
           assert.equal(termsChecks, 1, 'the callback must not log in again or repeat the agreement check')
           assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('cosmoscraft_auth')).id), user.id)

@@ -10,7 +10,6 @@ const {
   validate,
   emailSignupSchema,
   emailLoginSchema,
-  oauthSignupSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
 } = require('../utils/validation');
@@ -43,77 +42,6 @@ const getCookieOptions = () => {
   };
 };
 
-// Google Callback
-exports.googleCallback = asyncHandler(async (req, res, next) => {
-  if (!req.user) {
-    return res.redirect(`${getFrontendUrl()}/auth/oauth-signup?provider=google&userData=${encodeURIComponent(JSON.stringify(req.authInfo?.oauthData || {}))}`);
-  }
-
-  const roleSummary = await rbacService.getUserRoleSummary(req.user.user_id, false);
-  const { accessToken, refreshToken } = await generateTokens(req.user.user_id, roleSummary.role);
-
-  const cookieOptions = getCookieOptions();
-
-  res.cookie('accessToken', accessToken, cookieOptions);
-  res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
-
-  return res.redirect(`${getFrontendUrl()}/auth/success?userId=${req.user.user_id}&token=${encodeURIComponent(accessToken)}&provider=google`);
-});
-// Facebook Callback
-exports.facebookCallback = asyncHandler(async (req, res, next) => {
-  if (!req.user) {
-    return res.redirect(`${getFrontendUrl()}/auth/oauth-signup?provider=facebook&userData=${encodeURIComponent(JSON.stringify(req.authInfo?.oauthData || {}))}`);
-  }
-
-  const roleSummary = await rbacService.getUserRoleSummary(req.user.user_id, false);
-  const { accessToken, refreshToken } = await generateTokens(req.user.user_id, roleSummary.role);
-
-  const cookieOptions = getCookieOptions();
-
-  res.cookie('accessToken', accessToken, cookieOptions);
-  res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
-
-  return res.redirect(`${getFrontendUrl()}/auth/success?userId=${req.user.user_id}&token=${encodeURIComponent(accessToken)}&provider=facebook`);
-});
-
-// OAuth Signup(for new users)
-exports.oauthSignup = asyncHandler(async (req, res, next) => {
-  require('../services/termsService').validateAgreement(req.body.termsAgreement, ['account']);
-  const { provider, googleId, facebookId, email, firstName, middleName, lastName } = req.body;
-
-  if (!['google', 'facebook'].includes(provider)) throw new AppError('Provider must be google or facebook', 400);
-
-  const userData = { firstName, middleName, lastName };
-  const { error } = oauthSignupSchema.validate(userData, { abortEarly: false });
-  if (error) {
-    const errors = error.details.map((detail) => ({ field: detail.path.join('.'), message: detail.message }));
-    throw new AppError('Validation failed', 400, errors);
-  }
-
-  const newUser = await userService.createOAuthUser({
-    provider,
-    googleId: provider === 'google' ? googleId : undefined,
-    facebookId: provider === 'facebook' ? facebookId : undefined,
-    email,
-    firstName,
-    middleName: middleName || '',
-    lastName,
-    termsAgreement: req.body.termsAgreement,
-  });
-
-  const roleSummary = await rbacService.getUserRoleSummary(newUser.user_id, false);
-  const { accessToken, refreshToken } = await generateTokens(newUser.user_id, roleSummary.role);
-
-  const cookieOptions = getCookieOptions();
-
-  res.cookie('accessToken', accessToken, cookieOptions);
-  res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
-
-  res.status(201).json({
-    status: 'success', message: 'OAuth signup successful',
-    data: { user: { id: newUser.user_id, email: newUser.email, name: `${newUser.first_name} ${newUser.last_name}` } }
-  });
-});
 // Email Signup
 exports.emailSignup = asyncHandler(async (req, res, next) => {
   require('../services/termsService').validateAgreement(req.body.termsAgreement, ['account']);
@@ -461,7 +389,7 @@ exports.forgotPassword = asyncHandler(async (req, res, next) => {
     // OAuth-only accounts have no password and cannot use this flow. mailService only
     // exposes password-reset / password-change templates, so we intentionally skip
     // sending rather than inventing a new template. (Tradeoff: these users receive no
-    // email; a dedicated "sign in with Google/Facebook" template would avoid confusion.)
+    // email; a dedicated "sign in with Google" template would avoid confusion.)
     if (!user.password_hash) {
       await new Promise((resolve) => setTimeout(resolve, MIMIC_EMAIL_SEND_DELAY_MS));
       return res.status(200).json({ status: 'success', message: GENERIC_RESPONSE });

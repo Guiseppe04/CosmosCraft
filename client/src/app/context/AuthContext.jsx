@@ -1,3 +1,4 @@
+import { completeOAuth } from '../utils/oauth.js'
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { API, getAuthHeaders, setAuthToken, removeAuthToken } from '../utils/apiConfig'
 import { authFetch } from '../utils/authFetch.js'
@@ -229,14 +230,17 @@ export function AuthProvider({ children }) {
 
   // Verify authentication on app mount
   useEffect(() => {
-    // OAuth returns through a full page navigation. Install its token before
-    // starting the single session restoration shared with the callback page.
-    if (window.location.pathname === '/auth/success') {
-      const params = new URLSearchParams(window.location.search)
-      const token = params.get('token') || params.get('accessToken')
-      if (token) setAuthToken(token)
+    let cancelled = false
+    const restore = async () => {
+      if (window.location.pathname === '/auth/success') {
+        try { await completeOAuth() } catch {
+          // A duplicate completion can restore an existing session, but never
+          // retry the exchange or create a replacement session.
+        }
+      }
+      if (!cancelled) await fetchUser()
     }
-    fetchUser()
+    restore()
     const onSessionExpired = () => {
       sessionVersion.current++
       clearTimeout(restoreTimer.current)
@@ -246,6 +250,7 @@ export function AuthProvider({ children }) {
     }
     window.addEventListener('cosmoscraft:session-expired', onSessionExpired)
     return () => {
+      cancelled = true
       sessionVersion.current++
       clearTimeout(restoreTimer.current)
       window.removeEventListener('cosmoscraft:session-expired', onSessionExpired)

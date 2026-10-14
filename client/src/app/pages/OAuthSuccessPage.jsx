@@ -1,11 +1,10 @@
 import { useEffect, useState, useRef } from 'react'
-import { useSearchParams, useNavigate } from 'react-router'
+import { useNavigate } from 'react-router'
 import { useAuth } from '../context/AuthContext.jsx'
 
 import { getAuthDestination, takeAuthReturnPath } from '../utils/authRedirect.js'
 
 export function OAuthSuccessPage() {
-  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { user, isAuthenticated, isRestoringSession } = useAuth()
   const [error, setError] = useState(null)
@@ -13,23 +12,20 @@ export function OAuthSuccessPage() {
 
   useEffect(() => {
     if (redirectStarted.current) return
-    const userId = searchParams.get('userId')
-    const token = searchParams.get('token') || searchParams.get('accessToken')
     const fallbackPath = '/login'
-    const validCallback = Boolean(userId || token)
-    if (validCallback && isRestoringSession) return
+    if (isRestoringSession) return
 
-    if (validCallback && isAuthenticated && user) {
+    if (isAuthenticated && user) {
       redirectStarted.current = true
       const returnPath = takeAuthReturnPath()
       navigate(getAuthDestination(user.role, returnPath, window.location.origin), { replace: true })
       return
     }
 
-    setError(validCallback ? 'Unable to complete sign-in. Please try again.' : 'Authentication failed. Please try again.')
+    setError('Unable to complete sign-in. Please try again.')
     const timer = setTimeout(() => navigate(fallbackPath, { replace: true }), 800)
     return () => clearTimeout(timer)
-  }, [searchParams, navigate, user, isAuthenticated, isRestoringSession])
+  }, [navigate, user, isAuthenticated, isRestoringSession])
 
   if (error) {
     return (
