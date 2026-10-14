@@ -50,6 +50,9 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
     : refund.status === 'approved' && ['return_pending','returned','return_in_transit'].includes(refund.return_status)
       ? ['item_received','rejected'] : actions[refund.status] || []
   const files = refund.private_files || []
+  const receivedFiles = files.filter(kind => /^evidence_?[0-4]$/.test(kind))
+  const returnFiles = files.filter(kind => /^return_?[0-4]$/.test(kind)).sort((a,b) => Number(a.slice(-1)) - Number(b.slice(-1)))
+  const showReturnShipment = next.includes('item_received') || returnFiles.length > 0 || refund.return_method || refund.return_reference || refund.customer_return_notes
   const payment = refund.payment
   const paymentProof = payment?.proof_url || payment?.payment_proof_url || payment?.proof_image_url
   const actionTitle = inspect ? 'Inspect and decide' : review ? noReturnRecorded ? 'Refund decision' : 'Return decision'
@@ -149,19 +152,29 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
     {<>
     {refund.order_id && <DispatchPhotoGallery orderId={refund.order_id} allowAdd={refund.can_manage} />}
     <RefundRequestPhotos images={refund.images} />
-    {refund.can_manage && files.filter(kind => /^(evidence|return)_?[0-4]$/.test(kind)).length > 0 && <details open className="text-sm text-[var(--text-muted)]">
-      <summary>Supporting and return evidence</summary>
-      <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">{files.filter(kind => /^(evidence|return)_?[0-4]$/.test(kind)).map(kind =>
-        <PrivateRefundFile key={kind} refundId={refund.refund_request_id} kind={kind} label={`${kind.startsWith('return') ? 'Return evidence' : 'Customer Received Photo'} ${Number(kind.match(/[0-4]$/)[0]) + 1}`} />)}</div>
+    {refund.can_manage && receivedFiles.length > 0 && <details open className="text-sm text-[var(--text-muted)]">
+      <summary>Customer-received product photos</summary>
+      <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">{receivedFiles.map(kind =>
+        <PrivateRefundFile key={kind} refundId={refund.refund_request_id} kind={kind} label={`Customer Received Photo ${Number(kind.match(/[0-4]$/)[0]) + 1}`} />)}</div>
     </details>}
-    {!files.some(kind => /^(evidence|return)_?[0-4]$/.test(kind)) && <p className="text-sm text-[var(--text-muted)]">No supporting or return evidence is attached to this request.</p>}
+    {!receivedFiles.length && <p className="text-sm text-[var(--text-muted)]">No customer-received product photos are attached to this request.</p>}
+    {showReturnShipment && <p className="text-sm text-[var(--text-muted)]">Customer return photos and shipping details are shown in Step 3: {actionTitle}.</p>}
     </>}
     {<>
+    {showReturnShipment && <section aria-label="Customer return shipment" className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+      <h3 className="font-semibold text-[var(--text-light)]">Customer return shipment</h3>
+      <p className="text-xs text-[var(--text-muted)]">Compare the shipping details and customer photos with the item received before confirming receipt. Uploaded evidence does not confirm physical receipt.</p>
+      <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+        <div><dt className="text-[var(--text-muted)]">Return method</dt><dd className="mt-1 text-[var(--text-light)]">{refund.return_method === 'courier' ? 'Courier' : refund.return_method === 'pickup' ? 'Pickup / drop-off' : refund.return_method || 'Not provided'}</dd></div>
+        <div><dt className="text-[var(--text-muted)]">Shipping / receipt reference</dt><dd className="mt-1 break-all text-[var(--text-light)]">{refund.return_reference || 'Not provided'}</dd></div>
+        {refund.customer_return_notes && <div className="sm:col-span-2"><dt className="text-[var(--text-muted)]">Customer return notes</dt><dd className="mt-1 whitespace-pre-wrap break-words text-[var(--text-light)]">{refund.customer_return_notes}</dd></div>}
+      </dl>
+      {refund.can_manage && (returnFiles.length ? <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{returnFiles.map(kind => <PrivateRefundFile key={kind} refundId={refund.refund_request_id} kind={kind} label={`Customer return photo ${Number(kind.slice(-1)) + 1}`} />)}</div>
+        : <p className="text-sm text-[var(--text-muted)]">No customer return photos have been submitted for this request.</p>)}
+    </section>}
     <div className="space-y-2 text-sm text-[var(--text-muted)]">
       {!refundApproved && refund.admin_notes && <p className="whitespace-pre-wrap break-words">Admin remarks: {refund.admin_notes}</p>}
       {refund.return_instructions && <p className="whitespace-pre-wrap break-words">Return instructions: {refund.return_instructions}</p>}
-      {refund.return_reference && <p className="break-all">Return reference: {refund.return_reference}</p>}
-      {refund.customer_return_notes && <p className="whitespace-pre-wrap break-words">Customer return notes: {refund.customer_return_notes}</p>}
       {refund.item_received_at && <p>Received: {new Date(refund.item_received_at).toLocaleString('en-PH')}</p>}
       {refund.inspection_notes && <p className="whitespace-pre-wrap break-words">Inspection: {refund.inspection_notes}</p>}
       {refund.claim_verified != null && <p>Claim verified: {refund.claim_verified?'Yes':'No'}</p>}
