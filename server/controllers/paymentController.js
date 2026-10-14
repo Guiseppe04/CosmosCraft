@@ -47,7 +47,7 @@ async function checkPaymentAccess(paymentId, userId, userRole) {
     return payment;
   }
 
-  if (payment.user_id && payment.user_id !== userId) {
+  if (payment.order_user_id !== userId) {
     throw new AppError('Access denied to this payment', 403);
   }
 
@@ -58,11 +58,9 @@ exports.createPayment = async (req, res, next) => {
   try {
     const validated = validate(req.body, paymentValidation.createPaymentSchema);
 
-    const userId = req.user ? req.user.user_id : null;
-
     const payment = await paymentService.createPayment({
       order_id: validated.order_id,
-      user_id: userId,
+      actor: req.user,
       method: validated.method,
       amount: validated.amount,
       currency: validated.currency,
@@ -149,7 +147,14 @@ exports.listPayments = async (req, res, next) => {
   try {
     const validated = validate(req.query, paymentValidation.listPaymentsSchema);
 
-    if (req.user.role === 'customer') {
+    const isStaff = hasRole(req.user.role, 'admin', 'staff');
+    if (validated.order_id) {
+      const ownerId = await paymentService.getOrderOwner(validated.order_id);
+      if (!isStaff && ownerId !== req.user.user_id) {
+        throw new AppError('Access denied to this order', 403);
+      }
+    }
+    if (!isStaff) {
       validated.user_id = req.user.user_id;
     }
 
@@ -319,7 +324,7 @@ exports.getUserPayments = async (req, res, next) => {
     const { userId } = req.params;
     const { status, method, limit = 20, offset = 0, start_date, end_date } = req.query;
 
-    if (req.user.role === 'customer' && userId !== req.user.user_id) {
+    if (!hasRole(req.user.role, 'admin', 'staff') && userId !== req.user.user_id) {
       throw new AppError('Access denied', 403);
     }
 

@@ -2,6 +2,7 @@ const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const defaultWorkflowService = require('./defaultWorkflowService');
 const projectRefundService = require('./projectRefundService');
+const { hasRole } = require('../utils/roles');
 
 exports.PAYMENT_METHODS = {
   GCASH: 'gcash',
@@ -41,6 +42,7 @@ exports.getPaymentsByUser = getPaymentsByUser;
 exports.getPaymentsByUserCount = getPaymentsByUserCount;
 exports.getPaymentById = getPaymentById;
 exports.getPaymentByOrderId = getPaymentByOrderId;
+exports.getOrderOwner = getOrderOwner;
 exports.checkIdempotency = checkIdempotency;
 
 const STATUS_TRANSITIONS = {
@@ -168,6 +170,12 @@ async function getOrderById(orderId) {
   return result.rows[0];
 }
 
+async function getOrderOwner(orderId) {
+  const result = await pool.query('SELECT user_id FROM orders WHERE order_id = $1', [orderId]);
+  if (!result.rows.length) throw new AppError('Order not found', 404);
+  return result.rows[0].user_id;
+}
+
 async function getPaymentConfig(method) {
   const result = await pool.query(
     'SELECT * FROM payment_config WHERE payment_method = $1 AND is_active = true',
@@ -192,6 +200,8 @@ async function getAllActivePaymentConfigs() {
 async function getPaymentById(paymentId) {
   const result = await pool.query(
     `SELECT p.*,
+            o.user_id AS user_id,
+            o.user_id AS order_user_id,
             o.order_number,
             o.order_type,
             o.status AS order_status,
@@ -206,7 +216,7 @@ async function getPaymentById(paymentId) {
             pr.progress AS project_progress
      FROM payments p
      JOIN orders o ON p.order_id = o.order_id
-     LEFT JOIN users u ON COALESCE(p.user_id, o.user_id) = u.user_id
+     LEFT JOIN users u ON o.user_id = u.user_id
      LEFT JOIN projects pr ON pr.order_id = o.order_id AND pr.deleted_at IS NULL
      WHERE p.payment_id = $1`,
     [paymentId]
@@ -216,7 +226,7 @@ async function getPaymentById(paymentId) {
 
 async function getPaymentByOrderId(orderId) {
   const result = await pool.query(
-    `SELECT p.*, o.order_number
+    `SELECT p.*, o.user_id AS user_id, o.order_number
      FROM payments p
      JOIN orders o ON p.order_id = o.order_id
      WHERE p.order_id = $1
@@ -230,15 +240,22 @@ function normalizeAmount(value) {
   return Number(Number(value || 0).toFixed(2));
 }
 
-async function createPayment({ order_id, user_id, method, amount, currency = 'PHP', reference_number, proof_url }) {
+async function createPayment({ order_id, actor, method, amount, currency = 'PHP', reference_number, proof_url }) {
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
 
-    const order = await client.query('SELECT * FROM orders WHERE order_id = $1', [order_id]);
+    // Serialize all submissions for this order before checking active payments or balance.
+    const order = await client.query('SELECT * FROM orders WHERE order_id = $1 FOR UPDATE', [order_id]);
     if (order.rows.length === 0) {
       throw new AppError('Order not found', 404);
+    }
+    const ownerId = order.rows[0].user_id;
+    // Only staff/admin may submit on behalf of an order owner. The payment
+    // remains attributed to that owner; metadata records the acting account.
+    if (!actor?.user_id || (ownerId !== actor.user_id && !hasRole(actor.role, 'admin', 'staff'))) {
+      throw new AppError('Access denied to this order', 403);
     }
 
     const existingPayments = await client.query(
@@ -296,15 +313,15 @@ async function createPayment({ order_id, user_id, method, amount, currency = 'PH
     }
 
     const result = await client.query(
-      `INSERT INTO payments (order_id, user_id, method, amount, currency, reference_number, proof_url, payment_instructions, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO payments (order_id, user_id, method, amount, currency, reference_number, proof_url, payment_instructions, status, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [order_id, user_id, method, requestedAmount, currency, reference_number, proof_url || null, JSON.stringify(paymentInstructions), exports.PAYMENT_STATUS.PENDING]
+      [order_id, ownerId, method, requestedAmount, currency, reference_number, proof_url || null,
+        JSON.stringify(paymentInstructions), exports.PAYMENT_STATUS.PENDING,
+        JSON.stringify({ submitted_by: actor.user_id })]
     );
 
     await ensureProjectForCustomBuildOrder(client, order_id);
-
-    const created = result.rows[0];
 
     await client.query('COMMIT');
     return result.rows[0];
@@ -587,7 +604,7 @@ async function listPayments(filters = {}) {
   }
 
   if (user_id) {
-    conditions.push(`p.user_id = $${paramIndex++}`);
+    conditions.push(`o.user_id = $${paramIndex++}`);
     values.push(user_id);
   }
 
@@ -604,11 +621,11 @@ async function listPayments(filters = {}) {
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const result = await pool.query(
-    `SELECT p.*, o.order_number, u.email as user_email,
+    `SELECT p.*, o.user_id AS user_id, o.order_number, u.email as user_email,
             CONCAT(u.first_name, ' ', COALESCE(u.middle_name, ''), ' ', u.last_name) as user_name
      FROM payments p
      JOIN orders o ON p.order_id = o.order_id
-     LEFT JOIN users u ON p.user_id = u.user_id
+     LEFT JOIN users u ON o.user_id = u.user_id
      ${whereClause}
      ORDER BY p.created_at DESC
      LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
@@ -641,7 +658,7 @@ async function getPaymentsCount(filters = {}) {
   }
 
   if (user_id) {
-    conditions.push(`p.user_id = $${paramIndex++}`);
+    conditions.push(`o.user_id = $${paramIndex++}`);
     values.push(user_id);
   }
 
@@ -658,7 +675,7 @@ async function getPaymentsCount(filters = {}) {
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const result = await pool.query(
-    `SELECT COUNT(*) as total FROM payments p ${whereClause}`,
+    `SELECT COUNT(*) as total FROM payments p JOIN orders o ON o.order_id = p.order_id ${whereClause}`,
     values
   );
 
@@ -707,7 +724,7 @@ async function getPaymentStats(filters = {}) {
   }
 
   if (user_id) {
-    conditions.push(`p.user_id = $${paramIndex++}`);
+    conditions.push(`o.user_id = $${paramIndex++}`);
     values.push(user_id);
   }
 
@@ -723,6 +740,7 @@ async function getPaymentStats(filters = {}) {
        SUM(CASE WHEN p.status = 'verified' THEN p.amount ELSE 0 END) as total_verified_amount,
        SUM(p.amount) as total_amount
      FROM payments p
+     JOIN orders o ON o.order_id = p.order_id
      ${whereClause}`,
     values
   );
@@ -777,7 +795,7 @@ async function refundPayment(paymentId, refundedByUserId, reason) {
 async function getPaymentsByUser(userId, filters = {}) {
   const { status, method, limit = 20, offset = 0, start_date, end_date } = filters;
 
-  const conditions = ['p.user_id = $1'];
+  const conditions = ['o.user_id = $1'];
   const values = [userId];
   let paramIndex = 2;
 
@@ -804,7 +822,7 @@ async function getPaymentsByUser(userId, filters = {}) {
   const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
   const result = await pool.query(
-    `SELECT p.*, o.order_number, o.total_amount as order_total
+    `SELECT p.*, o.user_id AS user_id, o.order_number, o.total_amount as order_total
      FROM payments p
      JOIN orders o ON p.order_id = o.order_id
      ${whereClause}
@@ -819,7 +837,7 @@ async function getPaymentsByUser(userId, filters = {}) {
 async function getPaymentsByUserCount(userId, filters = {}) {
   const { status, method, start_date, end_date } = filters;
 
-  const conditions = ['p.user_id = $1'];
+  const conditions = ['o.user_id = $1'];
   const values = [userId];
   let paramIndex = 2;
 
@@ -846,7 +864,7 @@ async function getPaymentsByUserCount(userId, filters = {}) {
   const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
   const result = await pool.query(
-    `SELECT COUNT(*) as total FROM payments p ${whereClause}`,
+    `SELECT COUNT(*) as total FROM payments p JOIN orders o ON o.order_id = p.order_id ${whereClause}`,
     values
   );
 

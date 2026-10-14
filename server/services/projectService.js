@@ -1651,6 +1651,16 @@ exports.getProjectById = async (projectId) => {
   });
 };
 
+exports.getProjectCustomerId = async (projectId) => {
+  const result = await pool.query(
+    `SELECT o.user_id FROM projects p
+     JOIN orders o ON o.order_id = p.order_id
+     WHERE p.project_id = $1`,
+    [projectId]
+  );
+  return result.rows[0]?.user_id || null;
+};
+
 exports.getMyProjects = async (userId, params = {}) => {
   await ensureProjectArchiveColumns();
   const result = await exports.getAllProjects({ ...params, user_id: userId, include_tasks: true });
