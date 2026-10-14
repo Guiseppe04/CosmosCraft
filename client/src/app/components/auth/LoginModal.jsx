@@ -1,3 +1,4 @@
+import { startGoogleLogin } from '../../utils/oauth.js'
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useNavigate } from 'react-router'
@@ -62,12 +63,15 @@ export function LoginModal() {
     navigate('/signup')
   }
 
-  const startSocialLogin = (provider) => {
+  const startSocialLogin = async () => {
     try {
       const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`
       window.sessionStorage.setItem('cosmoscraft.auth.returnTo', returnTo)
     } catch {}
-    window.location.href = `${API}/auth/${provider}`
+    try { await startGoogleLogin() } catch {
+      setRedirectingProvider(null)
+      setError('Unable to start Google sign-in. Please enable browser storage and try again.')
+    }
   }
 
   useEffect(() => {

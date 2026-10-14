@@ -1,3 +1,4 @@
+import { startGoogleLogin } from '../utils/oauth.js'
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router'
 import { motion } from 'motion/react'
@@ -131,7 +132,7 @@ export function LoginPage() {
     }
   }
 
-  const handleSocialLogin = (provider) => {
+  const handleSocialLogin = async (provider) => {
     try {
       const from = location.state?.from
       const returnTo = from?.pathname ? from.pathname + (from.search || '') + (from.hash || '') : null
@@ -140,7 +141,10 @@ export function LoginPage() {
     } catch {}
 
     setRedirectingProvider(provider)
-    window.location.href = `${API}/auth/${provider.toLowerCase()}`
+    try { await startGoogleLogin() } catch {
+      setRedirectingProvider(null)
+      setError('Unable to start Google sign-in. Please enable browser storage and try again.')
+    }
   }
 
   return (

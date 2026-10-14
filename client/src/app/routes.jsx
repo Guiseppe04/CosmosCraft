@@ -14,7 +14,6 @@ import { SignupPage } from './pages/SignupPage.jsx'
 import { LoginPage } from './pages/LoginPage.jsx'
 import { OTPVerificationPage } from './pages/OTPVerificationPage.jsx'
 import { OAuthSuccessPage } from './pages/OAuthSuccessPage.jsx'
-import { OAuthSignupPage } from './pages/OAuthSignupPage.jsx'
 import { FeedbackPage } from './pages/FeedbackPage.jsx'
 import { ResetPasswordPage } from './pages/ResetPasswordPage.jsx'
 import { ForgotPassword } from './pages/ForgotPassword.jsx'
@@ -64,7 +63,7 @@ export const router = createBrowserRouter([
       { path: 'forgot-password', Component: ForgotPassword },
       { path: 'verify-otp', Component: OTPVerificationPage },
       { path: 'auth/success', Component: OAuthSuccessPage },
-      { path: 'auth/signup', Component: OAuthSignupPage },
+      { path: 'auth/signup', loader: () => redirect('/login') },
       { path: 'reset-password', Component: ResetPasswordPage },
 
       // Customer routes (authenticated)

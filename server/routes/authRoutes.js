@@ -5,7 +5,7 @@ const authController = require('../controllers/authController.js');
 const { authenticateToken, optionalAuthenticateToken } = require('../middleware/auth.js');
 const { asyncHandler } = require('../middleware/errorHandler');
 const rbacService = require('../services/rbacService');
-const { oauthSingleUseGuard } = require('../middleware/oauthGuard');
+const { beginOAuth, oauthSingleUseGuard, privateResponse, rejectCallback, getFrontendUrl, hash, random, validSecret } = require('../middleware/oauthGuard');
 
 const router = express.Router();
 const termsController = require('../controllers/termsController');
@@ -28,53 +28,7 @@ const forgotPasswordLimiter = rateLimit({
 
 // Helper to generate tokens (import from utils)
 const { generateTokens } = require('../utils/generateTokens');
-const crypto = require('crypto');
 const { pool } = require('../config/database');
-
-let oauthUserIdColumnExists;
-
-const getFrontendUrl = () => {
-  if (process.env.NODE_ENV === 'production') {
-    return process.env.FRONTEND_URL_PROD || process.env.FRONTEND_URL || 'http://localhost:3000';
-  }
-  return process.env.FRONTEND_URL || process.env.FRONTEND_URL_PROD || 'http://localhost:3000';
-};
-
-const ensureOauthUserIdColumn = async () => {
-  if (oauthUserIdColumnExists !== undefined) return oauthUserIdColumnExists;
-  const result = await pool.query(
-    `SELECT 1 FROM information_schema.columns WHERE table_name = 'oauth_codes' AND column_name = 'oauth_user_id' LIMIT 1`
-  );
-  oauthUserIdColumnExists = result.rows.length > 0;
-  return oauthUserIdColumnExists;
-};
-
-const updateOauthCodeSuccess = async (code, userId) => {
-  if (!code) return;
-  const hash = crypto.createHash('sha256').update(code).digest('hex');
-  const hasColumn = await ensureOauthUserIdColumn();
-
-  if (hasColumn) {
-    await pool.query(
-      'UPDATE oauth_codes SET status = $1, oauth_user_id = $2, processed_at = now() WHERE code_hash = $3',
-      ['success', String(userId), hash]
-    );
-  } else {
-    await pool.query(
-      'UPDATE oauth_codes SET status = $1, user_id = $2, processed_at = now() WHERE code_hash = $3',
-      ['success', userId, hash]
-    );
-  }
-};
-
-const updateOauthCodeFailure = async (code, errorMessage) => {
-  if (!code) return;
-  const hash = crypto.createHash('sha256').update(code).digest('hex');
-  await pool.query(
-    'UPDATE oauth_codes SET status = $1, error_message = $2, processed_at = now() WHERE code_hash = $3',
-    ['failed', errorMessage, hash]
-  );
-};
 
 const getCookieOptions = () => {
   const isProd = process.env.NODE_ENV === 'production';
@@ -92,149 +46,51 @@ const getCookieOptions = () => {
   };
 };
 
-const clearAuthCookies = (res) => {
-  const cookieOptions = getCookieOptions();
-  delete cookieOptions.maxAge;
-  res.clearCookie('accessToken', cookieOptions);
-  res.clearCookie('refreshToken', cookieOptions);
-};
+// Both route prefixes share the same transaction and code constraints.
+router.get('/google', privateResponse, beginOAuth('google'), (req, res, next) => {
+  passport.authenticate('google', { scope: ['profile', 'email'], state: req.oauthState, session: false })(req, res, next);
+});
 
-// OAuth Routes - Use standard Passport middleware
-router.get(
-  '/google',
-  passport.authenticate('google', { scope: ['profile', 'email'] })
-);
-
-// Google Callback - use custom callback to capture user
-router.get('/google/callback', oauthSingleUseGuard('google'), asyncHandler(async (req, res, next) => {
-  console.log('[Google Callback] Request received');
-  clearAuthCookies(res);
-  
-  passport.authenticate('google', { session: false }, async (err, user, info) => {
+router.get('/google/callback', privateResponse, oauthSingleUseGuard('google'), (req, res, next) => {
+  passport.authenticate('google', { session: false }, async (err, user) => {
     try {
-      console.log('[Google Callback] Auth result:', { err, user: user ? 'user found' : 'no user', info });
-
-      if (err) {
-        console.error('[Google Callback] Auth error:', err);
-        const payload = { status: 'error', code: 'OAUTH_ERROR', provider: 'google', message: err.message || 'Authentication failed. Please try again.' };
-        // Mark oauth_codes as failed so duplicate callers know
-        try {
-          const code = req.query.code || req.body.code;
-          if (code) {
-            const hash = crypto.createHash('sha256').update(code).digest('hex');
-            await pool.query('UPDATE oauth_codes SET status = $1, error_message = $2, processed_at = now() WHERE code_hash = $3', ['failed', err.message || 'oauth_error', hash]);
-          }
-        } catch (uErr) {
-          console.error('[Google Callback] Failed to mark oauth_codes failed:', uErr);
-        }
-        if (req.headers.accept && req.headers.accept.includes('application/json')) return res.status(400).json(payload);
-        return res.redirect(`${getFrontendUrl()}/?auth_error=${encodeURIComponent(payload.message)}&auth_code=${payload.code}`);
-      }
-
-      if (!user) {
-        console.log('[Google Callback] No user found, redirecting to signup');
-        const msg = 'Authentication failed. Please try again.';
-        try {
-          await updateOauthCodeFailure(req.query.code || req.body.code, msg);
-        } catch (uErr) {
-          console.error('[Google Callback] Failed to mark oauth_codes failed:', uErr);
-        }
-        if (req.headers.accept && req.headers.accept.includes('application/json')) return res.status(400).json({ status: 'error', message: msg });
-        return res.redirect(`${getFrontendUrl()}/?auth_error=${encodeURIComponent(msg)}`);
-      }
-
-      // User exists or was just created - generate tokens
-      const roleSummary = await rbacService.getUserRoleSummary(user.user_id, false);
-      const { accessToken, refreshToken } = await generateTokens(user.user_id, roleSummary.role);
-      console.log('[Google Callback] Tokens generated for user:', user.user_id);
-
-      // Update oauth_codes record to mark success so duplicate callers can proceed
-      try {
-        await updateOauthCodeSuccess(req.query.code || req.body.code, user.user_id);
-      } catch (uErr) {
-        console.error('[Google Callback] Failed to update oauth_codes record:', uErr);
-      }
-
-      const cookieOptions = getCookieOptions();
-      res.cookie('accessToken', accessToken, cookieOptions);
-      res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
-
-      const redirectUrl = `${getFrontendUrl()}/auth/success?userId=${user.user_id}&token=${encodeURIComponent(accessToken)}&provider=google`;
-      console.log('[Google Callback] Redirecting to authentication success');
-      
-      return res.redirect(redirectUrl);
+      if (err || !user || user.is_active === false || !user.is_verified) return rejectCallback(req, res, 'OAUTH_ERROR');
+      // No session is minted here. The initiating tab must redeem the handoff.
+      const handoff = random();
+      await pool.query(
+        "INSERT INTO oauth_handoffs (handoff_hash, client_challenge, user_id, expires_at) VALUES ($1, $2, $3, now() + interval '1 minute')",
+        [hash(handoff), req.oauthTransaction.client_challenge, user.user_id]
+      );
+      return res.redirect(getFrontendUrl() + '/auth/success#handoff=' + handoff);
     } catch (error) {
-      console.error('[Google Callback] Error in callback:', error);
-      const payload = { status: 'error', code: 'OAUTH_ERROR', provider: 'google', message: 'Authentication failed. Please try again.' };
-      if (req.headers.accept && req.headers.accept.includes('application/json')) return res.status(500).json(payload);
-      return res.redirect(`${getFrontendUrl()}/?auth_error=${encodeURIComponent(payload.message)}&auth_code=${payload.code}`);
+      // Provider errors may contain tokens, codes or profiles; never log them.
+      return rejectCallback(req, res, 'OAUTH_ERROR', 500);
     }
   })(req, res, next);
+});
+
+router.post('/oauth/complete', privateResponse, asyncHandler(async (req, res) => {
+  const { handoff, verifier } = req.body || {};
+  if (!validSecret(handoff) || !validSecret(verifier)) {
+    return res.status(400).json({ code: 'OAUTH_TRANSACTION_INVALID' });
+  }
+  const result = await pool.query(
+    'DELETE FROM oauth_handoffs WHERE handoff_hash = $1 AND client_challenge = $2 AND expires_at > now() RETURNING user_id',
+    [hash(handoff), hash(verifier)]
+  );
+  if (!result.rows.length) return res.status(409).json({ code: 'AUTH_CODE_USED' });
+  const userId = result.rows[0].user_id;
+  const account = await pool.query('SELECT is_active, is_verified FROM users WHERE user_id = $1', [userId]);
+  if (!account.rows[0]?.is_active || !account.rows[0]?.is_verified) {
+    return res.status(403).json({ code: 'ACCOUNT_UNAVAILABLE' });
+  }
+  const roleSummary = await rbacService.getUserRoleSummary(userId, false);
+  const { accessToken, refreshToken } = await generateTokens(userId, roleSummary.role);
+  const options = getCookieOptions();
+  res.cookie('accessToken', accessToken, options);
+  res.cookie('refreshToken', refreshToken, options);
+  return res.json({ data: { accessToken } });
 }));
-
-// Facebook - Use standard Passport middleware
-router.get(
-  '/facebook',
-  passport.authenticate('facebook', { scope: ['public_profile', 'email'] })
-);
-
-// Facebook Callback - use custom callback to capture user
-router.get('/facebook/callback', oauthSingleUseGuard('facebook'), asyncHandler(async (req, res, next) => {
-  clearAuthCookies(res);
-  passport.authenticate('facebook', { session: false }, async (err, user, info) => {
-    try {
-      if (err) {
-        console.error('[Facebook Callback] Auth error:', err);
-          // Mark oauth_codes as failed
-          try {
-            const code = req.query.code || req.body.code;
-            if (code) {
-              const hash = crypto.createHash('sha256').update(code).digest('hex');
-              await pool.query('UPDATE oauth_codes SET status = $1, error_message = $2, processed_at = now() WHERE code_hash = $3', ['failed', err.message || 'oauth_error', hash]);
-            }
-          } catch (uErr) {
-            console.error('[Facebook Callback] Failed to mark oauth_codes failed:', uErr);
-          }
-        const payload = { status: 'error', code: 'OAUTH_ERROR', provider: 'facebook', message: err.message || 'Authentication failed. Please try again.' };
-        if (req.headers.accept && req.headers.accept.includes('application/json')) return res.status(400).json(payload);
-        return res.redirect(`${getFrontendUrl()}/?auth_error=${encodeURIComponent(payload.message)}&auth_code=${payload.code}`);
-      }
-
-      if (!user) {
-        const msg = 'Authentication failed. Please try again.';
-        try {
-          await updateOauthCodeFailure(req.query.code || req.body.code, msg);
-        } catch (uErr) {
-          console.error('[Facebook Callback] Failed to mark oauth_codes failed:', uErr);
-        }
-        if (req.headers.accept && req.headers.accept.includes('application/json')) return res.status(400).json({ status: 'error', message: msg });
-        return res.redirect(`${getFrontendUrl()}/?auth_error=${encodeURIComponent(msg)}`);
-      }
-
-      // User exists or was just created - generate tokens
-      const roleSummary = await rbacService.getUserRoleSummary(user.user_id, false);
-      const { accessToken, refreshToken } = await generateTokens(user.user_id, roleSummary.role);
-
-      const cookieOptions = getCookieOptions();
-      res.cookie('accessToken', accessToken, cookieOptions);
-      res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
-
-      // Update oauth_codes record to mark success so duplicate callers can proceed
-      try {
-        await updateOauthCodeSuccess(req.query.code || req.body.code, user.user_id);
-      } catch (uErr) {
-        console.error('[Facebook Callback] Failed to update oauth_codes record:', uErr);
-      }
-
-      return res.redirect(`${getFrontendUrl()}/auth/success?userId=${user.user_id}&token=${encodeURIComponent(accessToken)}&provider=facebook`);
-    } catch (error) {
-      next(error);
-    }
-  })(req, res, next);
-}));
-
-// OAuth Signup (for new users)
-router.post('/oauth-signup', authController.oauthSignup);
 
 // Email/Password Authentication Routes
 router.post('/email-signup', authController.emailSignup);
