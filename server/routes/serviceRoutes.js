@@ -8,11 +8,12 @@ const express = require('express');
 const router = express.Router();
 const { authenticateToken, authorize } = require('../middleware/auth');
 const ctrl = require('../controllers/serviceController');
+const { publicCache } = require('../middleware/publicCache');
 
 // ─── SERVICES ROUTES ─────────────────────────────────────────────────────────
 
 // Public (anyone can view services)
-router.get('/', ctrl.listServices);
+router.get('/', publicCache('services'), ctrl.listServices);
 router.get('/:id', ctrl.getService);
 router.get('/:serviceId/availability', ctrl.checkAvailability);
 

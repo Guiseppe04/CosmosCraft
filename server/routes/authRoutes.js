@@ -1,6 +1,6 @@
 const express = require('express');
 const passport = require('passport');
-const rateLimit = require('express-rate-limit');
+const { createRateLimiter, rateLimitSetting } = require('../middleware/rateLimitMiddleware');
 const authController = require('../controllers/authController.js');
 const { authenticateToken, optionalAuthenticateToken } = require('../middleware/auth.js');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -13,13 +13,11 @@ router.get('/terms/status', authenticateToken, termsController.status);
 router.post('/terms/account', authenticateToken, termsController.acceptAccount);
 router.post('/terms/checkout', authenticateToken, termsController.acceptCheckout);
 
-// Dedicated rate limiter scoped to the forgot-password route only.
-// Prevents abuse/spam of the email-sending endpoint (max 5 requests per IP per hour).
-const forgotPasswordLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
+// Dedicated limiter for password-reset emails; tokens refill gradually.
+const forgotPasswordLimiter = createRateLimiter({
+  scope: 'forgot-password',
+  capacity: rateLimitSetting('RATE_LIMIT_RESET_BURST', 3, 1, 10000),
+  refillMs: rateLimitSetting('RATE_LIMIT_RESET_REFILL_MS', 600000, 100, 3600000),
   message: {
     status: 429,
     error: 'Too many password reset requests. Please try again later.',

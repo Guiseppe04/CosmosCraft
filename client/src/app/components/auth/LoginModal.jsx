@@ -31,10 +31,17 @@ export function LoginModal() {
       const data = await response.json()
 
       if (!response.ok) {
+        if (response.status === 429) {
+          const retrySeconds = Number(response.headers.get('Retry-After'))
+          setError(Number.isFinite(retrySeconds) && retrySeconds > 0
+            ? `Too many login attempts. Please try again in ${retrySeconds} seconds.`
+            : 'Too many login attempts. Please try again shortly.')
+          return
+        }
         if (data.code === 'EMAIL_NOT_VERIFIED') {
-          const email = data.data?.email || email.trim()
+          const verificationEmail = data.data?.email || email.trim()
           closeLogin()
-          navigate(`/verify-otp?email=${encodeURIComponent(email)}`, { replace: true })
+          navigate(`/verify-otp?email=${encodeURIComponent(verificationEmail)}`, { replace: true })
           return
         }
         setError(data.message || 'Login failed. Please check your credentials.')

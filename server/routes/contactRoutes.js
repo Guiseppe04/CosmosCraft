@@ -1,5 +1,5 @@
 const express = require('express');
-const rateLimit = require('express-rate-limit');
+const { createRateLimiter, rateLimitSetting } = require('../middleware/rateLimitMiddleware');
 const { pool } = require('../config/database');
 const { authenticateToken, authorize } = require('../middleware/auth');
 const mailService = require('../services/mailService');
@@ -34,11 +34,10 @@ const ensureContactSettings = () => {
 };
 
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-const contactSubmissionLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
+const contactSubmissionLimiter = createRateLimiter({
+  scope: 'contact',
+  capacity: rateLimitSetting('RATE_LIMIT_CONTACT_BURST', 3, 1, 10000),
+  refillMs: rateLimitSetting('RATE_LIMIT_CONTACT_REFILL_MS', 180000, 100, 3600000),
   message: { success: false, message: 'Too many messages. Please try again later.' },
 });
 

@@ -36,44 +36,62 @@ const branchRoutes = require('./routes/branchRoutes.js');
 const fulfillmentRoutes = require('./routes/fulfillmentRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const { errorHandler, notFound } = require('./middleware/errorHandler.js');
-const { createRateLimiter } = require('./middleware/rateLimitMiddleware.js');
+const { createRateLimiter, isAuthPath, isSessionAuthPath, getGeneralRateLimitKey, rateLimitSetting } = require('./middleware/rateLimitMiddleware.js');
+const { getRedisClient, closeRedis } = require('./config/redis');
 
 const app = express();
 app.disable('x-powered-by');
 app.use(require('./middleware/securityHeaders').securityHeaders);
 app.use(require('./services/auditRequestContext').auditRequestContext);
 
-// Configure `trust proxy` when running behind a reverse proxy (e.g. Render, Heroku).
-// If `TRUST_PROXY` is set it will be used verbatim, otherwise enable in production.
+// Coolify puts its reverse proxy one hop in front of Git-based applications.
+// Keep the explicit override for other deployments; trusting every hop would
+// let clients choose their own rate-limit IP through forwarded headers.
 if (process.env.TRUST_PROXY) {
-  app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? true : process.env.TRUST_PROXY);
+  const proxy = process.env.TRUST_PROXY;
+  app.set('trust proxy', proxy === 'false' ? false : /^\d+$/.test(proxy) ? Number(proxy) : proxy);
 } else if (process.env.NODE_ENV === 'production') {
-  app.set('trust proxy', 1);
+  app.set('trust proxy', process.env.COOLIFY_RESOURCE_UUID ? 1 : 'loopback');
 }
 
+const generalRates = {
+  guestBurst: rateLimitSetting('RATE_LIMIT_GUEST_BURST', 80, 1, 10000),
+  guestRefillMs: rateLimitSetting('RATE_LIMIT_GUEST_REFILL_MS', 500, 100, 3600000),
+  userBurst: rateLimitSetting('RATE_LIMIT_USER_BURST', 120, 1, 10000),
+  userRefillMs: rateLimitSetting('RATE_LIMIT_USER_REFILL_MS', 250, 100, 3600000),
+};
+
 const generalLimiter = createRateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: 300,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    status: 429,
-    error: 'Too many requests, please try again later.',
+  scope: 'general',
+  skip: req => (req.method === 'GET' && req.path === '/health') || isAuthPath(req.path),
+  policy: req => {
+    const key = getGeneralRateLimitKey(req);
+    return key.startsWith('user:')
+      ? { key, capacity: generalRates.userBurst, refillMs: generalRates.userRefillMs }
+      : { key, capacity: generalRates.guestBurst, refillMs: generalRates.guestRefillMs };
   },
+  message: { status: 429, error: 'Too many requests. Please wait briefly and retry.' },
 });
 
 const authLimiter = createRateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
+  scope: 'auth',
+  skip: req => isSessionAuthPath(req.path),
+  capacity: rateLimitSetting('RATE_LIMIT_AUTH_BURST', 8, 1, 10000),
+  refillMs: rateLimitSetting('RATE_LIMIT_AUTH_REFILL_MS', 60000, 100, 3600000),
   message: {
     status: 429,
     error: 'Too many authentication attempts, please try again later.',
   },
 });
 
-app.use(generalLimiter);
+const authSessionLimiter = createRateLimiter({
+  scope: 'auth-session',
+  skip: req => !isSessionAuthPath(req.path),
+  capacity: rateLimitSetting('RATE_LIMIT_SESSION_BURST', 40, 1, 10000),
+  refillMs: rateLimitSetting('RATE_LIMIT_SESSION_REFILL_MS', 1500, 100, 3600000),
+  message: { status: 429, error: 'Too many session requests, please try again later.' },
+});
+
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   process.env.FRONTEND_URL_PROD
@@ -99,9 +117,17 @@ app.use(
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Access-Token', 'X-Refresh-Token', 'Accept', 'X-Requested-With', 'Cache-Control', 'Pragma', 'Expires'],
-    exposedHeaders: ['Set-Cookie', 'X-New-Access-Token'],
+    exposedHeaders: ['Set-Cookie', 'X-New-Access-Token', 'Retry-After', 'RateLimit-Limit', 'RateLimit-Remaining', 'RateLimit-Reset'],
   })
 );
+
+app.use(generalLimiter);
+app.use('/auth', authSessionLimiter, authLimiter);
+app.use('/api/auth', authSessionLimiter, authLimiter);
+
+// Small public forms should not consume the large upload limits used elsewhere.
+app.use(/^\/(?:api\/)?auth(?:\/|$)/, express.json({ limit: '64kb' }), express.urlencoded({ limit: '64kb', extended: true }));
+app.use('/api/contact', express.json({ limit: '16kb' }), express.urlencoded({ limit: '16kb', extended: true }));
 
 // Five 5 MB images encoded as JSON require up to 36 MB on these customer routes.
 app.use(/^\/api\/orders\/(?:[^/]+\/refund-request|refund-requests\/[^/]+\/return-evidence)$/, express.json({ limit: '36mb' }));
@@ -119,8 +145,8 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.use('/auth', authLimiter, authRoutes);
-app.use('/api/auth', authLimiter, authRoutes);
+app.use('/auth', authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/guitars', guitarRoutes);
@@ -160,6 +186,7 @@ const PORT = process.env.PORT || 5000;
 let server;
 
 async function startServer() {
+  getRedisClient();
   await connectDB();
 
   server = http.createServer(app);
@@ -186,7 +213,7 @@ async function startServer() {
   server.on('close', () => clearInterval(noShowTimer));
   void sweepNoShows();
 
-  server.listen(PORT, async () => {
+  server.listen(PORT, process.env.HOST || (process.env.NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0'), async () => {
     console.log(`Backend Running`);
     console.log(`Port: ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV}`);
@@ -216,6 +243,7 @@ process.on('SIGTERM', () => {
   }
 
   server.close(() => {
+    closeRedis();
     console.log('Server closed');
     process.exit(0);
   });
