@@ -601,6 +601,27 @@
   color: #f87171 !important;
 }
 
+.purch-action-btn--refund {
+  border: 1px solid currentColor;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  transition: background 150ms ease, box-shadow 150ms ease;
+}
+
+.purch-action-btn--refund:hover {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.purch-action-btn--refund:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
+.purch-action-btn--refund:active {
+  background: rgba(255, 255, 255, 0.18);
+}
+
 @media (max-width: 767px) {
   /* Too narrow to keep tabs and sort on one line: let the sort control drop
      below the tab strip instead of squeezing it off screen. */

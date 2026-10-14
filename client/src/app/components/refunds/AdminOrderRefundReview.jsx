@@ -8,6 +8,9 @@ import { formatPaymentMethod } from '../../utils/paymentMethodUtils'
 import { adminRefundTextError, REFUND_MESSAGE_PRESETS } from '../../utils/refundWorkflow'
 import { useBranchSettings } from '../../hooks/useBranchSettings'
 import ImageZoomModal from '../../pages/admin/components/shared/ImageZoomModal'
+import AdminRefundSteps from './AdminRefundSteps'
+import DispatchPhotoGallery from '../DispatchPhotoGallery'
+import { RefundRequestItems, RefundRequestPhotos } from './RefundRequestContents'
 import { CheckCircle, XCircle, Truck, Clock, Search, PackageCheck } from 'lucide-react'
 
 const actions = {
@@ -49,6 +52,10 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
   const files = refund.private_files || []
   const payment = refund.payment
   const paymentProof = payment?.proof_url || payment?.payment_proof_url || payment?.proof_image_url
+  const actionTitle = inspect ? 'Inspect and decide' : review ? noReturnRecorded ? 'Refund decision' : 'Return decision'
+    : next.includes('item_received') ? 'Receive returned item'
+    : refund.status === 'item_received' ? 'Begin inspection' : refund.status === 'approved' ? 'Begin refund processing'
+    : refund.status === 'processing' ? 'Record refund payment' : refund.status === 'refund_sent' ? 'Confirm refund payment' : 'Final outcome'
   function validate(status) {
     const result = {}
     if (status === 'return_required') { const error=adminRefundTextError(instructions,'Return instructions'); if(error) result.returnInstructions=error }
@@ -112,7 +119,12 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
     } catch(err){setError(err.message)} finally{lock.current=false;setBusy(false)}
   }
   return <section aria-label="Admin return and refund review" className="space-y-5 rounded-xl border border-[var(--border)] p-4">
-    <CustomerRefundProgress refund={refund} showNextStep={false} />
+    <details className="text-sm text-[var(--text-muted)]">
+      <summary className="cursor-pointer">View return and refund progress</summary>
+      <div className="mt-3"><CustomerRefundProgress refund={refund} showNextStep={false} /></div>
+    </details>
+    <AdminRefundSteps actionTitle={actionTitle} status={refund.status} disabled={busy || reading}>
+    {<>
     <h3 className="font-semibold text-[var(--text-light)]">Original order and payment</h3>
     <dl className="grid grid-cols-1 gap-3 text-sm text-[var(--text-muted)] sm:grid-cols-2">
       <div><dt>Customer</dt><dd>{refund.first_name} {refund.last_name}</dd></div>
@@ -126,17 +138,25 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
       </>}
       {refund.approved_amount != null && <div><dt>Approved refund amount</dt><dd>{formatCurrency(refund.approved_amount)}</dd></div>}
     </dl>
+    <RefundRequestItems refund={refund} />
     <p className="text-sm text-[var(--text-muted)]">Refund reason: {refund.reason}</p>
     {refund.customer_notes && <p className="whitespace-pre-wrap break-words text-sm text-[var(--text-muted)]">Customer explanation: {refund.customer_notes}</p>}
     {refund.can_manage && <div className="space-y-2">
       <button type="button" onClick={()=>setShowOriginalProof(true)} className="text-sm text-[var(--gold-primary)] underline">View original payment proof</button>
       {showOriginalProof && <ImageZoomModal src={paymentProof} alt="Original customer payment proof" isOpen onClose={()=>setShowOriginalProof(false)} />}
     </div>}
+    </>}
+    {<>
+    {refund.order_id && <DispatchPhotoGallery orderId={refund.order_id} allowAdd={refund.can_manage} />}
+    <RefundRequestPhotos images={refund.images} />
     {refund.can_manage && files.filter(kind => /^(evidence|return)_?[0-4]$/.test(kind)).length > 0 && <details open className="text-sm text-[var(--text-muted)]">
       <summary>Supporting and return evidence</summary>
       <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">{files.filter(kind => /^(evidence|return)_?[0-4]$/.test(kind)).map(kind =>
-        <PrivateRefundFile key={kind} refundId={refund.refund_request_id} kind={kind} label={`${kind.startsWith('return') ? 'Return evidence' : 'Supporting evidence'} ${Number(kind.match(/[0-4]$/)[0]) + 1}`} />)}</div>
+        <PrivateRefundFile key={kind} refundId={refund.refund_request_id} kind={kind} label={`${kind.startsWith('return') ? 'Return evidence' : 'Customer Received Photo'} ${Number(kind.match(/[0-4]$/)[0]) + 1}`} />)}</div>
     </details>}
+    {!files.some(kind => /^(evidence|return)_?[0-4]$/.test(kind)) && <p className="text-sm text-[var(--text-muted)]">No supporting or return evidence is attached to this request.</p>}
+    </>}
+    {<>
     <div className="space-y-2 text-sm text-[var(--text-muted)]">
       {!refundApproved && refund.admin_notes && <p className="whitespace-pre-wrap break-words">Admin remarks: {refund.admin_notes}</p>}
       {refund.return_instructions && <p className="whitespace-pre-wrap break-words">Return instructions: {refund.return_instructions}</p>}
@@ -215,5 +235,8 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
       })}</div>
     </fieldset>}
     {error && <p role="alert" style={{ color: '#ef4444' }} className="text-sm text-red-400">{error}</p>}
+    {next.length === 0 && <p className="text-sm text-[var(--text-muted)]">No further refund actions are available for this request.</p>}
+    </>}
+    </AdminRefundSteps>
   </section>
 }

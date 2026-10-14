@@ -166,7 +166,7 @@ async function update(id, status, user, data = {}) {
 async function getFile(id, kind, user) {
   await ensureReady();
   if (!['qr','proof','inspection'].includes(kind) && !/^(evidence|return)_?[0-4]$/.test(kind)) throw new AppError('File not found', 404);
-  const result = await pool.query(`SELECT f.mime_type,f.file_data,r.user_id,r.status FROM refund_private_files f
+  const result = await pool.query(`SELECT f.mime_type,f.file_data,f.created_at,r.user_id,r.status FROM refund_private_files f
     JOIN refund_requests r USING(refund_request_id) WHERE f.refund_request_id=$1 AND f.kind=$2 AND r.deleted_at IS NULL`, [id,kind]);
   const file = result.rows[0];
   if (!file) throw new AppError('File not found', 404);

@@ -12,7 +12,6 @@ export default function DispatchPhotoGallery({orderId,allowAdd=false,customerVie
   const [photos,setPhotos]=useState([]),[error,setError]=useState(''),[loading,setLoading]=useState(true),[image,setImage]=useState(null),[retry,setRetry]=useState(0)
   const [add,setAdd]=useState(false),[entries,setEntries]=useState([]),[reason,setReason]=useState(''),[ready,setReady]=useState(false),[busy,setBusy]=useState(false)
   useEffect(()=>{let active=true;setLoading(true);setError('');adminApi.getDispatchPhotos(orderId).then(result=>{if(active)setPhotos(result.data.photos)}).catch(err=>{if(active)setError(err.message)}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[orderId,retry])
-  async function open(photo){setError('');try{const result=await adminApi.getDispatchPhoto(photo.photo_id);setImage({src:result.data.image,alt:`Dispatch photo of ${photo.item_name}`})}catch(err){setError(err.message)}}
   async function save(){if(busy)return;setBusy(true);setError('');try{await adminApi.appendDispatchPhotos(orderId,{itemPhotos:entries,reason});setAdd(false);setEntries([]);setReason('');setRetry(value=>value+1)}catch(err){setError(err.message)}finally{setBusy(false)}}
   return <section aria-label="Pre-shipping product evidence" className="space-y-3 rounded-xl border border-[var(--border)] p-4">
     <h3 className="font-semibold text-[var(--text-light)]">Pre-shipping photos</h3>
@@ -21,10 +20,9 @@ export default function DispatchPhotoGallery({orderId,allowAdd=false,customerVie
     {!loading && !photos.length && !error && <p className="text-sm text-[var(--text-muted)]">No dispatch photos were recorded. Historical shipments may predate this requirement.</p>}
     <div className="grid gap-3 sm:grid-cols-2">{photos.map(photo=><div key={photo.photo_id} className="space-y-1 rounded-lg border border-[var(--border)] p-3 text-sm text-[var(--text-muted)]">
       <p>{photo.item_name} — quantity {photo.quantity}</p><p>{photo.phase==='pre_dispatch'?'Original dispatch record':'Later supplemental evidence'}</p>
-      <p>{new Date(photo.created_at).toLocaleString('en-PH')}{!customerView && ` · ${photo.uploader_name?.trim() || 'Authorized uploader'}`}</p>
+      <p>{new Date(photo.created_at).toLocaleString('en-PH', {timeZone:'Asia/Manila'})}{!customerView && ` · ${photo.uploader_name?.trim() || 'Authorized uploader'}`}</p>
       {!customerView && photo.addition_reason && <p className="whitespace-pre-wrap break-words">Addition reason: {photo.addition_reason}</p>}
       <Thumbnail photo={photo} onOpen={setImage} />
-      <button type="button" onClick={()=>open(photo)} className="text-[var(--gold-primary)] underline">View dispatch photo of {photo.item_name}</button>
     </div>)}</div>
     {allowAdd && !customerView && photos.length>0 && <button type="button" disabled={busy} onClick={()=>setAdd(value=>!value)} className="text-sm text-[var(--gold-primary)] underline">Add supplemental photos</button>}
     {add && !customerView && <div className="space-y-3"><DispatchPhotoInput orderId={orderId} value={entries} onChange={setEntries} onReadyChange={setReady} disabled={busy} optional />

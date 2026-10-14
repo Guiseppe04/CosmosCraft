@@ -239,9 +239,10 @@ export function AddressForm({
           onChange={value => handleChange('barangay', value)} options={locationData.barangays}
           placeholder={formData.city ? 'Select Barangay' : 'Select a city first'} disabled={!formData.city} error={errors.barangay} />
       </div>
-      {!isNcr && formData.region && !formData.province && locationData.cities.length > 0 && (
+      {!isNcr && formData.region && !formData.province && !formData.independentCity && locationData.cities.length > 0 && (
         <p className="text-xs text-[var(--text-muted)]">Select a province, or choose an independent city directly.</p>
       )}
+      {!isNcr && formData.independentCity && !formData.city && <p className="text-xs text-[var(--text-muted)]">Select an independent city below the province selection.</p>}
 
       <div>
         <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Postal Code <span className="text-red-400" style={{ color: '#f87171' }}>*</span></label>

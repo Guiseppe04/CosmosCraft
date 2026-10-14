@@ -8,9 +8,11 @@ import { adminRefundTextError, REFUND_MESSAGE_PRESETS, refundMethodLabel } from 
 import { CheckCircle, Clock, XCircle } from 'lucide-react'
 import AdminOrderRefundReview from './AdminOrderRefundReview'
 import DispatchPhotoGallery from '../DispatchPhotoGallery'
+import AdminRefundSteps from './AdminRefundSteps'
+import { RefundRequestItems, RefundRequestPhotos } from './RefundRequestContents'
 
 export default function AdminRefundWorkflow(props) {
-  return <>{props.refund.order_id && <DispatchPhotoGallery orderId={props.refund.order_id} allowAdd={props.refund.can_manage} />}{props.refund.original_payment_method ? <AdminOrderRefundReview {...props} /> : <LegacyAdminRefundWorkflow {...props} />}</>
+  return props.refund.original_payment_method ? <AdminOrderRefundReview {...props} /> : <LegacyAdminRefundWorkflow {...props} />
 }
 
 function LegacyAdminRefundWorkflow({ refund, onUpdated }) {
@@ -40,6 +42,8 @@ function LegacyAdminRefundWorkflow({ refund, onUpdated }) {
   }
   return <section aria-label="Admin refund review" className="space-y-4 rounded-xl border border-[var(--border)] p-4">
     <RefundProgress status={refund.status} />
+    <AdminRefundSteps status={refund.status} disabled={busy || reading} actionTitle={refund.status === 'processing' ? 'Record refund payment' : refund.status === 'refund_sent' ? 'Confirm refund payment' : next.length ? 'Refund decision' : 'Final outcome'}>
+    {<>
     <h3 className="font-semibold text-[var(--text-light)]">Customer refund request information</h3>
     <dl className="grid grid-cols-1 gap-3 text-sm text-[var(--text-muted)] sm:grid-cols-2">
       <div><dt>Customer</dt><dd>{refund.first_name} {refund.last_name}</dd></div>
@@ -55,8 +59,16 @@ function LegacyAdminRefundWorkflow({ refund, onUpdated }) {
         {destination.details && <div><dt>Other payment details</dt><dd className="whitespace-pre-wrap break-words">{destination.details}</dd></div>}
       </>}
     </dl>
-    {destination && refund.has_qr && <PrivateRefundFile refundId={refund.refund_request_id} kind="qr" label="Customer E-Wallet QR code" />}
+    <RefundRequestItems refund={refund} />
     {!destination && <p className="text-sm text-[var(--text-muted)]">Only authorized admins can view payment details and manage this refund.</p>}
+    </>}
+    {<>
+    {refund.order_id && <DispatchPhotoGallery orderId={refund.order_id} allowAdd={refund.can_manage} />}
+    <RefundRequestPhotos images={refund.images} />
+    {destination && refund.has_qr && <PrivateRefundFile refundId={refund.refund_request_id} kind="qr" label="Customer E-Wallet QR code" />}
+    {!refund.has_qr && <p className="text-sm text-[var(--text-muted)]">No refund destination QR image is attached.</p>}
+    </>}
+    {<>
     {refund.has_proof && <div className="space-y-3 border-t border-[var(--border)] pt-4">
       <h3 className="font-semibold text-[var(--text-light)]">Admin payment confirmation</h3>
       <p className="text-sm text-[var(--text-muted)]">{formatCurrency(refund.refunded_amount)} · {refundMethodLabel(refund.preferred_method)} · {new Date(refund.refund_sent_at).toLocaleString('en-PH')}</p>
@@ -92,5 +104,8 @@ function LegacyAdminRefundWorkflow({ refund, onUpdated }) {
         {busy ? 'Updating…' : labels[status]}</button>)}</div>
     </fieldset>}
     {error && !error.startsWith('Rejection reason') && <p role="alert" style={{ color: '#ef4444' }} className="text-sm text-red-400">{error}</p>}
+    {next.length === 0 && <p className="text-sm text-[var(--text-muted)]">No further refund actions are available for this request.</p>}
+    </>}
+    </AdminRefundSteps>
   </section>
 }
