@@ -439,7 +439,10 @@ export const adminApi = {
     return request(`/api/audit-logs${qs ? '?' + qs : ''}`, options)
   },
   getAuditLog: (id, options = {}) => request(`/api/audit-logs/${id}`, options),
-  getAuditActions: () => request('/api/audit-logs/actions'),
+  getAuditActions: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/audit-logs/actions${qs ? '?' + qs : ''}`)
+  },
   getAuditSummary: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/audit-logs/summary${qs ? '?' + qs : ''}`)

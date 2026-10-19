@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
-  History, Eye,
+  History, Eye, Search, Filter, ChevronDown,
   X, ArrowRight, Briefcase, ShoppingBag, CreditCard, Truck, Wallet,
   Package, Layers, Wrench, Shield, CalendarOff,
 } from 'lucide-react'
@@ -237,11 +237,39 @@ export function AuditLogsSection({ showToast }) {
   const [selectedLog, setSelectedLog] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false)
+  const [selectedPreset, setSelectedPreset] = useState(0)
+  const filterDropdownRef = useRef(null)
+  useEffect(() => {
+    if (!filterMenuOpen) return
+    const dismiss = event => {
+      if (!filterDropdownRef.current?.contains(event.target)) setFilterMenuOpen(false)
+    }
+    const escape = event => {
+      if (event.key === 'Escape') {
+        setFilterMenuOpen(false)
+        filterDropdownRef.current?.querySelector('button')?.focus()
+      }
+    }
+    document.addEventListener('mousedown', dismiss)
+    document.addEventListener('focusin', dismiss)
+    document.addEventListener('keydown', escape)
+    return () => {
+      document.removeEventListener('mousedown', dismiss)
+      document.removeEventListener('focusin', dismiss)
+      document.removeEventListener('keydown', escape)
+    }
+  }, [filterMenuOpen])
   const request = useRef(null)
   const detailRequest = useRef(null)
-  const actionsRequest = useRef(null)
-  const update = (field, value) => setDraft(prev => ({ ...prev, [field]: value }))
+  const actionsRequest = useRef(new Map())
+  const update = (field, value) => {
+    if (field === 'entity_type') setActions([])
+    if (field === 'start_date' || field === 'end_date') setSelectedPreset(null)
+    setDraft(prev => ({ ...prev, [field]: value, ...(field === 'entity_type' ? { action: 'all' } : {}) }))
+  }
   const datePreset = days => {
+    setSelectedPreset(days)
     const now = new Date()
     const calendarDate = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
     setDraft(prev => ({ ...prev,
@@ -251,10 +279,16 @@ export function AuditLogsSection({ showToast }) {
   }
   useEffect(() => {
     let active = true
-    actionsRequest.current ||= adminApi.getAuditActions()
-    actionsRequest.current.then(res => { if (active) setActions(res.data || []) }).catch(() => {})
+    const module = draft.entity_type
+    setActions([])
+    if (!actionsRequest.current.has(module)) {
+      actionsRequest.current.set(module, adminApi.getAuditActions(module === 'all' ? {} : { entity_type: module }))
+    }
+    actionsRequest.current.get(module).then(res => { if (active) setActions(res.data || []) }).catch(() => {
+      actionsRequest.current.delete(module)
+    })
     return () => { active = false }
-  }, [])
+  }, [draft.entity_type])
   useEffect(() => () => { request.current?.abort(); detailRequest.current?.abort() }, [])
   const closeDetails = () => { detailRequest.current?.abort(); setSelectedLog(null) }
   useEffect(() => {
@@ -293,6 +327,7 @@ export function AuditLogsSection({ showToast }) {
     closeDetails(); setApplied(filters); load(filters)
   }
   const reset = () => {
+    setSelectedPreset(0)
     request.current?.abort(); closeDetails(); setDraft(empty); setApplied(null)
     setLogs([]); setTotal(0); setPage(1); setLoading(false); setError('')
   }
@@ -310,26 +345,52 @@ export function AuditLogsSection({ showToast }) {
   const control = 'mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-2.5 py-2 text-sm text-[var(--text-light)] focus:outline-none focus:border-[var(--gold-primary)]'
   const button = 'rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-light)] hover:border-[var(--gold-primary)] disabled:opacity-40'
   const pages = Math.max(1, Math.ceil(total / size))
+  const filterControl = 'mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-2.5 py-2 text-sm text-black focus:outline-none focus:border-[var(--gold-primary)]'
+  const filterCount = [draft.entity_type !== 'all', draft.action !== 'all', !!draft.search.trim(), !!(draft.start_date || draft.end_date)].filter(Boolean).length
   return <div className="space-y-6">
     <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-4">
       <h2 className="text-base font-bold text-[var(--text-light)]">Audit Logs</h2>
       <p className="text-xs text-[var(--text-muted)] mt-1">A read-only record of who changed each record and when.</p>
     </div>
-    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
+    <div className={`relative bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl shadow-sm ${filterMenuOpen ? 'z-30 overflow-visible' : 'overflow-hidden'}`}>
       <form onSubmit={submit} className="p-4 space-y-4 border-b border-[var(--border)]">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <label className="text-xs text-[var(--text-light)]">Module<select aria-label="Module" className={control} value={draft.entity_type} onChange={e => update('entity_type', e.target.value)}>{MODULE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-          <label className="text-xs text-[var(--text-light)]">Action<select aria-label="Action" className={control} value={draft.action} onChange={e => update('action', e.target.value)}><option value="all">All Actions</option>{actions.map(action => <option key={action} value={action}>{formatAction(action)}</option>)}</select></label>
-          <label className="text-xs text-[var(--text-light)]">Search<input type="search" aria-label="Search audit history" className={control} maxLength={200} value={draft.search} onChange={e => update('search', e.target.value)} placeholder="Details, reference, entity or actor" /></label>
-          <label className="text-xs text-[var(--text-light)]">Start date<input type="date" className={control} value={draft.start_date} onChange={e => update('start_date', e.target.value)} /></label>
-          <label className="text-xs text-[var(--text-light)]">End date<input type="date" className={control} value={draft.end_date} onChange={e => update('end_date', e.target.value)} /></label>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <span className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider">Audit Records</span>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="relative flex-1 sm:flex-none">
+              <Search aria-hidden="true" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+              <input type="search" aria-label="Search audit history" className="bg-white border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm text-black placeholder:text-gray-500 focus:border-[var(--gold-primary)] focus:outline-none w-full sm:w-60 shadow-sm" maxLength={200} value={draft.search} onChange={e => update('search', e.target.value)} placeholder="Search audit history..." />
+            </div>
+            <div className="relative" ref={filterDropdownRef}>
+              <button type="button" aria-label="Filters" aria-expanded={filterMenuOpen} aria-controls="audit-filter-panel" onClick={() => setFilterMenuOpen(open => !open)} className="inline-flex h-9 sm:h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 text-sm font-semibold text-black transition-colors hover:border-[var(--gold-primary)] shadow-sm">
+                <Filter aria-hidden="true" className="h-4 w-4" />
+                <span>Filters</span>
+                {filterCount > 0 && <span className="px-1.5 rounded-full text-xs font-bold bg-[var(--gold-primary)] text-black">{filterCount}</span>}
+                <ChevronDown aria-hidden="true" className="h-4 w-4" />
+              </button>
+              {filterMenuOpen && <div id="audit-filter-panel" className="absolute right-0 top-full z-50 mt-2 w-[min(92vw,22rem)] overflow-y-auto max-h-[75vh] rounded-xl border border-gray-300 bg-white shadow-2xl p-4 text-black space-y-3">
+                <label className="text-xs font-semibold text-black block">Module<select aria-label="Module" className={filterControl} value={draft.entity_type} onChange={e => update('entity_type', e.target.value)}>{MODULE_OPTIONS.map(option => <option key={option.value} value={option.value} className="text-black bg-white">{option.label}</option>)}</select></label>
+                <label className="text-xs font-semibold text-black block">Action<select aria-label="Action" className={filterControl} value={draft.action} onChange={e => update('action', e.target.value)}><option value="all" className="text-black bg-white">All Actions</option>{actions.map(action => <option key={action} value={action} className="text-black bg-white">{formatAction(action)}</option>)}</select></label>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-black border-t border-gray-200 pt-3">Filters</p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <label className="text-xs font-semibold text-black block">From<input type="date" aria-label="Start date" className={filterControl} value={draft.start_date} max={draft.end_date || undefined} onChange={e => update('start_date', e.target.value)} /></label>
+                  <label className="text-xs font-semibold text-black block">To<input type="date" aria-label="End date" className={filterControl} value={draft.end_date} min={draft.start_date || undefined} onChange={e => update('end_date', e.target.value)} /></label>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-black mb-1.5">Quick Date Period</p>
+                  <div className="grid grid-cols-2 gap-1.5">{[['All Time', 0], ['Today', 1], ['Last 7 Days', 7], ['Last 30 Days', 30]].map(([label, days]) => <button key={label} type="button" aria-pressed={selectedPreset === days} className={`px-2 py-1 rounded text-xs font-medium text-center border transition-colors ${selectedPreset === days ? 'bg-[var(--gold-primary)] text-black border-[var(--gold-primary)] font-bold' : 'bg-gray-100 text-black border-gray-300 hover:bg-gray-200'}`} onClick={() => datePreset(days)}>{label}</button>)}</div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3">
+                  <button type="submit" className="rounded-lg border border-[var(--gold-primary)] bg-[var(--gold-primary)] px-3 py-2 text-xs font-bold text-black transition-colors hover:opacity-90 disabled:opacity-40" disabled={loading}>Apply Filters</button>
+                  <button type="button" className="rounded-lg border border-gray-300 bg-gray-100 px-3 py-2 text-xs font-bold text-black transition-colors hover:bg-gray-200" onClick={reset}>Reset Filters</button>
+                  <span className="text-xs text-gray-500">Edit filters, then apply to update results. Dates use your local time.</span>
+                </div>
+              </div>}
+            </div>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">{[['All Time', 0], ['Today', 1], ['Last 7 Days', 7], ['Last 30 Days', 30]].map(([label, days]) => <button key={label} type="button" className={button} onClick={() => datePreset(days)}>{label}</button>)}</div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button type="submit" className={button} disabled={loading}>Apply Filters</button>
-          <button type="button" className={button} onClick={reset}>Reset Filters</button>
-          <span className="text-xs text-[var(--text-muted)]">Edit filters, then apply to update results. Dates use your local time.</span>
-        </div>
+
       </form>
       {error && <div role="alert" className="p-4 text-sm text-red-400">{error}</div>}
       {!applied ? <p className="p-12 text-center text-sm text-[var(--text-muted)]">Select your filters to view audit records.</p> : loading ? <SectionLoader label="Loading audit logs..." className="py-20" /> : !error && <>

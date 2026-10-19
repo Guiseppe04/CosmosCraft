@@ -21,7 +21,7 @@ exports.getAuditLogs = async (req, res, next) => {
 // that can actually return results.
 exports.getAuditActions = async (req, res, next) => {
   try {
-    const actions = await auditService.getAuditActions();
+    const actions = await auditService.getAuditActions(req.query);
     res.json({ status: 'success', data: actions.map((row) => row.action) });
   } catch (err) { next(err); }
 };

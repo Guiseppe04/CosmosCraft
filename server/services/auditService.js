@@ -143,9 +143,11 @@ async function getAuditLogsByUser(userId, filters = {}) {
  * Distinct actions that actually exist in the trail, so the admin filter never
  * offers a value that returns nothing.
  */
-async function getAuditActions() {
+async function getAuditActions(filters = {}) {
+  const { entity_type } = validateAuditFilters(filters);
   const result = await pool.query(
-    `SELECT DISTINCT action FROM audit_logs ORDER BY action`
+    `SELECT DISTINCT action FROM audit_logs${entity_type ? ' WHERE entity_type = $1' : ''} ORDER BY action`,
+    entity_type ? [entity_type] : []
   );
   return result.rows;
 }

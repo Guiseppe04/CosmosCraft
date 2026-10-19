@@ -43,6 +43,20 @@ test('audit routes retain authentication and staff/admin authorization with inpu
   }
 });
 
+test('action options are distinct and scoped to the selected module', async t => {
+  const db = new PGlite();
+  t.mock.method(pool, 'query', (sql, values) => db.query(sql, values));
+  try {
+    await db.exec(`CREATE TABLE audit_logs(entity_type text, action text);
+      INSERT INTO audit_logs VALUES ('order', 'UPDATE'), ('order', 'UPDATE'), ('payment', 'VERIFY');`);
+    assert.deepEqual(await service.getAuditActions(), [{ action: 'UPDATE' }, { action: 'VERIFY' }]);
+    assert.deepEqual(await service.getAuditActions({ entity_type: 'order' }), [{ action: 'UPDATE' }]);
+    assert.deepEqual(await service.getAuditActions({ entity_type: 'payment' }), [{ action: 'VERIFY' }]);
+    assert.deepEqual(await service.getAuditActions({ entity_type: 'inventory' }), []);
+    await assert.rejects(service.getAuditActions({ entity_type: "order'; DROP TABLE audit_logs" }), error => error.statusCode === 400);
+  } finally { await db.close(); }
+});
+
 test('invalid filter inputs fail before SQL execution', () => {
   for (const filters of [{ limit: 51 }, { offset: -1 }, { limit: '25junk' },
     { search: ['one', 'two'] }, { start_date: 'invalid' },
