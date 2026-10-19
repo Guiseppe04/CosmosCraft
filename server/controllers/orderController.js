@@ -331,7 +331,7 @@ exports.getRefundFile = asyncHandler(async (req, res) => {
   const file = await require('../services/orderRefundWorkflow').getFile(req.params.refundId, req.params.kind, req.user)
   res.set('Cache-Control', 'private, no-store')
   res.set('X-Content-Type-Options', 'nosniff')
-  res.status(200).json({ status: 'success', data: { image: `data:${file.mime_type};base64,${Buffer.from(file.file_data).toString('base64')}` } })
+  res.status(200).json({ status: 'success', data: { image: `data:${file.mime_type};base64,${Buffer.from(file.file_data).toString('base64')}`, created_at: file.created_at } })
 })
 
 exports.confirmRefund = asyncHandler(async (req, res) => {

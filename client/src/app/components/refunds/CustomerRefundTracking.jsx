@@ -8,6 +8,9 @@ import PrivateRefundFile from './PrivateRefundFile'
 import { adminApi } from '../../utils/adminApi'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { refundMethodLabel, refundStatusLabel } from '../../utils/refundWorkflow'
+import { Truck, Camera, Send, ClipboardList } from 'lucide-react'
+
+const returnFieldClass = 'mt-2 block w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-light)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/30 focus:border-[var(--gold-primary)]'
 
 export default function CustomerRefundTracking({ order, onRefresh }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [success, setSuccess] = useState('')
@@ -49,7 +52,7 @@ export default function CustomerRefundTracking({ order, onRefresh }) {
       {details.approved_amount != null && <p>Approved amount: {formatCurrency(details.approved_amount)}</p>}
       {details.admin_notes && <p className="whitespace-pre-wrap break-words">Admin remarks: {details.admin_notes}</p>}
       {details.rejection_reason && <p className="text-red-400 whitespace-pre-wrap break-words">{details.rejection_reason}</p>}
-      {details.return_instructions && <p className="whitespace-pre-wrap break-words">Return instructions: {details.return_instructions}</p>}
+      {details.return_instructions && <div className="rounded-lg border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/5 p-3"><p className="mb-1 flex items-center gap-2 font-semibold text-[var(--text-light)]"><ClipboardList className="h-4 w-4" aria-hidden="true" />Return instructions</p><p className="whitespace-pre-wrap break-words">{details.return_instructions}</p></div>}
       {details.no_return_reason && <p className="whitespace-pre-wrap break-words">Return Not Required: {details.no_return_reason}</p>}
       {details.inspection_notes && <p className="whitespace-pre-wrap break-words">Inspection notes: {details.inspection_notes}</p>}
       {details.return_reference && <p className="break-all">Return reference: {details.return_reference}</p>}
@@ -62,18 +65,32 @@ export default function CustomerRefundTracking({ order, onRefresh }) {
         <figcaption>{file.kind.startsWith('return') ? 'Return evidence' : ''}</figcaption>
       </figure>)}</div>
     </details>}
-    {details?.return_status === 'return_pending' && details.return_instructions?.trim() && ['return_required','approved','return_pending'].includes(details.status) && <fieldset disabled={busy || reading} className="space-y-3 rounded-lg border border-[var(--border)] p-3">
-      <legend className="text-sm text-[var(--text-light)]">Submit item return</legend>
-      <label className="block text-sm">Return method <span style={{ color: '#ef4444' }} className="text-red-400">*</span>
-        <select value={method} onChange={e => setMethod(e.target.value)} className="mt-1 w-full rounded-lg bg-[var(--bg-primary)] p-2"><option value="courier">Courier</option><option value="pickup">Pickup / drop-off</option></select>
-      </label>
-      <label className="block text-sm">Shipping / receipt reference {method === 'courier' && <span style={{ color: '#ef4444' }} className="text-red-400">*</span>}
-        <input value={reference} maxLength={255} onChange={e => setReference(e.target.value)} className="mt-1 w-full rounded-lg bg-[var(--bg-primary)] p-2" />
-      </label>
-      <label className="block text-sm">Return notes<textarea value={notes} maxLength={1000} onChange={e => setNotes(e.target.value)} className="mt-1 w-full rounded-lg bg-[var(--bg-primary)] p-2" /></label>
-      <CustomerRefundImages images={images} onChange={setImages} disabled={busy || reading} onBusyChange={setReading} />
-      <p className="text-xs text-[var(--text-muted)]">Include the packaged item and shipping receipt. Follow the provided return instructions.</p>
-      <button type="button" disabled={busy || reading} onClick={submitReturn} className="rounded-lg bg-[var(--gold-primary)] px-4 py-2 text-sm font-semibold text-black disabled:opacity-50">{busy ? 'Submitting...' : 'Submit return evidence'}</button>
+    {details?.return_status === 'return_pending' && details.return_instructions?.trim() && ['return_required','approved','return_pending'].includes(details.status) && <fieldset disabled={busy || reading} className="min-w-0 space-y-4 rounded-xl border border-[var(--border)] p-4">
+      <legend className="px-2 text-base font-semibold text-[var(--text-light)]">Submit item return</legend>
+      <p className="text-sm text-[var(--text-muted)]">Follow the return instructions above, then provide your return details and photos for the store to review. Fields marked <span style={{ color: '#ef4444' }}>*</span> are required.</p>
+      <div className="space-y-3">
+        <h4 className="flex items-center gap-2 text-sm font-semibold text-[var(--text-light)]"><Truck className="h-4 w-4 text-[var(--gold-primary)]" aria-hidden="true" />1. Return details</h4>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="block text-sm text-[var(--text-light)]">Return method <span style={{ color: '#ef4444' }}>*</span>
+            <select value={method} onChange={e => setMethod(e.target.value)} className={returnFieldClass}><option value="courier">Courier</option><option value="pickup">Pickup / drop-off</option></select>
+          </label>
+          <label className="block text-sm text-[var(--text-light)]">Shipping / receipt reference {method === 'courier' ? <span style={{ color: '#ef4444' }}>*</span> : <span className="text-xs text-[var(--text-muted)]">(optional)</span>}
+            <input value={reference} maxLength={255} onChange={e => setReference(e.target.value)} placeholder={method === 'courier' ? 'Enter tracking or receipt number' : 'Enter a receipt number, if available'} className={returnFieldClass} />
+          </label>
+        </div>
+        <p className="text-xs text-[var(--text-muted)]">{method === 'courier' ? 'Use the tracking number or reference shown on your courier receipt.' : 'For pickup or drop-off, provide a receipt reference if you have one.'}</p>
+        <label className="block text-sm text-[var(--text-light)]">Return notes <span className="text-xs text-[var(--text-muted)]">(optional)</span><textarea value={notes} maxLength={1000} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Add details that may help the store review your return." className={returnFieldClass} /></label>
+      </div>
+      <div className="space-y-3 border-t border-[var(--border)] pt-4">
+        <h4 className="flex items-center gap-2 text-sm font-semibold text-[var(--text-light)]"><Camera className="h-4 w-4 text-[var(--gold-primary)]" aria-hidden="true" />2. Attach return photos</h4>
+        <p className="text-xs text-[var(--text-muted)]">Include the packaged item and shipping receipt. Follow the provided return instructions.</p>
+        <CustomerRefundImages label="Return photos" images={images} onChange={setImages} disabled={busy || reading} onBusyChange={setReading} />
+      </div>
+      <div className="space-y-3 border-t border-[var(--border)] pt-4">
+        <h4 className="flex items-center gap-2 text-sm font-semibold text-[var(--text-light)]"><Send className="h-4 w-4 text-[var(--gold-primary)]" aria-hidden="true" />3. Review and submit</h4>
+        <p className="text-xs text-[var(--text-muted)]">Check your return method, reference and selected photos before submitting.</p>
+        <button type="button" disabled={busy || reading} onClick={submitReturn} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--gold-primary)] px-4 py-3 text-sm font-semibold text-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--gold-primary)] disabled:opacity-50 sm:w-auto"><Send className="h-4 w-4" aria-hidden="true" />{busy ? 'Submitting...' : 'Submit return evidence'}</button>
+      </div>
     </fieldset>}
     {sent && <div className="space-y-3">
       <h4 className="text-sm font-semibold text-[var(--text-light)]">Admin payment confirmation</h4>

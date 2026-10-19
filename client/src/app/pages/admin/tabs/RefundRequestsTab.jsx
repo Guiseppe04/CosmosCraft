@@ -762,7 +762,7 @@ export function RefundRequestsTab({ showToast, user }) {
                   </div>
 
                   </>}
-                  <div>
+                  {selectedRequest.workflow_version !== 2 && <div>
                     <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-3">Refund Items</p>
                     <div className="bg-[var(--bg-primary)]/50 rounded-xl overflow-hidden">
                       <table className="w-full text-sm">
@@ -790,9 +790,8 @@ export function RefundRequestsTab({ showToast, user }) {
                         <span className="text-lg font-bold text-[var(--gold-primary)]">{formatCurrency(getRefundTotal(selectedRequest.items, selectedRequest.amount_requested))}</span>
                       </div>
                     </div>
-                  </div>
-
-                  {selectedRequest.images && selectedRequest.images.length > 0 && (
+                  </div>}
+                  {selectedRequest.workflow_version !== 2 && selectedRequest.images && selectedRequest.images.length > 0 && (
                     <div>
                       <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-3">Proof Photos</p>
                       <div className="flex flex-wrap gap-3">

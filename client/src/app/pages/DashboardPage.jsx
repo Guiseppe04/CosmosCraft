@@ -22,9 +22,8 @@ import { formatCurrency } from '../utils/formatCurrency.js'
 import { ShippingFeeNotice } from '../components/ShippingFeeNotice.jsx'
 import { getFulfillmentProgress, getOrderDisplayTotal } from '../utils/orderDisplay.js'
 import CustomerRefundImages from '../components/refunds/CustomerRefundImages'
-import CustomerRefundTracking from '../components/refunds/CustomerRefundTracking'
+import CustomerRefundTrackingModal from '../components/refunds/CustomerRefundTrackingModal'
 import DispatchPhotoGallery from '../components/DispatchPhotoGallery'
-import CustomerRefundReviewLoader from '../components/refunds/CustomerRefundReviewLoader'
 import { hasPurchaseRefund } from '../utils/refundWorkflow'
 import CustomerProjectTracker from '../components/projects/CustomerProjectTracker.jsx'
 import { AddressForm } from '../components/AddressForm.jsx'
@@ -558,6 +557,7 @@ export function DashboardPage() {
 
   const [myOrders, setMyOrders] = useState(() => dashboardCache.orders || [])
   const [dispatchPhotoOrderId, setDispatchPhotoOrderId] = useState(null)
+  const [refundTrackingOrderId, setRefundTrackingOrderId] = useState(null)
   const [activePurchaseTab, setActivePurchaseTab] = useState('All')
   const [purchaseSort, setPurchaseSort] = useState('created_latest')
   const [purchaseSearch, setPurchaseSearch] = useState('')
@@ -2428,6 +2428,16 @@ export function DashboardPage() {
                         {printingOrderId === order.order_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
                         Print Invoice
                       </button>
+                      {order.has_refund_request && order.refund_request_id && (() => {
+                        const refundConfig = getRefundStatusConfig(order.refund_request_status)
+                        const RefundIcon = refundConfig.icon
+                        return <button type="button" onClick={() => setRefundTrackingOrderId(order.order_id)}
+                          aria-haspopup="dialog" aria-expanded={refundTrackingOrderId === order.order_id} title="View return and refund tracking"
+                          className={`purch-action-btn purch-action-btn--refund ${refundConfig.className}`}>
+                          <RefundIcon className="w-4 h-4" aria-hidden="true" />{refundConfig.label}
+                          <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      })()}
                       {order.status === 'pending' && (
                         <button
                           onClick={() => openCancelOrderModal(order)}
@@ -2468,50 +2478,6 @@ export function DashboardPage() {
                         </button>
                       )}
                     </div>
-                    {(order.status === 'received' || order.status === 'delivered') && order.has_refund_request && (
-                      <div className="mt-3 flex justify-end items-center gap-3 flex-wrap">
-                        {(() => {
-                          const refundConfig = getRefundStatusConfig(order.refund_request_status)
-                          const RefundIcon = refundConfig.icon
-                          return (
-                            <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-semibold ${refundConfig.className}`}>
-                              <RefundIcon className="w-4 h-4" />
-                              {refundConfig.label}
-                            </span>
-                          )
-                        })()}
-                        {['pending', 'pending_payment_verification'].includes(order.refund_request_status) && (
-                          <button
-                            onClick={async () => {
-                              try {
-                                await adminApi.withdrawRefund(order.refund_request_id)
-                                setToastMessage('Refund request withdrawn.')
-                                fetchMyOrders()
-                              } catch (err) {
-                                setToastMessage(`Failed to withdraw refund: ${err.message}`)
-                              }
-                            }}
-                            className="px-4 py-2 border border-slate-500/30 text-slate-400 hover:bg-slate-500/10 transition-colors rounded-lg text-sm font-semibold"
-                          >
-                            Withdraw Refund
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {order.has_refund_request && (order.refund_rejection_reason || order.refund_admin_notes) && (
-                      <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3">
-                        <p className="text-sm font-semibold text-[var(--text-light)]">
-                          {order.refund_request_status === 'rejected' ? 'Refund rejection reason' : 'Refund notes from admin'}
-                        </p>
-                        <p className="mt-1 whitespace-pre-wrap break-words text-sm text-[var(--text-muted)]">
-                          {order.refund_rejection_reason || order.refund_admin_notes}
-                        </p>
-                      </div>
-                    )}
-                    {order.has_refund_request && order.refund_workflow_version === 2 && (
-                      <CustomerRefundTracking key={order.refund_request_id} order={order} onRefresh={fetchMyOrders} />
-                    )}
-                    {order.has_refund_request && order.refund_workflow_version !== 2 && <CustomerRefundReviewLoader refundId={order.refund_request_id} onUpdated={fetchMyOrders} />}
                   </div>
                 )
               })}
@@ -4199,8 +4165,11 @@ export function DashboardPage() {
 
   const isToastError = toastMessage?.startsWith?.('Failed') || false
 
+  const refundTrackingOrder = myOrders.find(order => order.order_id === refundTrackingOrderId)
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] pt-24 pb-12">
+      {refundTrackingOrder && <CustomerRefundTrackingModal key={refundTrackingOrder.refund_request_id} order={refundTrackingOrder}
+        onClose={() => setRefundTrackingOrderId(null)} onRefresh={fetchMyOrders} onNotify={setToastMessage} />}
       <AnimatePresence>
         {toastMessage && (
           <motion.div
