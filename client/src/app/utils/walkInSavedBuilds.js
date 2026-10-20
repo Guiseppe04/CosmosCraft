@@ -9,14 +9,14 @@ export function readSavedBuilds(storage, key) {
   }
 }
 
-export function mergeWalkInSavedBuilds(localBuilds, customizations, userId, guitarType) {
+export function mergeWalkInSavedBuilds(localBuilds, customizations, userId, guitarType, includeAll = false) {
   const received = customizations.filter(build =>
     String(build.user_id) === String(userId) && build.is_saved !== false &&
     (build.guitar_type === 'bass' ? 'bass' : 'electric') === guitarType,
   ).map(build => {
     const config = typeof build.config_json === 'string' ? JSON.parse(build.config_json) : build.config_json || {}
     return { build, config }
-  }).filter(({ config }) => config._walkIn)
+  }).filter(({ config }) => includeAll || config._walkIn)
 
   const receivedIds = new Set(received.map(({ build }) => String(build.customization_id)))
   const result = localBuilds.filter(build => {
@@ -41,9 +41,9 @@ export function mergeWalkInSavedBuilds(localBuilds, customizations, userId, guit
       stickers: Array.isArray(build.stickers) ? build.stickers : [],
       preview_image: build.preview_image,
       preview_images: config._previewImages,
-      summary: config._walkIn.summary || {},
-      pricingBreakdown: config._walkIn.pricingBreakdown || {},
-      lineItems: config._walkIn.lineItems || [],
+      summary: config._walkIn?.summary || result[index]?.summary || {},
+      pricingBreakdown: config._walkIn?.pricingBreakdown || result[index]?.pricingBreakdown || {},
+      lineItems: config._walkIn?.lineItems || result[index]?.lineItems || [],
       created_at: build.created_at,
       updated_at: build.updated_at,
       savedAt: build.created_at || build.updated_at,

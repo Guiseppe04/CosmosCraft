@@ -1,5 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
 import { useStickerDraft } from '../hooks/useStickerDraft'
+import { writeSavedBuilds } from '../utils/savedBuildStorage.js'
+import { findSavedBuild } from '../utils/findSavedBuild.js'
 import { useBuilderDesktop } from '../hooks/useBuilderDesktop.js'
 import { motion, AnimatePresence } from 'motion/react'
 import { useSearchParams, useNavigate, useBlocker } from 'react-router'
@@ -728,6 +730,7 @@ export function BassCustomizePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const editBuildId = searchParams.get('edit')
   const [activeBuildId, setActiveBuildId] = useState(editBuildId)
+  const databaseBuildIdRef = useRef(null)
   const navigate = useNavigate()
 
   const {
@@ -1138,10 +1141,10 @@ export function BassCustomizePage() {
 
 
   useEffect(() => {
+    let cancelled = false
     if (editBuildId) {
-      for (const storageKey of ['cosmoscraft_saved_bass_builds', 'cosmoscraft_saved_builds']) {
-        const builds = JSON.parse(window.localStorage.getItem(storageKey) || '[]')
-        const target = builds.find(b => b.id === editBuildId)
+      findSavedBuild(editBuildId, isAuthenticated).then(target => {
+        if (cancelled) return
         if (target) {
           try {
             beginLoadedBuild()
@@ -1149,14 +1152,18 @@ export function BassCustomizePage() {
             const loadedStickers = Array.isArray(target.stickers) ? target.stickers : []
             setStickers(loadedStickers)
             setActiveBuildId(target.id)
+            databaseBuildIdRef.current = target.dbCustomizationId || target.customization_id || null
           } catch (e) {
             console.error('Failed to load build config for editing:', e)
           }
-          break
         }
-      }
+      }).catch(error => {
+        console.error('Failed to load saved bass build:', error)
+        if (!cancelled) setToastMessage('Unable to load your saved build. Please try again.')
+      })
     }
-  }, [editBuildId, baseLoadConfig])
+    return () => { cancelled = true }
+  }, [editBuildId, baseLoadConfig, isAuthenticated])
 
   const shouldBlockNavigation = Boolean(activeBuildId) && hasUnsavedChanges && !bypassNavigationBlockRef.current
   const blocker = useBlocker(
@@ -1251,11 +1258,13 @@ export function BassCustomizePage() {
         return
       }
 
-      const savedCustomizationId = stored[existingIndex]?.dbCustomizationId || stored[existingIndex]?.customization_id
-      if (savedCustomizationId && isAuthenticated) {
+      const savedCustomizationId = stored[existingIndex]?.dbCustomizationId || stored[existingIndex]?.customization_id || databaseBuildIdRef.current
+      let databaseSaved = false
+      let databaseError
+      if (isAuthenticated) {
         try {
-          const response = await fetch(`${API}/api/guitars/my-customizations/${savedCustomizationId}`, {
-            method:'PUT', credentials:'include', headers:getAuthHeaders({'Content-Type':'application/json'}),
+          const response = await fetch(`${API}/api/guitars/my-customizations${savedCustomizationId ? `/${savedCustomizationId}` : ''}`, {
+            method:savedCustomizationId ? 'PUT' : 'POST', credentials:'include', headers:getAuthHeaders({'Content-Type':'application/json'}),
             body:JSON.stringify({name:build.name,guitar_type:'bass',total_price:build.price,is_saved:true,
               config_json:{...config,_previewImages:previewImages},stickers,preview_image:previewImages.front}),
           })
@@ -1263,9 +1272,20 @@ export function BassCustomizePage() {
             const error = await response.json().catch(() => ({}))
             throw new Error(error.message || 'Unable to save your bass design')
           }
+          const data = await response.json()
+          databaseSaved = true
+          build.dbCustomizationId = data.data.customization_id
+          databaseBuildIdRef.current = data.data.customization_id
+          build.customization_id = data.data.customization_id
+          build.preview_image = data.data.preview_image || previewImages.front
+          build.preview_images = data.data.config_json?._previewImages || previewImages
+          build.stickers = data.data.stickers || stickers
         } catch (error) {
-          setToastMessage(error.message)
-          return
+          databaseError = error
+          if (error.message.includes('active order') || error.message.includes('up to 10')) {
+            setToastMessage(error.message)
+            return
+          }
         }
       }
 
@@ -1276,9 +1296,21 @@ export function BassCustomizePage() {
       }
 
       if (stored.length > 10) stored = stored.slice(0, 10)
-      window.localStorage.setItem(storedKey, JSON.stringify(stored))
+      try {
+        stored = writeSavedBuilds(window.localStorage, storedKey, stored)
+      } catch (error) {
+        console.warn('Local build backup unavailable:', error)
+        if (!databaseSaved) {
+          setToastMessage('Unable to save your build. Browser storage is full or unavailable and database saving failed. Please try again.')
+          return
+        }
+      }
       setActiveBuildId(buildId)
       if (storedKey === 'cosmoscraft_saved_bass_builds') setSavedBuilds(stored)
+      if (databaseError) {
+        setToastMessage('Saved locally. Database sync failed.')
+        return
+      }
       try {
         const snap = JSON.stringify({ config, stickers })
         setSavedSnapshot(snap)
@@ -1306,6 +1338,9 @@ export function BassCustomizePage() {
       } else {
         setToastMessage('Your Build is saved to My Bass!')
       }
+    } catch (error) {
+      console.error('Failed to save build:', error)
+      setToastMessage('Unable to save your build. Please try again.')
     } finally {
       savingBuildRef.current = false
     }
@@ -1384,6 +1419,7 @@ export function BassCustomizePage() {
     setStickers(loadedStickers)
     beginLoadedBuild()
     setActiveBuildId(build.id)
+    databaseBuildIdRef.current = build.dbCustomizationId || build.customization_id || null
     bypassNavigationBlockRef.current = true
     setSearchParams((params) => {
       params.set('edit', build.id)
@@ -1398,6 +1434,7 @@ export function BassCustomizePage() {
     setStickers([])
     setSelectedStickerId(null)
     setActiveBuildId(null)
+    databaseBuildIdRef.current = null
     setSavedSnapshot(null)
     setShowLoadModal(false)
     try {

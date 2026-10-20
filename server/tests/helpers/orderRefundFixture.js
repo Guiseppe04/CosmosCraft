@@ -23,7 +23,7 @@ async function createFixture() {
     CREATE TABLE notifications(notification_id UUID DEFAULT gen_random_uuid(),user_id UUID,title TEXT,message TEXT,notification_type TEXT,related_entity_id UUID,related_entity_type TEXT,created_at TIMESTAMPTZ DEFAULT now());
     CREATE TABLE products(product_id UUID PRIMARY KEY,name TEXT);
     CREATE TABLE orders(order_id UUID PRIMARY KEY,user_id UUID,order_number TEXT,status TEXT,payment_status TEXT,
-      delivered_at TIMESTAMPTZ DEFAULT now(), received_at TIMESTAMPTZ,created_at TIMESTAMPTZ DEFAULT now(),updated_at TIMESTAMPTZ,total_amount NUMERIC);
+      delivered_at TIMESTAMPTZ DEFAULT now(), received_at TIMESTAMPTZ,created_at TIMESTAMPTZ DEFAULT now(),updated_at TIMESTAMPTZ,total_amount NUMERIC,notes TEXT);
     CREATE TABLE payments(payment_id UUID DEFAULT gen_random_uuid(),order_id UUID,amount NUMERIC,status TEXT,payment_method TEXT,proof_url TEXT,reference_number TEXT,created_at TIMESTAMPTZ DEFAULT now(),updated_at TIMESTAMPTZ);
     CREATE TABLE order_items(order_item_id BIGSERIAL PRIMARY KEY,order_id UUID,product_id UUID,product_name TEXT,unit_price NUMERIC,quantity INT);
     CREATE TABLE product_images(product_id UUID,image_url TEXT,is_primary BOOLEAN);

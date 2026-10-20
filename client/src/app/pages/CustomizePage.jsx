@@ -1,5 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
 import { useStickerDraft } from '../hooks/useStickerDraft'
+import { writeSavedBuilds } from '../utils/savedBuildStorage.js'
+import { findSavedBuild } from '../utils/findSavedBuild.js'
 import { useBuilderDesktop } from '../hooks/useBuilderDesktop.js'
 import { motion, AnimatePresence } from 'motion/react'
 import { useSearchParams, useNavigate, useBlocker } from 'react-router'
@@ -698,9 +700,10 @@ export function CustomizePage() {
     let cancelled = false
 
     const loadExistingBuild = async () => {
+      const recovered = await findSavedBuild(editBuildId, isAuthenticated)
       for (const storageKey of ['cosmoscraft_saved_builds', 'cosmoscraft_saved_bass_builds']) {
         const builds = JSON.parse(window.localStorage.getItem(storageKey) || '[]')
-        let target = builds.find(b => b.id === editBuildId)
+        let target = recovered || builds.find(b => b.id === editBuildId)
         if (!target) continue
 
         const targetCustomizationId = target.dbCustomizationId || target.customization_id || null
@@ -746,7 +749,10 @@ export function CustomizePage() {
       }
     }
 
-    void loadExistingBuild()
+    void loadExistingBuild().catch(error => {
+      console.error('Failed to load saved build:', error)
+      if (!cancelled) setToastMessage('Unable to load your saved build. Please try again.')
+    })
 
     return () => {
       cancelled = true
@@ -892,6 +898,7 @@ export function CustomizePage() {
       }
 
       if (stored.length > 10) stored = stored.slice(0, 10)
+      let localSaved = false
       const persistLocalBuild = (extraPatch = {}) => {
         const nextBuild = { ...baseBuild, ...extraPatch }
         let nextStored = JSON.parse(window.localStorage.getItem(storedKey) || '[]')
@@ -902,8 +909,13 @@ export function CustomizePage() {
           nextStored.unshift(nextBuild)
         }
         if (nextStored.length > 10) nextStored = nextStored.slice(0, 10)
-        window.localStorage.setItem(storedKey, JSON.stringify(nextStored))
-        if (storedKey === 'cosmoscraft_saved_builds') setSavedBuilds(nextStored)
+        try {
+          const saved = writeSavedBuilds(window.localStorage, storedKey, nextStored)
+          localSaved = true
+          if (storedKey === 'cosmoscraft_saved_builds') setSavedBuilds(saved)
+        } catch (error) {
+          console.warn('Local build backup unavailable:', error)
+        }
         return nextBuild
       }
 
@@ -955,7 +967,11 @@ export function CustomizePage() {
         const savedId = data?.data?.customization_id || dbCustomizationId || null
         if (savedId) {
           setDbCustomizationId(savedId)
-          persistLocalBuild({ dbCustomizationId: savedId, customization_id: savedId })
+          persistLocalBuild({ dbCustomizationId: savedId, customization_id: savedId,
+            preview_image: data.data.preview_image || previewImages.front,
+            preview_images: data.data.config_json?._previewImages || previewImages,
+            stickers: data.data.stickers || stickers,
+          })
         }
       } catch (error) {
         console.error('Database save failed (local backup retained):', error)
@@ -974,7 +990,8 @@ export function CustomizePage() {
           setToastMessage('You can only save up to 10 guitar builds. Please delete an existing build before creating a new one.')
           return
         }
-        setToastMessage('Saved locally. Database sync failed.')
+        setToastMessage(localSaved ? 'Saved locally. Database sync failed.' : 'Unable to save your build. Browser storage is full or unavailable and database saving failed. Please try again.')
+        return
       }
 
       if (continueBlockedNavigation && blocker.state === 'blocked') {
@@ -1000,6 +1017,9 @@ export function CustomizePage() {
         setToastMessage('Your Build is saved to My Guitar!')
         setTimeout(() => setJustSaved(false), 500)
       }
+    } catch (error) {
+      console.error('Failed to save build:', error)
+      setToastMessage('Unable to save your build. Please try again.')
     } finally {
       savingBuildRef.current = false
     }

@@ -808,7 +808,10 @@ export function RefundRequestsTab({ showToast, user }) {
                     </div>
                   )}
 
-                  {selectedRequest.can_manage && selectedRequest.workflow_version !== 2 && ['pending','under_review'].includes(selectedRequest.status) && (
+                  {selectedRequest.workflow_version !== 2 && selectedRequest.reason === 'Automatic refund request from order cancellation' && (
+                    <p className="text-sm text-amber-400">The customer must complete the refund form with their refund destination before this refund can be processed. Payment proof will be required before sending the refund.</p>
+                  )}
+                  {selectedRequest.can_manage && selectedRequest.workflow_version !== 2 && selectedRequest.reason !== 'Automatic refund request from order cancellation' && ['pending','under_review'].includes(selectedRequest.status) && (
                     <div>
                       <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Admin Notes</p>
                       <textarea
@@ -871,7 +874,7 @@ export function RefundRequestsTab({ showToast, user }) {
                     </div>
                   )}
 
-                  {selectedRequest.can_manage && selectedRequest.workflow_version !== 2 && selectedRequest.status === 'approved' && (
+                  {selectedRequest.can_manage && selectedRequest.workflow_version !== 2 && selectedRequest.reason !== 'Automatic refund request from order cancellation' && selectedRequest.status === 'approved' && (
                     <div className="flex gap-3">
                       <button
                         onClick={() => handleUpdateStatus('processing')}
@@ -884,7 +887,7 @@ export function RefundRequestsTab({ showToast, user }) {
                     </div>
                   )}
 
-                  {selectedRequest.can_manage && selectedRequest.workflow_version !== 2 && selectedRequest.status === 'processing' && (
+                  {selectedRequest.can_manage && selectedRequest.workflow_version !== 2 && selectedRequest.reason !== 'Automatic refund request from order cancellation' && selectedRequest.status === 'processing' && (
                     <div className="flex gap-3">
                       <button
                         onClick={() => handleUpdateStatus('refunded')}

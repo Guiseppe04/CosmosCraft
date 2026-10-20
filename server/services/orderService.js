@@ -1879,24 +1879,17 @@ exports.createRefundRequest = async (data) => {
   if (!Array.isArray(items) || new Set(items.map(item => item.order_item_id)).size !== items.length) throw new Error('Duplicate refund items are not allowed');
 
   const orderRes = await pool.query(
-    `SELECT status, delivered_at, received_at FROM orders WHERE order_id = $1 AND user_id = $2`,
+    `SELECT status, delivered_at, received_at, notes FROM orders WHERE order_id = $1 AND user_id = $2`,
     [orderId, userId]
   );
   if (orderRes.rows.length === 0) {
     throw new Error('Order not found');
   }
   const order = orderRes.rows[0];
+  const cancelledByCustomer = order.status === 'cancelled' && /Customer cancellation reason \(/.test(order.notes || '');
   const eligibleStatuses = ['delivered', 'received'];
-  if (!eligibleStatuses.includes(order.status)) {
+  if (!eligibleStatuses.includes(order.status) && !cancelledByCustomer) {
     throw new Error(`Refund requests are only allowed for delivered or received orders. Current status: ${order.status}`);
-  }
-
-  const existingRes = await pool.query(
-    `SELECT refund_request_id FROM refund_requests WHERE order_id = $1 AND status NOT IN ('rejected', 'refunded', 'completed', 'withdrawn') AND deleted_at IS NULL LIMIT 1`,
-    [orderId]
-  );
-  if (existingRes.rows.length > 0) {
-    throw new Error('A refund request already exists for this order');
   }
 
   if (!items || items.length === 0) {
@@ -1909,27 +1902,38 @@ exports.createRefundRequest = async (data) => {
     const auditContext = await require('./refundAudit').prepare(client,userId);
 
     // Serialize requests and payment/item budget checks for this order.
-    const locked = await client.query('SELECT status,delivered_at,received_at FROM orders WHERE order_id=$1 AND user_id=$2 FOR UPDATE', [orderId,userId]);
+    const locked = await client.query('SELECT status,delivered_at,received_at,notes FROM orders WHERE order_id=$1 AND user_id=$2 FOR UPDATE', [orderId,userId]);
     const lockedOrder = locked.rows[0];
-    if (!lockedOrder || !eligibleStatuses.includes(lockedOrder.status)) throw createValidationError('This order is no longer eligible for a refund');
+    const lockedCancellation = lockedOrder?.status === 'cancelled' && /Customer cancellation reason \(/.test(lockedOrder.notes || '');
+    if (!lockedOrder || (!eligibleStatuses.includes(lockedOrder.status) && !lockedCancellation)) throw createValidationError('This order is no longer eligible for a refund');
     const policyService = require('./refundPolicyService');
     const submittedAt = new Date().toISOString();
     const eligibilityItems = [];
-    const duplicate = await client.query(`SELECT 1 FROM refund_requests WHERE order_id=$1 AND deleted_at IS NULL
-      AND status NOT IN ('rejected','withdrawn','completed','refunded')`, [orderId]);
-    if (duplicate.rows.length) throw createValidationError('A refund request already exists for this order',409);
+    const duplicate = await client.query(`SELECT * FROM refund_requests WHERE order_id=$1 AND deleted_at IS NULL
+      AND status NOT IN ('rejected','withdrawn','completed','refunded') FOR UPDATE`, [orderId]);
+    const automaticRefund = duplicate.rows[0];
+    const completeAutomatic = lockedCancellation && duplicate.rows.length === 1 && automaticRefund.workflow_version !== 2 &&
+      automaticRefund.reason === 'Automatic refund request from order cancellation' &&
+      ['pending','pending_payment_verification','approved','processing'].includes(automaticRefund.status);
+    if (duplicate.rows.length && !completeAutomatic) throw createValidationError('A refund request already exists for this order',409);
     const paymentRes = await client.query(`SELECT p.*, COALESCE(to_jsonb(p)->>'method',to_jsonb(p)->>'payment_method') AS original_method
       FROM payments p WHERE order_id=$1 AND status='verified' ORDER BY created_at DESC`, [orderId]);
     if (!paymentRes.rows.length || paymentRes.rows.some(p => !p.original_method)) throw createValidationError('A verified original payment is required');
     if (new Set(paymentRes.rows.map(p => p.original_method)).size !== 1) throw createValidationError('Orders paid through multiple channels require assistance before requesting a refund');
     const payment = paymentRes.rows[0];
-    const requestNumber = await generateRefundRequestNumber(client, 'RF');
-
-    const refundRes = await client.query(
-      `INSERT INTO refund_requests (order_id, user_id, reason, customer_notes, request_number) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [orderId, userId, reason, customerNotes || null, requestNumber]
-    );
-    const refundRequest = refundRes.rows[0];
+    let refundRequest;
+    if (completeAutomatic) {
+      refundRequest = (await client.query(`UPDATE refund_requests SET reason=$2, customer_notes=$3,
+        status='pending', approved_amount=NULL, approved_at=NULL, processing_at=NULL, updated_at=now()
+        WHERE refund_request_id=$1 AND workflow_version<>2 AND status IN ('pending','pending_payment_verification','approved','processing') RETURNING *`, [automaticRefund.refund_request_id, reason, customerNotes || null])).rows[0];
+      if (!refundRequest) throw new Error('This refund request has already been submitted or reviewed');
+    } else {
+      const requestNumber = await generateRefundRequestNumber(client, 'RF');
+      refundRequest = (await client.query(
+        `INSERT INTO refund_requests (order_id, user_id, reason, customer_notes, request_number) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [orderId, userId, reason, customerNotes || null, requestNumber]
+      )).rows[0];
+    }
 
     for (const item of items) {
       if (!item.order_item_id) {

@@ -7,5 +7,6 @@ export default function RefundProgress({ status }) {
       {index + 1}. {label}
     </li>)}
     {['rejected', 'withdrawn'].includes(status) && <li className="text-sm text-red-400">{status === 'rejected' ? 'Rejected' : 'Withdrawn'}</li>}
+    {status === 'pending_payment_verification' && <li className="text-sm text-amber-400">Awaiting payment verification</li>}
   </ol>
 }
