@@ -25,8 +25,8 @@ function LegacyAdminRefundWorkflow({ refund, onUpdated }) {
   const [confirmed,setConfirmed] = useState(false)
   const lock = useRef(false), notesField = useRef(null)
   const destination = refund.payment_destination
-  const next = { pending: ['under_review'], under_review: ['approved','rejected'], approved: ['processing'], processing: ['refund_sent'], refund_sent: ['completed'] }[refund.status] || []
-  const labels = { under_review: 'Start review', approved: 'Approve refund', rejected: 'Reject refund', processing: 'Start payment processing', refund_sent: 'Mark refund sent', completed: 'Mark completed' }
+  const next = { pending: ['under_review'], under_review: ['approved'], approved: ['processing'], processing: ['refund_sent'], refund_sent: ['completed'] }[refund.status] || []
+  const labels = { under_review: 'Start review', approved: 'Approve refund request', rejected: 'Reject refund', processing: 'Start payment processing', refund_sent: 'Mark refund sent', completed: 'Mark completed' }
   async function update(status) {
     if (lock.current) return
     if (status==='rejected' && adminRefundTextError(notes,'Rejection reason')) {setError(adminRefundTextError(notes,'Rejection reason'));notesField.current?.focus();return}

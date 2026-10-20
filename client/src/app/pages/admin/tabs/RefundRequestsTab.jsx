@@ -851,14 +851,6 @@ export function RefundRequestsTab({ showToast, user }) {
                           {updatingStatus ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                           Approve
                         </button>
-                        <button
-                          onClick={() => handleUpdateStatus('rejected')}
-                          disabled={updatingStatus}
-                          className="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                          {updatingStatus ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
-                          Reject
-                        </button>
                       </div>
                     </div>
                   )}

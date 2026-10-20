@@ -54,6 +54,7 @@ async function createFixture() {
   await db.exec(fs.readFileSync(path.join(__dirname, '../../migrations/49_refund_claim_verification.sql'), 'utf8'));
   await db.exec(fs.readFileSync(path.join(__dirname, '../../migrations/50_refund_review_tools.sql'), 'utf8'));
   await db.exec(fs.readFileSync(path.join(__dirname, '../../migrations/51_dispatch_photos.sql'), 'utf8'));
+  await db.exec(fs.readFileSync(path.join(__dirname, '../../migrations/53_refund_inspection_stock.sql'), 'utf8'));
   for (const [name,id] of Object.entries(ids).filter(([name]) => ['customer','admin','other','staff'].includes(name))) {
     await db.query('INSERT INTO users VALUES($1,$2,$3,$4)', [id,name,'Test',`${name}@example.test`]);
   }

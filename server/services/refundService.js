@@ -247,6 +247,7 @@ exports.applyTransition = async (refundId, newStatus, actorId, actorRole, data =
     if (refund.workflow_version === 2) throw new AppError('Use the reviewed refund workflow for this request', 409);
 
     const from = refund.status;
+    if (newStatus === 'rejected' && from !== 'under_inspection') throw new AppError('Refunds can only be rejected Under Inspection',409);
 
     // Withdrawal is customer-initiated; all other transitions require staff+.
     if (newStatus === 'withdrawn') {

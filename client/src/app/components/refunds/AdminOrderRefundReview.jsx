@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react'
+import * as Dialog from '@radix-ui/react-dialog'
+import { ConfirmModal } from '../ui/ConfirmModal'
 import CustomerRefundProgress from './CustomerRefundProgress'
 import PrivateRefundFile from './PrivateRefundFile'
 import RefundImageInput from './RefundImageInput'
@@ -11,18 +13,18 @@ import ImageZoomModal from '../../pages/admin/components/shared/ImageZoomModal'
 import AdminRefundSteps from './AdminRefundSteps'
 import DispatchPhotoGallery from '../DispatchPhotoGallery'
 import { RefundRequestItems, RefundRequestPhotos } from './RefundRequestContents'
-import { CheckCircle, XCircle, Truck, Clock, Search, PackageCheck } from 'lucide-react'
+import { CheckCircle, XCircle, Truck, Clock, Search, PackageCheck, X, ArrowRight, ShieldCheck, Loader2, Camera } from 'lucide-react'
 
 const actions = {
-  pending:['under_review','return_required','approved','rejected'],
-  under_review:['return_required','approved','rejected'],
-  return_required:['item_received','rejected'],return_in_transit:['item_received','rejected'],
-  return_pending:['item_received','rejected'],returned:['item_received','rejected'],
-  item_received:['under_inspection','rejected'],under_inspection:['approved','rejected'],
-  approved:['processing'],processing:['refund_sent','rejected'],refund_sent:['completed'],
+  pending:['under_review','return_required','approved'],
+  under_review:['return_required','approved'],
+  return_required:['item_received'],return_in_transit:['item_received'],
+  return_pending:['item_received'],returned:['item_received'],
+  item_received:['under_inspection'],under_inspection:['approved','rejected'],
+  approved:['processing'],processing:['refund_sent'],refund_sent:['completed'],
 }
 const labels = {mark_no_return:'Mark Return Not Required',under_review:'Start review',return_required:'Approve return',item_received:'Confirm item received',
-  under_inspection:'Start inspection',approved:'Approve refund',processing:'Start refund processing',
+  under_inspection:'Start inspection',approved:'Approve request',processing:'Start refund processing',
   refund_sent:'Record refund payment',completed:'Complete refund',rejected:'Reject refund'}
 const fieldClass = 'mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-light)]'
 const Required = () => <span style={{ color: '#ef4444' }} className="text-red-400">*</span>
@@ -32,8 +34,16 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
   const [customNotes,setCustomNotes] = useState('')
   const [customInstructions,setCustomInstructions] = useState(refund.return_instructions || '')
   const [exception,setException] = useState(''), [inspection,setInspection] = useState(refund.inspection_notes || '')
-  const [suitable,setSuitable] = useState(''), [amount,setAmount] = useState(refund.approved_amount ?? refund.review_context?.calculation?.suggestedAmount ?? refund.amount_requested)
-  const [claim,setClaim] = useState('')
+  const [amount,setAmount] = useState(refund.approved_amount ?? refund.review_context?.calculation?.suggestedAmount ?? refund.amount_requested)
+  const savedInspection=refund.review_data?.inspection
+  const [suitable,setSuitable] = useState(savedInspection ? savedInspection.items.some(item=>item.resaleSuitable) ? 'yes' : 'no' : refund.resale_suitable == null ? '' : refund.resale_suitable ? 'yes' : 'no')
+  const [claim,setClaim] = useState(refund.claim_verified == null ? '' : refund.claim_verified ? 'yes' : 'no')
+  const inspectionItems = (refund.items || []).map(item=>{
+    const saved=savedInspection?.items.find(result=>String(result.orderItemId)===String(item.order_item_id))
+    return {orderItemId:Number(item.order_item_id),acceptedQuantity:saved?.acceptedQuantity ?? (suitable==='yes'?Number(item.quantity):0),resaleSuitable:saved ? saved.resaleSuitable : suitable==='yes'}
+  })
+  const [resaleOpen,setResaleOpen]=useState(false), [resaleProof,setResaleProof]=useState(undefined), [resaleConfirmed,setResaleConfirmed]=useState(false)
+  const [rejectionOpen,setRejectionOpen]=useState(false), [rejectionConfirm,setRejectionConfirm]=useState(false)
   const [reference,setReference] = useState(''), [proof,setProof] = useState(undefined), [confirmed,setConfirmed] = useState(false)
   const [busy,setBusy] = useState(false), [reading,setReading] = useState(false), [error,setError] = useState('')
   const lock = useRef(false)
@@ -46,13 +56,16 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
   const refundApproved = refund.approved_amount != null || ['approved','processing','refund_sent','completed','refunded'].includes(refund.status)
   const inspect = refund.status === 'under_inspection'
   const noReturnRecorded = refund.return_status === 'not_required' && Boolean(refund.no_return_reason)
-  const next = review ? noReturnRecorded ? ['approved','rejected'] : [mode === 'no_return' ? 'mark_no_return' : mode === 'reject' ? 'rejected' : 'return_required']
+  const next = (review ? noReturnRecorded ? ['approved'] : [mode === 'no_return' ? 'mark_no_return' : 'return_required']
     : refund.status === 'approved' && ['return_pending','returned','return_in_transit'].includes(refund.return_status)
-      ? ['item_received','rejected'] : actions[refund.status] || []
+      ? ['item_received'] : actions[refund.status] || []).filter(status=>status!=='rejected' || inspect)
   const files = refund.private_files || []
   const receivedFiles = files.filter(kind => /^evidence_?[0-4]$/.test(kind))
   const returnFiles = files.filter(kind => /^return_?[0-4]$/.test(kind)).sort((a,b) => Number(a.slice(-1)) - Number(b.slice(-1)))
   const showReturnShipment = next.includes('item_received') || returnFiles.length > 0 || refund.return_method || refund.return_reference || refund.customer_return_notes
+  const paymentStage = ['processing','refund_sent','completed','refunded'].includes(refund.status)
+  const hasInspectionHistory = showReturnShipment || refund.admin_notes || refund.return_instructions || refund.item_received_at || refund.inspection_notes || refund.claim_verified != null || files.includes('inspection') || refund.no_return_reason || refund.rejection_reason
+  const InspectionHistory = paymentStage && hasInspectionHistory ? 'details' : 'div'
   const payment = refund.payment
   const paymentProof = payment?.proof_url || payment?.payment_proof_url || payment?.proof_image_url
   const actionTitle = inspect ? 'Inspect and decide' : review ? noReturnRecorded ? 'Refund decision' : 'Return decision'
@@ -64,15 +77,21 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
     if (status === 'return_required') { const error=adminRefundTextError(instructions,'Return instructions'); if(error) result.returnInstructions=error }
     if (status === 'mark_no_return') { const error=adminRefundTextError(exception,'Return Not Required reason'); if(error) result.noReturnReason=error }
     if (status === 'rejected') { const error=adminRefundTextError(notes,'Rejection reason'); if(error) result.adminNotes=error }
-    if ((status === 'approved' || status === 'rejected') && inspect && !inspection.trim()) result.inspectionNotes='Inspection notes are required.'
-    if ((status === 'approved' || status === 'rejected') && inspect && !claim) result.claimVerified='Select whether the customer claim was verified during inspection.'
+    if (['approved','rejected','save_inspection'].includes(status) && inspect && !inspection.trim()) result.inspectionNotes='Inspection notes are required.'
+    if (['approved','rejected','save_inspection'].includes(status) && inspect && !claim) result.claimVerified='Select whether the customer claim was verified during inspection.'
+    if (['approved','rejected','save_inspection'].includes(status) && inspect) {
+      if (!suitable) result.resaleSuitable='Select whether the item is suitable for resale.'
+      else if (suitable==='yes' && !savedInspection) {
+        if (!resaleProof) result.resaleProof='Upload photo proof showing the returned items are suitable for resale.'
+        if (!resaleConfirmed) result.resaleConfirmed='Confirm the listed quantities were physically received, inspected and are suitable for resale.'
+      }
+    }
     if (status === 'approved' && inspect && claim==='no') result.claimVerified='The customer claim must be verified before approving the refund.'
     if (status === 'approved') {
       const calculation=refund.review_context?.calculation;
       if(calculation?.custom && calculation.requiresVerifiedCosts) result.approvedAmount='Verified material/base value, incurred labor and supporting evidence are required before approving this customized guitar refund.'
       else if(calculation?.custom && Number(amount)>calculation.maximum) result.approvedAmount=`The verified customized guitar refund limit is ${formatCurrency(calculation.maximum)}.`
       if (!Number.isFinite(Number(amount)) || Number(amount)<=0 || Number(amount)>Number(refund.amount_requested)) result.approvedAmount='Enter a positive amount up to the requested refund.'
-      if (inspect && !suitable) result.resaleSuitable='Select whether the item is suitable for resale.'
       if (!inspect && !noReturnRecorded) result.noReturnReason='Record Return Not Required before approving this refund.'
     }
     if (status === 'refund_sent' && !proof) result.proofImage='Upload refund payment proof before recording payment.'
@@ -103,21 +122,30 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
       {errors[key] && <p id={`error-${key}`} role="alert" style={{ color: '#ef4444' }} className="text-sm text-red-400">{errors[key]}</p>}
       {choices.length>0 && <p className="text-xs text-[var(--text-muted)]" style={{ color: '#f59e0b' }}>{dropdownOnly?'Select a message, or choose Other to enter your own text.':'Suggestions are editable and added to your existing text. Couriers are suggestions only.'}</p>}    </div>
   }
-  async function update(status) {
+  async function update(status,confirmRejection=false) {
     if (lock.current || reading) return
     const validation=validate(status);setErrors(validation);setError('')
-    if(Object.keys(validation).length){const field=fields.current[Object.keys(validation)[0]];field?.focus();field?.scrollIntoView({block:'center',behavior:'smooth'});return}
+    if(Object.keys(validation).length){
+      const focusError=()=>{const field=fields.current[Object.keys(validation)[0]];field?.focus();field?.scrollIntoView({block:'center',behavior:'smooth'})}
+      if(status==='save_inspection' && validation.inspectionNotes){setResaleOpen(false);requestAnimationFrame(focusError)}
+      else focusError()
+      return
+    }
+    if(status==='rejected' && !confirmRejection){setRejectionOpen(false);setRejectionConfirm(true);return}
     lock.current=true;setBusy(true)
     try {
-      await adminApi.updateRefundStatus(refund.refund_request_id,status==='mark_no_return'?'under_review':status,{
+      await adminApi.updateRefundStatus(refund.refund_request_id,status==='save_inspection'?'under_inspection':status==='mark_no_return'?'under_review':status,{
         adminNotes:notes,
+        ...(status==='save_inspection'?{action:'save_inspection'}:{}),
+        ...(inspect && ['save_inspection','approved','rejected'].includes(status)?{inspectionNotes:inspection,claimVerified:claim==='yes',inspectionItems,
+          ...(!savedInspection && suitable==='yes'?{resaleProofImage:resaleProof,resaleConfirmed}:{}),}:{}),
         ...(status==='mark_no_return'?{action:'mark_no_return',noReturnReason:exception}:{}),
         ...(status==='return_required'?{returnInstructions:instructions}:{}),
-        ...(status==='approved'?{approvedAmount:Number(amount),...(inspect?{inspectionNotes:inspection,resaleSuitable:suitable==='yes',claimVerified:claim==='yes'}:{})}:{}),
-        ...(status==='rejected'&&inspect?{inspectionNotes:inspection,claimVerified:claim==='yes'}:{}),
+        ...(status==='approved'?{approvedAmount:Number(amount)}:{}),
         ...(status==='refund_sent'?{refundReference:reference,proofImage:proof}:{}),
         ...(status==='completed'?{paymentConfirmed:confirmed}:{}),
       })
+      setRejectionConfirm(false);setRejectionOpen(false);setResaleOpen(false)
       await onUpdated?.()
     } catch(err){setError(err.message)} finally{lock.current=false;setBusy(false)}
   }
@@ -161,6 +189,8 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
     {showReturnShipment && <p className="text-sm text-[var(--text-muted)]">Customer return photos and shipping details are shown in Step 3: {actionTitle}.</p>}
     </>}
     {<>
+    <InspectionHistory className="space-y-4">
+    {paymentStage && hasInspectionHistory && <summary className="cursor-pointer text-sm font-medium text-[var(--text-muted)]">Return and inspection details</summary>}
     {showReturnShipment && <section aria-label="Customer return shipment" className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
       <h3 className="font-semibold text-[var(--text-light)]">Customer return shipment</h3>
       <p className="text-xs text-[var(--text-muted)]">Compare the shipping details and customer photos with the item received before confirming receipt. Uploaded evidence does not confirm physical receipt.</p>
@@ -178,9 +208,11 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
       {refund.item_received_at && <p>Received: {new Date(refund.item_received_at).toLocaleString('en-PH')}</p>}
       {refund.inspection_notes && <p className="whitespace-pre-wrap break-words">Inspection: {refund.inspection_notes}</p>}
       {refund.claim_verified != null && <p>Claim verified: {refund.claim_verified?'Yes':'No'}</p>}
+      {refund.can_manage && files.includes('inspection') && <PrivateRefundFile refundId={refund.refund_request_id} kind="inspection" label="Resale condition proof" />}
       {refund.no_return_reason && <p className="whitespace-pre-wrap break-words">Return Not Required: {refund.no_return_reason}</p>}
       {refund.rejection_reason && <p className="text-red-400 whitespace-pre-wrap break-words">Rejection reason: {refund.rejection_reason}</p>}
     </div>
+    </InspectionHistory>
     {refund.has_proof && refund.can_manage && <div className="space-y-2">
       <p className="break-all text-sm text-[var(--text-muted)]">Refund transaction: {refund.refund_reference || 'Not provided'}</p>
       <PrivateRefundFile refundId={refund.refund_request_id} kind="proof" label="Proof of refund payment" />
@@ -190,14 +222,12 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
     {refund.can_manage && next.length > 0 && <fieldset disabled={busy || reading} className="space-y-4">
       {review && !noReturnRecorded && <label className="block text-sm text-[var(--text-light)]">Review action
         <select aria-label="Review action" value={mode} onChange={e=>{setMode(e.target.value);setErrors({})}} className={fieldClass}>
-          <option value="return">Approve item return</option><option value="no_return">Return Not Required</option><option value="reject">Reject request</option>
+          <option value="return">Approve item return</option><option value="no_return">Return Not Required</option>
         </select>
       </label>}
-      {!refundApproved && textField('adminNotes','Admin remarks / rejection reason',notes,setNotes,{required:mode==='reject'||Boolean(errors.adminNotes),options:REFUND_MESSAGE_PRESETS.adminNotes})}
-      {refundApproved && next.includes('rejected') && textField('adminNotes','Rejection reason',notes,setNotes,{options:REFUND_MESSAGE_PRESETS.adminNotes})}
       {review && !noReturnRecorded && mode==='return' && textField('returnInstructions','Return instructions',instructions,setInstructions,{required:true,max:2000,options:REFUND_MESSAGE_PRESETS.returnInstructions})}
       {review && !noReturnRecorded && mode==='no_return' && textField('noReturnReason','Return Not Required reason',exception,setException,{required:true,options:REFUND_MESSAGE_PRESETS.noReturnReason})}
-      {inspect && <>
+      {inspect && <fieldset disabled={Boolean(savedInspection)} className="space-y-4">
         <label className="block text-sm text-[var(--text-light)]">Inspection notes <Required />
           <textarea ref={node=>{fields.current.inspectionNotes=node}} aria-invalid={Boolean(errors.inspectionNotes)} value={inspection} maxLength={1000} onChange={e=>{setInspection(e.target.value);setErrors(previous=>({...previous,inspectionNotes:undefined}))}} rows={3} className={fieldClass} />
         </label>
@@ -215,23 +245,20 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
           <p id="refund-resale-label" className="text-sm text-[var(--text-light)]">Suitable for resale <Required /></p>
           <div className="mt-2 flex gap-2">{['yes','no'].map(value=><button key={value} type="button"
             ref={value==='yes'?node=>{fields.current.resaleSuitable=node}:undefined} aria-pressed={suitable===value}
-            onClick={()=>{setSuitable(value);setErrors(previous=>({...previous,resaleSuitable:undefined}))}}
-            className={`rounded-lg border px-5 py-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--gold-primary)] ${suitable===value?'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-black':'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-light)]'} ${errors.resaleSuitable?'ring-1 ring-red-500':''}`}>
+            onClick={()=>{setSuitable(value);setErrors(previous=>({...previous,resaleSuitable:undefined,resaleProof:undefined,resaleConfirmed:undefined}));if(value==='yes'){setResaleConfirmed(false);setResaleOpen(true)}}}
+            className={`rounded-lg border px-5 py-2 text-sm font-semibold ${suitable===value?'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-black':'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-light)]'}`}>
             {value==='yes'?'Yes':'No'}
           </button>)}</div>
         </div>
-        <p className="text-xs text-[var(--text-muted)]">Inspection does not automatically restock the item.</p>
-      </>}
+      </fieldset>}
       {((review && noReturnRecorded) || inspect) && <label className="block text-sm text-[var(--text-light)]">Approved refund amount (PHP) <Required />
         <input type="number" min="0.01" max={refund.amount_requested} step="0.01" value={amount} ref={node=>{fields.current.approvedAmount=node}} onChange={e=>{setAmount(e.target.value);setErrors(previous=>({...previous,approvedAmount:undefined}))}} className={fieldClass} />
         {refund.review_context?.calculation?.suggestedAmount!=null && <p className="mt-2 text-sm">{refund.review_context.calculation.custom?'Verified cost-based amount':'Default 50% regular-product refund (editable; subject to approval)'}: {formatCurrency(refund.review_context.calculation.suggestedAmount)}. <button type="button" onClick={()=>setAmount(refund.review_context.calculation.suggestedAmount)} className="underline">Use suggested amount</button></p>}
       </label>}
       {refund.status === 'processing' && <>
-        <p className="text-sm text-[var(--text-muted)]">Process the repayment through {formatPaymentMethod(refund.original_payment_method)} using the original transaction. Record the actual payment evidence below.</p>
-        <p className="text-sm text-[var(--text-muted)]">This records a payment already sent. It does not transfer money.</p>
-        <label className="block text-sm text-[var(--text-light)]">Refund transaction reference (optional)
+        <p className="text-sm text-[var(--text-muted)]">Attach proof of the {formatCurrency(refund.approved_amount ?? refund.amount_requested)} refund sent via {formatPaymentMethod(refund.original_payment_method)}. This does not send money.</p>
+        <label className="block text-sm text-[var(--text-light)]">Transaction reference (optional)
           <input value={reference} maxLength={255} onChange={e=>setReference(e.target.value)} className={fieldClass} />
-          <span className="text-xs text-[var(--text-muted)]">Optional; a reference helps reconcile the repayment.</span>
         </label>
         <RefundImageInput label="Refund payment proof (required)" value={proof} onChange={value=>{setProof(value);setErrors(previous=>({...previous,proofImage:undefined}))}} disabled={busy} onBusyChange={setReading} />
       </>}
@@ -239,11 +266,11 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
         <input ref={node=>{fields.current.paymentConfirmed=node}} type="checkbox" checked={confirmed} onChange={e=>{setConfirmed(e.target.checked);setErrors(previous=>({...previous,paymentConfirmed:undefined}))}} className="mt-1" />
         I have verified that the actual refund payment succeeded through the original payment channel. <Required />
       </label>}
-      {['inspectionNotes','claimVerified','resaleSuitable','approvedAmount','proofImage','paymentConfirmed'].filter(key=>errors[key]).map(key=><p key={key} id={`error-${key}`} role="alert" style={{ color: '#ef4444' }} className="text-sm text-red-400">{errors[key]}</p>)}
+      {['inspectionNotes','claimVerified','resaleSuitable','resaleProof','resaleConfirmed','approvedAmount','proofImage','paymentConfirmed'].filter(key=>errors[key]).map(key=><p key={key} id={`error-${key}`} role="alert" style={{ color: '#ef4444' }} className="text-sm text-red-400">{errors[key]}</p>)}
       <div className="flex flex-wrap gap-2">{next.map(status=>{
         const Icon={return_required:Truck,approved:CheckCircle,rejected:XCircle,processing:Clock,completed:CheckCircle,item_received:PackageCheck,under_inspection:Search}[status] || Clock
         const color={return_required:'bg-blue-600 hover:bg-blue-500',approved:'bg-green-600 hover:bg-green-500',rejected:'bg-red-600 hover:bg-red-500',processing:'bg-amber-600 hover:bg-amber-500',completed:'bg-green-600 hover:bg-green-500'}[status] || 'bg-slate-600 hover:bg-slate-500'
-        return <button key={status} type="button" disabled={busy||reading} onClick={()=>update(status)} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--gold-primary)] disabled:opacity-50 ${color}`}>
+        return <button key={status} type="button" disabled={busy||reading} onClick={()=>status==='rejected'?setRejectionOpen(true):update(status)} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--gold-primary)] disabled:opacity-50 ${color}`}>
           <Icon className="h-4 w-4" aria-hidden="true" />{busy?'Updating...':labels[status]}</button>
       })}</div>
     </fieldset>}
@@ -251,5 +278,64 @@ export default function AdminOrderRefundReview({ refund, onUpdated }) {
     {next.length === 0 && <p className="text-sm text-[var(--text-muted)]">No further refund actions are available for this request.</p>}
     </>}
     </AdminRefundSteps>
+    <Dialog.Root open={resaleOpen && inspect} onOpenChange={open=>{if(!lock.current && !reading){setResaleOpen(open);if(!open)setSuitable('')}}}>
+      <Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-[301] flex max-h-[90dvh] w-[min(94vw,36rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-light)] shadow-2xl focus:outline-none">
+          <div className="relative shrink-0 border-b border-[var(--border)] px-5 pb-5 pt-6 sm:px-7 sm:pt-7">
+            <div className="mb-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--text-muted)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--gold-primary)]" />Return inspection</div>
+            <button type="button" aria-label="Close resale confirmation" disabled={busy || reading} onClick={()=>{setResaleOpen(false);setSuitable('');setErrors({})}} className="absolute right-4 top-4 rounded-full p-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-primary)] hover:text-[var(--text-light)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--gold-primary)] disabled:opacity-50"><X className="h-4 w-4" aria-hidden="true" /></button>
+            <div className="flex items-start gap-4">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600"><PackageCheck className="h-6 w-6" aria-hidden="true" /></span>
+              <div>
+                <Dialog.Title className="text-xl font-bold tracking-tight sm:text-2xl">Confirm suitable for resale</Dialog.Title>
+                <Dialog.Description className="mt-1.5 text-sm leading-relaxed text-[var(--text-muted)]">Verify the returned items and attach a condition photo before adding them back to available stock.</Dialog.Description>
+              </div>
+            </div>
+          </div>
+          <div className="min-h-0 space-y-5 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
+            <section aria-label="Items to restock" className="overflow-hidden rounded-2xl border border-[var(--border)]">
+              <div className="flex items-center justify-between gap-3 bg-[var(--bg-primary)] px-4 py-3">
+                <h4 className="text-xs font-semibold text-[var(--text-muted)]">Items returning to stock</h4>
+                <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600">Resale ready</span>
+              </div>
+              <ul className="divide-y divide-[var(--border)]">{(refund.items || []).map(item=><li key={item.order_item_id} className="flex items-center justify-between gap-4 px-4 py-3.5">
+                <span className="flex min-w-0 items-center gap-3"><PackageCheck className="h-4 w-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" /><span className="break-words text-sm font-semibold">{item.product_name}</span></span>
+                <span className="shrink-0 rounded-lg bg-[var(--bg-primary)] px-3 py-1 text-xs font-bold tabular-nums">{item.quantity} {Number(item.quantity)===1?'unit':'units'}</span>
+              </li>)}</ul>
+            </section>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2"><Camera className="h-4 w-4 text-[var(--gold-primary)]" aria-hidden="true" /><h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Condition evidence</h4></div>
+              <RefundImageInput label="Resale condition photo (required)" presentation="dropzone" value={resaleProof} onChange={setResaleProof} onBusyChange={setReading} disabled={busy} />
+            </div>
+            <label className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-colors ${resaleConfirmed?'border-emerald-500/30 bg-emerald-500/5':'border-[var(--border)] bg-[var(--bg-primary)]'}`}>
+              <input type="checkbox" checked={resaleConfirmed} disabled={busy || reading} onChange={event=>setResaleConfirmed(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 rounded accent-emerald-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--gold-primary)]" />
+              <span className="text-sm leading-relaxed"><span className="mb-1 block font-semibold">Physical inspection complete</span><span className="text-[var(--text-muted)]">I confirm all listed quantities were received, inspected and are suitable for resale.</span></span>
+            </label>
+            {['resaleProof','resaleConfirmed','claimVerified'].filter(key=>errors[key]).map(key=><p key={key} role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-500">{errors[key]}</p>)}
+            {error && <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-500">{error}</p>}
+          </div>
+          <div className="shrink-0 space-y-3 border-t border-[var(--border)] bg-[var(--bg-primary)] px-5 py-4 sm:px-7">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:gap-3">
+              <button type="button" disabled={busy || reading} onClick={()=>{setResaleOpen(false);setSuitable('');setErrors({})}} className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-5 py-3 text-sm font-semibold transition-colors hover:border-[var(--gold-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--gold-primary)] disabled:opacity-50">Cancel</button>
+              <button type="button" disabled={busy || reading} onClick={()=>update('save_inspection')} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:opacity-50">{busy?<Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />:<CheckCircle className="h-4 w-4" aria-hidden="true" />}{busy?'Saving...':'Confirm suitability and restock'}{!busy && <ArrowRight className="h-4 w-4" aria-hidden="true" />}</button>
+            </div>
+            <p className="flex items-center justify-center gap-1.5 text-[11px] text-[var(--text-muted)]"><ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />Photo evidence is saved with this inspection.</p>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+    <Dialog.Root open={rejectionOpen && inspect} onOpenChange={open=>{if(!busy)setRejectionOpen(open)}}>
+      <Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-[300] bg-black/75" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-[301] w-[min(95vw,32rem)] -translate-x-1/2 -translate-y-1/2 space-y-4 rounded-xl bg-[var(--surface-dark)] p-6">
+          <Dialog.Title>Admin remarks / rejection reason</Dialog.Title>
+          <Dialog.Description>Provide the reason that will be shown to the customer.</Dialog.Description>
+          {textField('adminNotes','Rejection reason',notes,setNotes,{required:true,options:REFUND_MESSAGE_PRESETS.adminNotes})}
+          <button type="button" disabled={busy} onClick={()=>setRejectionOpen(false)}>Cancel</button>
+          <button type="button" disabled={busy} onClick={()=>update('rejected')} className="ml-4 rounded-lg bg-red-600 px-4 py-2 text-white">Review rejection</button>
+          {Object.keys(errors).some(key=>key!=='adminNotes') && <p role="alert">Complete the inspection fields before rejecting. Close this dialog to review the highlighted fields.</p>}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+    <ConfirmModal open={rejectionConfirm && inspect} title="Confirm refund rejection" description={<span className="whitespace-pre-wrap break-words">{`Reject this refund with the following customer-visible reason: ${notes.trim()}`}{error && <span role="alert" className="mt-3 block text-red-400">{error}</span>}</span>} confirmLabel="Confirm rejection" isBusy={busy} onCancel={()=>{if(!lock.current){setRejectionConfirm(false);setRejectionOpen(true)}}} onConfirm={()=>update('rejected',true)} />
   </section>
 }

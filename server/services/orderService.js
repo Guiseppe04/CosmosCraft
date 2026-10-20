@@ -2182,6 +2182,7 @@ exports.updateRefundStatus = async (refundRequestId, status, options = {}) => {
     throw new Error('Refund request not found');
   }
   const currentStatus = checkRes.rows[0].status;
+  if (status === 'rejected' && currentStatus !== 'under_inspection') throw createValidationError('Refunds can only be rejected Under Inspection',409);
   if (checkRes.rows[0].workflow_version === 2) throw new Error('Use the reviewed refund workflow for this request');
   const allowedTransitions = {
     pending: ['approved', 'rejected', 'refunded'],

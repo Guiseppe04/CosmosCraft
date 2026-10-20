@@ -24,7 +24,6 @@ export default function AdminRefundSteps({ children, actionTitle, status, disabl
     </nav>
     <div>
       <h3 ref={heading} tabIndex={-1} id={`${id}-heading`} className="text-base font-semibold text-[var(--text-light)] outline-none">Step {active + 1} of 3: {steps[active]}</h3>
-      <p className="mt-1 text-xs text-[var(--text-muted)]">Back and Next only change the section. Use the action button to save a decision.</p>
     </div>
     {children.map((panel, index) => <div key={index} hidden={active !== index} className="space-y-4" aria-label={steps[index]}>{panel}</div>)}
     <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] pt-4">

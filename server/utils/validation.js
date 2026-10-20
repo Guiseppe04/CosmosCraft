@@ -926,12 +926,19 @@ exports.createProjectRefundRequestSchema = Joi.object({
 }).unknown(true);
 
 exports.updateRefundStatusSchema = Joi.object({
-  action: Joi.string().valid('start_review','mark_no_return').optional(),
+  action: Joi.string().valid('start_review','mark_no_return','save_inspection').optional(),
+  inspectionItems: Joi.array().items(Joi.object({
+    orderItemId: Joi.number().integer().positive().required(),
+    acceptedQuantity: Joi.number().integer().min(0).required(),
+    resaleSuitable: Joi.boolean().strict().required(),
+  })).min(1).optional(),
   internalNotes: Joi.string().trim().max(1000).allow('').optional(),
   returnInstructions: Joi.string().trim().max(2000).allow('').optional(),
   noReturnReason: Joi.string().trim().max(1000).allow('').optional(),
   inspectionNotes: Joi.string().trim().max(1000).allow('').optional(),
   resaleSuitable: Joi.boolean().strict().optional(),
+  resaleConfirmed: Joi.boolean().strict().optional(),
+  resaleProofImage: require('./refundValidation').refundImageSchema.optional(),
   claimVerified: Joi.boolean().strict().optional(),
   paymentConfirmed: Joi.boolean().strict().optional(),
   approvedAmount: Joi.number().positive().precision(2).optional(),

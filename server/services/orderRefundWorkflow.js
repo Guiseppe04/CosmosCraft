@@ -81,6 +81,7 @@ async function update(id, status, user, data = {}) {
     if (refund.workflow_version !== 2) throw new AppError('Use the original workflow for this refund', 409);
     await db.query('SELECT order_id FROM orders WHERE order_id=$1 FOR UPDATE', [refund.order_id]);
     if (!isAdmin(user)) throw new AppError('Only authorized admins can manage refunds', 403);
+    if (status === 'rejected' && refund.status !== 'under_inspection') throw new AppError('Refunds can only be rejected Under Inspection',409);
     if (status === 'under_review' && data.action === 'start_review' && refund.status !== 'pending') {
       await db.query('COMMIT');
       return publicRefund(refund);

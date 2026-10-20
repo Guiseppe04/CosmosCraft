@@ -4,13 +4,13 @@ const workflow = require('./orderRefundWorkflow');
 const notifications = require('./refundNotifications');
 const { refundTextError } = require('../utils/refundValidation');
 const transitions = {
-  pending:['under_review','return_required','approved','rejected'],
-  under_review:['return_required','approved','rejected'],
-  return_required:['item_received','rejected'],return_in_transit:['item_received','rejected'],
+  pending:['under_review','return_required','approved'],
+  under_review:['return_required','approved'],
+  return_required:['item_received'],return_in_transit:['item_received'],
   // Compatibility with customer-phase requests approved before this migration.
-  return_pending:['item_received','rejected'],returned:['item_received','rejected'],
-  item_received:['under_inspection','rejected'],under_inspection:['approved','rejected'],
-  approved:['processing','item_received','rejected'],processing:['refund_sent','rejected'],refund_sent:['completed'],
+  return_pending:['item_received'],returned:['item_received'],
+  item_received:['under_inspection'],under_inspection:['approved','rejected'],
+  approved:['processing','item_received'],processing:['refund_sent'],refund_sent:['completed'],
   rejected:[],completed:[],withdrawn:[],
 };
 const actorId = user => user?.user_id || user?.id;
@@ -63,20 +63,44 @@ async function update(id,status,user,data={}) {
       return refund;
     }
     const noReturn = data.action === 'mark_no_return';
+    const saveInspection = data.action === 'save_inspection';
+    if (status === 'rejected' && refund.status !== 'under_inspection') fail('Refunds can only be rejected Under Inspection',409);
+    if (saveInspection && (status !== 'under_inspection' || refund.status !== 'under_inspection')) fail('Inspection can only be saved Under Inspection',409);
     if (noReturn && (status !== 'under_review' || !['pending','under_review'].includes(refund.status))) fail('A no-return exception can only be recorded during review',409);
     if (noReturn && refund.return_status === 'not_required' && refund.no_return_reason?.trim()) { await db.query('COMMIT'); return refund; }
-    if (!noReturn && !transitions[refund.status]?.includes(status)) fail(`Invalid refund status transition from '${refund.status}' to '${status}'`,409);
+    if (!noReturn && !saveInspection && !transitions[refund.status]?.includes(status)) fail(`Invalid refund status transition from '${refund.status}' to '${status}'`,409);
     const notes = text(data.adminNotes,'Admin notes');
     const instructions = text(data.returnInstructions,'Return instructions',2000);
     const exception = text(data.noReturnReason,'No-return reason');
     const inspection = text(data.inspectionNotes,'Inspection notes');
     const reference = text(data.refundReference,'Refund transaction reference',255);
     const internal = text(data.internalNotes,'Internal notes');
+    if (status === 'rejected') {
+      const error=refundTextError(notes,'Rejection reason');
+      if (error) fail(error);
+    }
     const fields = ['status=$2','updated_at=now()'];
     const values = [id,status];
     const set = (column,value) => { values.push(value); fields.push(`${column}=$${values.length}`); };
     if (notes) set('admin_notes',notes);
     if (data.internalNotes != null) set('internal_notes',internal);
+    if (refund.status === 'under_inspection' && (saveInspection || ['approved','rejected'].includes(status))) {
+      const ledger=await db.query("SELECT to_regclass('refund_restock_log') AS ledger");
+      if (!ledger.rows[0]?.ledger) fail('Inspection stock handling requires migration 53. Run node server/migrations/run-migration53.js.',503);
+      const saved=refund.review_data?.inspection;
+      const result=await require('./refundInspectionService').save(db,refund,saved && !data.inspectionItems ? {
+        inspectionNotes:saved.notes,claimVerified:saved.claimVerified,inspectionItems:saved.items.map(({productId,...item})=>item),
+      } : data,actorId(user));
+      if (saveInspection && saved) { await db.query('COMMIT'); return refund; }
+      if (status === 'approved' && !result.claimVerified) fail('The customer claim must be verified before approving the refund');
+      set('review_data',JSON.stringify({...refund.review_data,inspection:result}));
+      set('claim_verified',result.claimVerified); set('inspection_notes',result.notes);
+      set('resale_suitable',result.items.every(item=>item.resaleSuitable));
+      if (!saved) {
+        set('inspected_by',actorId(user)); fields.push('inspected_at=now()');
+        set('return_status','return_confirmed'); fields.push('return_confirmed_at=now()');
+      }
+    }
     if (noReturn) {
       const error = refundTextError(exception,'Return Not Required reason');
       if (error) fail(error);
@@ -85,16 +109,8 @@ async function update(id,status,user,data={}) {
     }
     if (status === 'under_review' && refund.status === 'pending') { set('reviewed_by',actorId(user)); fields.push('reviewed_at=now()'); }
     if (status === 'rejected') {
-      const error = refundTextError(notes,'Rejection reason');
-      if (error) fail(error);
       set('rejection_reason',notes);
       if (!refund.reviewed_by) set('reviewed_by',actorId(user));
-      if (refund.status === 'under_inspection') {
-        if (!inspection) fail('Inspection notes are required when rejecting a returned item');
-        if (typeof data.claimVerified !== 'boolean') fail('Record whether the customer claim was verified during inspection');
-        set('claim_verified',data.claimVerified);
-        set('inspection_notes',inspection); set('inspected_by',actorId(user)); fields.push('inspected_at=now()');
-      }
     }
     if (status === 'return_required') {
       const error = refundTextError(instructions,'Return instructions');
@@ -112,14 +128,6 @@ async function update(id,status,user,data={}) {
       policy.verifyReceipt(refund);
       if (refund.status === 'under_inspection') {
         if (!refund.item_received_at) fail('Confirm receipt of the item before approving the refund',409);
-        if (!inspection) fail('Inspection notes are required');
-        if (typeof data.resaleSuitable !== 'boolean') fail('Record whether the returned item is suitable for resale');
-        if (typeof data.claimVerified !== 'boolean') fail('Record whether the customer claim was verified during inspection');
-        if (!data.claimVerified) fail('The customer claim must be verified before approving the refund');
-        set('claim_verified',data.claimVerified);
-        set('inspection_notes',inspection); set('resale_suitable',data.resaleSuitable);
-        set('inspected_by',actorId(user)); fields.push('inspected_at=now()');
-        set('return_status','return_confirmed'); fields.push('return_confirmed_at=now()');
       } else {
         if (refund.return_status !== 'not_required' || !refund.no_return_reason?.trim()) fail('Record the Return Not Required reason in a separate action before approving this refund');
       }
@@ -174,10 +182,10 @@ async function update(id,status,user,data={}) {
         await db.query("UPDATE orders SET payment_status='refunded',updated_at=now() WHERE order_id=$1",[refund.order_id]);
       }
     }
-    const audit = await require('./refundAudit').record(auditContext,{userId:actorId(user),action:noReturn ? 'refund_return_not_required' : `refund_${status}`,entityId:refund.order_id,
+    const audit = await require('./refundAudit').record(auditContext,{userId:actorId(user),action:saveInspection ? 'refund_inspection_saved' : noReturn ? 'refund_return_not_required' : `refund_${status}`,entityId:refund.order_id,
       status,previousStatus:refund.status,details:{refund_request_id:id,amount:updated.rows[0].approved_amount,
         ...(exception ? {no_return_reason:exception} : {}),...(inspection ? {inspection_notes:inspection,resale_suitable:data.resaleSuitable,claim_verified:data.claimVerified} : {}),
-        ...(notes ? {remarks:notes} : {}),...(data.internalNotes != null ? {internal_notes_updated:true} : {})},executor:db});
+        ...(notes ? {remarks:notes} : {}),...(data.inspectionItems ? {inspection_items:data.inspectionItems} : {}),...(data.internalNotes != null ? {internal_notes_updated:true} : {})},executor:db});
     if (!audit) fail('The refund activity could not be recorded. Please retry.',503);
     const recorded = await notifications.record(db,updated.rows[0],noReturn ? 'return_not_required' : status);
     await db.query('COMMIT');
