@@ -58,7 +58,7 @@ export default function CustomerRefundTrackingModal({ order, onClose, onRefresh,
         {error && <p role="alert" style={{ color: '#ef4444' }} className="text-sm">{error}</p>}
       </div>
       <footer className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-[var(--border)] p-4">
-        {['received', 'delivered'].includes(order.status) && ['pending', 'pending_payment_verification'].includes(order.refund_request_status) && <button type="button" disabled={withdrawing} onClick={withdraw} className="rounded-lg border border-slate-500/30 px-4 py-2 text-sm font-semibold text-slate-400 disabled:opacity-50">{withdrawing ? 'Withdrawing...' : 'Withdraw Refund'}</button>}
+        {['received', 'delivered', 'cancelled'].includes(order.status) && ['pending', 'pending_payment_verification'].includes(order.refund_request_status) && <button type="button" disabled={withdrawing} onClick={withdraw} className="rounded-lg border border-slate-500/30 px-4 py-2 text-sm font-semibold text-slate-400 disabled:opacity-50">{withdrawing ? 'Withdrawing...' : 'Withdraw Refund'}</button>}
         <button type="button" onClick={onClose} className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-semibold">Close</button>
       </footer>
     </div>
