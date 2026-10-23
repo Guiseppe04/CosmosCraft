@@ -1377,7 +1377,7 @@ export function CheckoutPage() {
       }
     } catch (error) {
       console.error('Checkout error:', error)
-      setOrderError(error.message || 'Network error. Please check your connection and try again.')
+      setOrderError(error.message || 'We could not connect. Check your internet connection and try again.')
       setIsProcessing(false)
       setShowPaymentModal(false)
     } finally {

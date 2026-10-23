@@ -52,7 +52,7 @@ export function LoginModal() {
       closeLogin()
     } catch (error) {
       console.error('Login error:', error)
-      setError('Network error. Please check your connection and try again.')
+      setError('Connection failed. Please try again.')
     } finally {
       setIsLoading(false)
     }

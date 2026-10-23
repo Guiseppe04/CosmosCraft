@@ -126,7 +126,7 @@ export function LoginPage() {
 
     } catch (err) {
       console.error('Login error:', err)
-      setError('Network error. Please check your connection and try again.')
+      setError('We could not connect. Check your internet connection and try again.')
     } finally {
       setIsLoading(false)
     }

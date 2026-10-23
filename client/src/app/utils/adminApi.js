@@ -35,16 +35,25 @@ async function request(path, options = {}) {
     }
     // fetch() rejects before any response exists (backend down, wrong port, CORS,
     // offline). Report that plainly instead of leaking the raw "Failed to fetch".
-    const error = new Error('Cannot reach the server. Make sure the backend is running, then try again.')
+    const error = new Error('We could not connect. Check your internet connection and try again. If the problem continues, please try again later.')
     error.cause = networkError
     throw error
   }
   const refreshedToken = res.headers.get('X-New-Access-Token')
   if (refreshedToken) setAuthToken(refreshedToken)
 
-  const data = await res.json()
+  let data
+  try {
+    data = await res.json()
+  } catch {
+    const error = new Error('We could not complete your request. Please try again in a few moments.')
+    error.status = res.status
+    throw error
+  }
   if (!res.ok) {
-    const error = new Error(data.message || 'Request failed')
+    const error = new Error(res.status >= 500
+      ? 'Something went wrong on our side. Please try again in a few moments.'
+      : data.message || 'We could not complete your request. Please try again.')
     error.status = res.status
     // Preserve field-level validation errors so the UI can map them to inputs.
     if (Array.isArray(data.errors) && data.errors.length > 0) {

@@ -88,7 +88,7 @@ export function useZipValidation() {
       return result
     } catch (err) {
       if (sequence !== requestSequence.current) return { valid: null }
-      const msg = err.message || 'Network error. Please check your connection.'
+      const msg = err.message || 'We could not connect. Check your internet connection and try again.'
       setState({
         isValid: false,
         isLoading: false,

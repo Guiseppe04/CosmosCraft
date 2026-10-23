@@ -960,7 +960,7 @@ export function CustomizePage() {
 
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}))
-          throw new Error(errData.message || 'Failed to save customization in database')
+          throw new Error(errData.message || 'We could not save your build to your account. Please try again.')
         }
 
         const data = await response.json().catch(() => ({}))
@@ -990,7 +990,7 @@ export function CustomizePage() {
           setToastMessage('You can only save up to 10 guitar builds. Please delete an existing build before creating a new one.')
           return
         }
-        setToastMessage(localSaved ? 'Saved locally. Database sync failed.' : 'Unable to save your build. Browser storage is full or unavailable and database saving failed. Please try again.')
+        setToastMessage(localSaved ? 'Your build is saved on this device, but not in your account yet. Please try saving again in a few moments.' : 'We could not save your build. Keep this page open and try saving again in a few moments.')
         return
       }
 

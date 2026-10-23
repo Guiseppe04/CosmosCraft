@@ -18,7 +18,7 @@ async function refreshSession() {
     throw error
   }
   const data = await response.json()
-  if (!data.data?.accessToken) throw new Error('Invalid session renewal response. Please try again.')
+  if (!data.data?.accessToken) throw new Error('We could not keep you signed in. Please sign in again.')
   if (sessionToken === getAuthToken()) setAuthToken(data.data.accessToken)
 }
 

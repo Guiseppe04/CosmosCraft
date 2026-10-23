@@ -1301,14 +1301,14 @@ export function BassCustomizePage() {
       } catch (error) {
         console.warn('Local build backup unavailable:', error)
         if (!databaseSaved) {
-          setToastMessage('Unable to save your build. Browser storage is full or unavailable and database saving failed. Please try again.')
+          setToastMessage('We could not save your build. Keep this page open and try saving again in a few moments.')
           return
         }
       }
       setActiveBuildId(buildId)
       if (storedKey === 'cosmoscraft_saved_bass_builds') setSavedBuilds(stored)
       if (databaseError) {
-        setToastMessage('Saved locally. Database sync failed.')
+        setToastMessage('Your build is saved on this device, but not in your account yet. Please try saving again in a few moments.')
         return
       }
       try {

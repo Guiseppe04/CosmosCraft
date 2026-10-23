@@ -37,6 +37,9 @@ async function fetchAPI(endpoint, options = {}) {
 
   try {
     const response = await authFetch(url, config)
+    if (response.status >= 500) {
+      throw new Error('Something went wrong on our side. Please try again in a few moments.')
+    }
     
     // Handle non-JSON responses
     const contentType = response.headers.get('content-type')
@@ -51,7 +54,7 @@ async function fetchAPI(endpoint, options = {}) {
       }
       
       if (response.status === 403) {
-        throw new Error('You do not have permission to perform this action.')
+        throw new Error('You do not have permission to do this. Please contact support if you need access.')
       }
 
       // Parse error message from response
@@ -59,7 +62,7 @@ async function fetchAPI(endpoint, options = {}) {
         || data?.error
         || (Array.isArray(data?.errors) ? data.errors.map((err) => err.message).filter(Boolean).join(', ') : null)
         || data?.errors?.[0]?.message
-        || 'An error occurred'
+        || 'We could not complete your request. Please try again.'
 
       throw new Error(errorMessage)
     }
@@ -67,7 +70,10 @@ async function fetchAPI(endpoint, options = {}) {
     return data
   } catch (error) {
     if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
-      throw new Error('Unable to connect to server. Please check your internet connection.')
+      throw new Error('We could not connect. Check your internet connection and try again. If the problem continues, please try again later.')
+    }
+    if (error instanceof SyntaxError) {
+      throw new Error('We could not complete your request. Please try again in a few moments.')
     }
     throw error
   }

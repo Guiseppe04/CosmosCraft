@@ -44,7 +44,7 @@ export function ForgotPassword() {
       }
     } catch (err) {
       console.error('Forgot password error:', err)
-      setError('Network error. Please try again.')
+      setError('We could not connect. Check your internet connection and try again.')
     } finally {
       setIsLoading(false)
     }

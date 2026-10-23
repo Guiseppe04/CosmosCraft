@@ -113,7 +113,7 @@ export function OTPVerificationPage() {
       navigate('/')
     } catch (error) {
       console.error('OTP verification error:', error)
-      setError('Network error. Please try again.')
+      setError('We could not connect. Check your internet connection and try again.')
     } finally {
       setIsLoading(false)
     }
@@ -149,7 +149,7 @@ export function OTPVerificationPage() {
       setOtp(['', '', '', '', '', ''])
     } catch (error) {
       console.error('Resend OTP error:', error)
-      setError('Network error. Please try again.')
+      setError('We could not connect. Check your internet connection and try again.')
       setCanResend(true)
       setResendTimer(0)
     } finally {

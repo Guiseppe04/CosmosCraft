@@ -475,7 +475,7 @@ export function SignupPage() {
       setTimeout(() => navigate('/verify-otp'), 1500)
     } catch (error) {
       console.error('Signup error:', error)
-      setErrors({ submit: 'Network error. Please check your connection and try again.' })
+      setErrors({ submit: 'We could not connect. Check your internet connection and try again.' })
     } finally {
       setIsLoading(false)
       signupSubmitting.current = false
