@@ -1,5 +1,5 @@
 const helmet = require('helmet');
-const { permissionsPolicy, referrerPolicy } = require('../../shared/securityPolicy.cjs');
+const { permissionsPolicy, referrerPolicy } = require('../config/securityPolicy.cjs');
 
 const headers = helmet({
   // Express serves JSON and uploaded files, not the React application document.

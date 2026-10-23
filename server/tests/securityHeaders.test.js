@@ -6,6 +6,35 @@ const { securityHeaders } = require('../middleware/securityHeaders');
 const { errorHandler, notFound, AppError } = require('../middleware/errorHandler');
 const policy = require('../../shared/securityPolicy.cjs');
 
+test('API security policy values match the frontend policy', () => {
+  const apiPolicy = require('../config/securityPolicy.cjs');
+  assert.equal(apiPolicy.permissionsPolicy, policy.permissionsPolicy);
+  assert.equal(apiPolicy.referrerPolicy, policy.referrerPolicy);
+});
+
+test('security middleware loads with only the server deployment directory available', () => {
+  const Module = require('node:module');
+  const path = require('node:path');
+  const serverRoot = path.resolve(__dirname, '..');
+  const middlewarePath = require.resolve('../middleware/securityHeaders');
+  const originalResolve = Module._resolveFilename;
+  delete require.cache[middlewarePath];
+  Module._resolveFilename = function (request, ...args) {
+    const resolved = originalResolve.call(this, request, ...args);
+    if (path.isAbsolute(resolved)) {
+      const relative = path.relative(serverRoot, resolved);
+      assert.ok(relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative), `Dependency outside server: ${resolved}`);
+    }
+    return resolved;
+  };
+  try {
+    assert.equal(typeof require(middlewarePath).securityHeaders, 'function');
+  } finally {
+    Module._resolveFilename = originalResolve;
+    delete require.cache[middlewarePath];
+  }
+});
+
 test('headers cover JSON, errors, static media and credentialed CORS without exposing stacks', async t => {
   const loggedErrors = [];
   t.mock.method(console, 'error', (...args) => loggedErrors.push(args));

@@ -1,2 +1,2 @@
-// Preserve the API's shared entry point while keeping frontend builds self-contained.
+// Compatibility entry point for repository tooling; deployments use local policies.
 module.exports = require('../client/securityPolicy.cjs');

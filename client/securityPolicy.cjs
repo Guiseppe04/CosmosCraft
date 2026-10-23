@@ -1,4 +1,5 @@
-// Kept inside the frontend deployment context; the API imports this via shared/.
+// Kept inside the frontend deployment context. Shared header values must match
+// server/config/securityPolicy.cjs (verified by the security headers tests).
 const permissionsPolicy = 'geolocation=()';
 const referrerPolicy = 'strict-origin-when-cross-origin';
 const documentBaseline = "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
